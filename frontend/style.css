@@ -519,6 +519,14 @@ button, input { font-family: inherit; }
   box-shadow: 6px 6px 0 var(--blueprint-navy);
 }
 
+.modal.modal-wide {
+  width: 800px;
+}
+
+.modal-wide .line-table input, .modal-wide .line-table select {
+  font-size: 12px;
+}
+
 .modal h2 {
   margin: 0 0 16px;
   font-family: var(--font-display);
@@ -539,4 +547,47 @@ button, input { font-family: inherit; }
   .app-shell { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; }
   .content { padding: 24px; }
+}
+
+.print-head {
+  display: none;
+}
+
+.btn-print {
+  background: var(--paper);
+  border: 1px solid var(--ink);
+}
+
+@media print {
+  .no-print,
+  .sidebar,
+  .panel-toolbar,
+  .tabs,
+  .editor-actions,
+  .add-row-btn {
+    display: none !important;
+  }
+
+  .app-shell { display: block; }
+  .content { padding: 0; background: #fff; }
+  .panel, .ficha-editor, .quote-editor { border: none; padding: 0; }
+
+  .print-head {
+    display: block;
+    margin-bottom: 18px;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 10px;
+  }
+  .print-head .print-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+  .print-head .print-meta { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+
+  .line-table input, .line-table select, .field input, .field select {
+    border: none;
+    background: transparent;
+    padding: 2px 4px;
+    -webkit-appearance: none;
+  }
+
+  .totals-box { border: 1px solid var(--ink); }
+  .stamp-card:hover { box-shadow: none; transform: none; }
 }

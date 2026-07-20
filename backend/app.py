@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
-from models import db, Material, Labor, Tool, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee
+from models import db, Material, Labor, Tool, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
@@ -40,7 +40,31 @@ def catalog_to_dict(item):
     }
 
 
-def register_catalog_routes(category, Model):
+def material_to_dict(item):
+    base = catalog_to_dict(item)
+    suppliers = item.suppliers
+    if suppliers:
+        cheapest = min(suppliers, key=lambda s: s.price)
+        priciest = max(suppliers, key=lambda s: s.price)
+        latest = max(suppliers, key=lambda s: s.date or "")
+        base.update({
+            "price_min": cheapest.price,
+            "price_min_proveedor": cheapest.proveedor,
+            "price_max": priciest.price,
+            "price_max_proveedor": priciest.proveedor,
+            "latest_date": latest.date,
+            "supplier_count": len(suppliers),
+        })
+    else:
+        base.update({
+            "price_min": None, "price_min_proveedor": None,
+            "price_max": None, "price_max_proveedor": None,
+            "latest_date": None, "supplier_count": 0,
+        })
+    return base
+
+
+def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
     endpoint = f"catalog_{category}"
 
     @app.route(f"/api/catalog/{category}", methods=["GET"], endpoint=f"{endpoint}_list")
@@ -49,7 +73,7 @@ def register_catalog_routes(category, Model):
         items = Model.query.order_by(Model.code).all()
         if q:
             items = [i for i in items if q in i.code.lower() or q in i.description.lower()]
-        return jsonify([catalog_to_dict(i) for i in items])
+        return jsonify([to_dict(i) for i in items])
 
     @app.route(f"/api/catalog/{category}", methods=["POST"], endpoint=f"{endpoint}_create")
     def create_item():
@@ -63,7 +87,7 @@ def register_catalog_routes(category, Model):
         )
         db.session.add(item)
         db.session.commit()
-        return jsonify(catalog_to_dict(item)), 201
+        return jsonify(to_dict(item)), 201
 
     @app.route(f"/api/catalog/{category}/<int:item_id>", methods=["PUT"], endpoint=f"{endpoint}_update")
     def update_item(item_id):
@@ -75,7 +99,7 @@ def register_catalog_routes(category, Model):
         item.unit_price = float(data.get("unit_price", item.unit_price) or 0)
         item.updated_at = datetime.utcnow().strftime("%Y-%m-%d")
         db.session.commit()
-        return jsonify(catalog_to_dict(item))
+        return jsonify(to_dict(item))
 
     @app.route(f"/api/catalog/{category}/<int:item_id>", methods=["DELETE"], endpoint=f"{endpoint}_delete")
     def delete_item(item_id):
@@ -86,7 +110,89 @@ def register_catalog_routes(category, Model):
 
 
 for cat, Model in CATEGORY_MODELS.items():
-    register_catalog_routes(cat, Model)
+    register_catalog_routes(cat, Model, to_dict=material_to_dict if cat == "material" else catalog_to_dict)
+
+
+# ---------------------------------------------------------------------------
+# Supplier prices (Proveedores) - per-material list of independent supplier quotes
+# ---------------------------------------------------------------------------
+
+def supplier_to_dict(s):
+    return {
+        "id": s.id,
+        "material_id": s.material_id,
+        "proveedor": s.proveedor,
+        "code": s.code,
+        "description": s.description,
+        "unit": s.unit,
+        "price": s.price,
+        "date": s.date,
+    }
+
+
+@app.route("/api/suppliers", methods=["GET"])
+def list_all_suppliers():
+    q = request.args.get("q", "").strip().lower()
+    rows = SupplierPrice.query.order_by(SupplierPrice.date.desc()).all()
+    result = []
+    for s in rows:
+        d = supplier_to_dict(s)
+        d["material_code"] = s.material.code if s.material else None
+        d["material_description"] = s.material.description if s.material else None
+        result.append(d)
+    if q:
+        result = [r for r in result if q in (r["proveedor"] or "").lower()
+                  or q in (r["code"] or "").lower()
+                  or q in (r["material_code"] or "").lower()
+                  or q in (r["material_description"] or "").lower()]
+    return jsonify(result)
+
+
+@app.route("/api/materials/<int:material_id>/suppliers", methods=["GET"])
+def list_suppliers(material_id):
+    Material.query.get_or_404(material_id)
+    rows = SupplierPrice.query.filter_by(material_id=material_id).order_by(SupplierPrice.date.desc()).all()
+    return jsonify([supplier_to_dict(s) for s in rows])
+
+
+@app.route("/api/materials/<int:material_id>/suppliers", methods=["POST"])
+def create_supplier(material_id):
+    Material.query.get_or_404(material_id)
+    data = request.json or {}
+    s = SupplierPrice(
+        material_id=material_id,
+        proveedor=data.get("proveedor", "").strip(),
+        code=data.get("code", "").strip(),
+        description=data.get("description", "").strip(),
+        unit=data.get("unit", "").strip(),
+        price=float(data.get("price", 0) or 0),
+        date=data.get("date") or datetime.utcnow().strftime("%Y-%m-%d"),
+    )
+    db.session.add(s)
+    db.session.commit()
+    return jsonify(supplier_to_dict(s)), 201
+
+
+@app.route("/api/suppliers/<int:supplier_id>", methods=["PUT"])
+def update_supplier(supplier_id):
+    s = SupplierPrice.query.get_or_404(supplier_id)
+    data = request.json or {}
+    s.proveedor = data.get("proveedor", s.proveedor).strip()
+    s.code = data.get("code", s.code)
+    s.description = data.get("description", s.description)
+    s.unit = data.get("unit", s.unit)
+    s.price = float(data.get("price", s.price) or 0)
+    s.date = data.get("date", s.date)
+    db.session.commit()
+    return jsonify(supplier_to_dict(s))
+
+
+@app.route("/api/suppliers/<int:supplier_id>", methods=["DELETE"])
+def delete_supplier(supplier_id):
+    s = SupplierPrice.query.get_or_404(supplier_id)
+    db.session.delete(s)
+    db.session.commit()
+    return "", 204
 
 
 # ---------------------------------------------------------------------------

@@ -37,9 +37,10 @@ document.querySelectorAll(".nav-item").forEach(btn => {
   });
 });
 
-function showModal(html) {
+function showModal(html, wide) {
   const backdrop = document.getElementById("modal-backdrop");
   const box = document.getElementById("modal-box");
+  box.classList.toggle("modal-wide", !!wide);
   box.innerHTML = html;
   backdrop.hidden = false;
 }
@@ -63,15 +64,21 @@ document.querySelectorAll("#catalog-tabs .tab").forEach(tab => {
     document.querySelectorAll("#catalog-tabs .tab").forEach(t => t.classList.remove("active"));
     tab.classList.add("active");
     currentCatalogCat = tab.dataset.cat;
-    loadCatalog();
+    if (currentCatalogCat === "supplier") loadSupplierQuotesTab();
+    else loadCatalog();
   });
 });
 
 document.getElementById("catalog-search").addEventListener("input", (e) => {
-  renderCatalogTable(e.target.value.trim().toLowerCase());
+  const val = e.target.value.trim().toLowerCase();
+  if (currentCatalogCat === "supplier") renderSupplierQuotesTable(val);
+  else renderCatalogTable(val);
 });
 
-document.getElementById("btn-new-catalog-item").addEventListener("click", () => openCatalogForm(null));
+document.getElementById("btn-new-catalog-item").addEventListener("click", () => {
+  if (currentCatalogCat === "supplier") openSupplierQuoteForm(null);
+  else openCatalogForm(null);
+});
 
 async function loadCatalog() {
   const items = await api.get(`/api/catalog/${currentCatalogCat}`);
@@ -79,24 +86,71 @@ async function loadCatalog() {
   renderCatalogTable("");
 }
 
+function catalogTheadHtml() {
+  if (currentCatalogCat === "material") {
+    return `<tr>
+      <th class="col-code">Código</th>
+      <th>Descripción</th>
+      <th class="col-unit">Unidad</th>
+      <th class="col-num">Precio Unit.</th>
+      <th class="col-num">Precio Mín. (Proveedor)</th>
+      <th class="col-num">Precio Máx. (Proveedor)</th>
+      <th class="col-date">Últ. Proveedor</th>
+      <th class="col-actions"></th>
+    </tr>`;
+  }
+  return `<tr>
+    <th class="col-code">Código</th>
+    <th>Descripción</th>
+    <th class="col-unit">Unidad</th>
+    <th class="col-num">Precio Unit.</th>
+    <th class="col-date">Actualizado</th>
+    <th class="col-actions"></th>
+  </tr>`;
+}
+
 function renderCatalogTable(filter) {
   const items = catalogCache[currentCatalogCat].filter(i =>
     !filter || i.code.toLowerCase().includes(filter) || i.description.toLowerCase().includes(filter));
   const tbody = document.getElementById("catalog-tbody");
+  document.getElementById("catalog-thead").innerHTML = catalogTheadHtml();
   document.getElementById("catalog-empty").hidden = items.length > 0;
-  tbody.innerHTML = items.map(i => `
-    <tr>
-      <td class="mono">${esc(i.code)}</td>
-      <td>${esc(i.description)}</td>
-      <td>${esc(i.unit)}</td>
-      <td class="num">${fmt(i.unit_price)}</td>
-      <td>${esc(i.updated_at || "—")}</td>
-      <td class="col-actions">
-        <button class="btn btn-sm btn-ghost" data-edit="${i.id}">Editar</button>
-        <button class="btn btn-sm btn-danger" data-del="${i.id}">×</button>
-      </td>
-    </tr>
-  `).join("");
+
+  const isMaterial = currentCatalogCat === "material";
+
+  tbody.innerHTML = items.map(i => {
+    if (isMaterial) {
+      const minCell = i.price_min != null ? `${fmt(i.price_min)} <span class="stamp-meta">— ${esc(i.price_min_proveedor)}</span>` : "—";
+      const maxCell = i.price_max != null ? `${fmt(i.price_max)} <span class="stamp-meta">— ${esc(i.price_max_proveedor)}</span>` : "—";
+      return `
+        <tr>
+          <td class="mono">${esc(i.code)}</td>
+          <td>${esc(i.description)}</td>
+          <td>${esc(i.unit)}</td>
+          <td class="num">${fmt(i.unit_price)}</td>
+          <td class="num">${minCell}</td>
+          <td class="num">${maxCell}</td>
+          <td>${esc(i.latest_date || "—")}</td>
+          <td class="col-actions">
+            <button class="btn btn-sm btn-ghost" data-suppliers="${i.id}">Proveedores${i.supplier_count ? ` (${i.supplier_count})` : ""}</button>
+            <button class="btn btn-sm btn-ghost" data-edit="${i.id}">Editar</button>
+            <button class="btn btn-sm btn-danger" data-del="${i.id}">×</button>
+          </td>
+        </tr>`;
+    }
+    return `
+      <tr>
+        <td class="mono">${esc(i.code)}</td>
+        <td>${esc(i.description)}</td>
+        <td>${esc(i.unit)}</td>
+        <td class="num">${fmt(i.unit_price)}</td>
+        <td>${esc(i.updated_at || "—")}</td>
+        <td class="col-actions">
+          <button class="btn btn-sm btn-ghost" data-edit="${i.id}">Editar</button>
+          <button class="btn btn-sm btn-danger" data-del="${i.id}">×</button>
+        </td>
+      </tr>`;
+  }).join("");
 
   tbody.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => {
     const item = catalogCache[currentCatalogCat].find(x => x.id == b.dataset.edit);
@@ -107,6 +161,204 @@ function renderCatalogTable(filter) {
     await api.del(`/api/catalog/${currentCatalogCat}/${b.dataset.del}`);
     loadCatalog();
   }));
+  tbody.querySelectorAll("[data-suppliers]").forEach(b => b.addEventListener("click", () => {
+    const item = catalogCache[currentCatalogCat].find(x => x.id == b.dataset.suppliers);
+    openSupplierModal(item);
+  }));
+}
+
+// ----- Supplier prices (Proveedores) per material -----
+
+function openSupplierModal(material) {
+  showModal(`
+    <h2>Proveedores — ${esc(material.code)} · ${esc(material.description)}</h2>
+    <p class="stamp-meta" style="margin-top:-8px">El precio unitario del material no cambia automáticamente; esto es solo referencia para comparar proveedores.</p>
+    <div id="supplier-table-wrap">Cargando…</div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="sup-close">Cerrar</button>
+    </div>
+  `, true);
+  document.getElementById("sup-close").addEventListener("click", () => { hideModal(); loadCatalog(); });
+  loadSuppliers(material.id);
+}
+
+async function loadSuppliers(materialId) {
+  const suppliers = await api.get(`/api/materials/${materialId}/suppliers`);
+  renderSupplierTable(materialId, suppliers);
+}
+
+function renderSupplierTable(materialId, suppliers) {
+  const wrap = document.getElementById("supplier-table-wrap");
+  if (!wrap) return; // modal was closed before this resolved
+  const sorted = [...suppliers].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const rows = sorted.map(s => `
+    <tr data-id="${s.id}">
+      <td><input class="s-proveedor" value="${esc(s.proveedor)}" placeholder="Nombre del proveedor"></td>
+      <td><input class="s-code" value="${esc(s.code || "")}" placeholder="Su código"></td>
+      <td><input class="s-desc" value="${esc(s.description || "")}" placeholder="Su descripción"></td>
+      <td><input class="s-unit" value="${esc(s.unit || "")}" placeholder="Unidad"></td>
+      <td><input class="s-price" type="number" step="0.01" value="${s.price}" style="width:100px"></td>
+      <td><input class="s-date" type="date" value="${esc(s.date || "")}"></td>
+      <td><button class="btn btn-sm btn-danger sup-del">×</button></td>
+    </tr>`).join("");
+
+  wrap.innerHTML = `
+    <table class="line-table">
+      <thead><tr>
+        <th>Proveedor</th><th style="width:100px">Código</th><th>Descripción</th>
+        <th style="width:80px">Unidad</th><th style="width:110px">Precio</th><th style="width:130px">Fecha</th><th style="width:36px"></th>
+      </tr></thead>
+      <tbody id="sup-tbody">${rows}</tbody>
+    </table>
+    <button class="add-row-btn" id="sup-add">+ Agregar cotización de proveedor</button>
+  `;
+
+  wrap.querySelectorAll("#sup-tbody tr").forEach(tr => {
+    const id = tr.dataset.id;
+    const save = async () => {
+      await api.put(`/api/suppliers/${id}`, {
+        proveedor: tr.querySelector(".s-proveedor").value,
+        code: tr.querySelector(".s-code").value,
+        description: tr.querySelector(".s-desc").value,
+        unit: tr.querySelector(".s-unit").value,
+        price: tr.querySelector(".s-price").value,
+        date: tr.querySelector(".s-date").value,
+      });
+      loadSuppliers(materialId);
+    };
+    tr.querySelectorAll("input").forEach(inp => inp.addEventListener("change", save));
+    tr.querySelector(".sup-del").addEventListener("click", async () => {
+      if (!confirm("¿Eliminar esta cotización de proveedor?")) return;
+      await api.del(`/api/suppliers/${id}`);
+      loadSuppliers(materialId);
+    });
+  });
+
+  document.getElementById("sup-add").addEventListener("click", () => {
+    const tbody = wrap.querySelector("#sup-tbody");
+    tbody.insertAdjacentHTML("beforeend", `
+      <tr data-new="1">
+        <td><input class="s-proveedor" placeholder="Nombre del proveedor"></td>
+        <td><input class="s-code" placeholder="Su código"></td>
+        <td><input class="s-desc" placeholder="Su descripción"></td>
+        <td><input class="s-unit" placeholder="Unidad"></td>
+        <td><input class="s-price" type="number" step="0.01" value="0" style="width:100px"></td>
+        <td><input class="s-date" type="date" value="${new Date().toISOString().slice(0, 10)}"></td>
+        <td><button class="btn btn-sm btn-primary sup-save-new">Guardar</button></td>
+      </tr>
+    `);
+    const tr = tbody.querySelector('tr[data-new="1"]');
+    tr.querySelector(".sup-save-new").addEventListener("click", async () => {
+      const proveedor = tr.querySelector(".s-proveedor").value.trim();
+      if (!proveedor) { alert("El nombre del proveedor es requerido."); return; }
+      await api.post(`/api/materials/${materialId}/suppliers`, {
+        proveedor,
+        code: tr.querySelector(".s-code").value,
+        description: tr.querySelector(".s-desc").value,
+        unit: tr.querySelector(".s-unit").value,
+        price: tr.querySelector(".s-price").value,
+        date: tr.querySelector(".s-date").value,
+      });
+      loadSuppliers(materialId);
+    });
+  });
+}
+
+// ----- Flat "Cotizaciones de Proveedores" tab (all suppliers, linked by dropdown) -----
+
+let allSupplierQuotes = [];
+
+async function loadSupplierQuotesTab() {
+  allSupplierQuotes = await api.get("/api/suppliers");
+  renderSupplierQuotesTable("");
+}
+
+function renderSupplierQuotesTable(filter) {
+  const items = allSupplierQuotes.filter(s => !filter
+    || (s.proveedor || "").toLowerCase().includes(filter)
+    || (s.code || "").toLowerCase().includes(filter)
+    || (s.material_code || "").toLowerCase().includes(filter)
+    || (s.material_description || "").toLowerCase().includes(filter));
+
+  document.getElementById("catalog-thead").innerHTML = `<tr>
+    <th style="width:150px">Material</th>
+    <th class="col-code">Cód. Proveedor</th>
+    <th>Descripción Proveedor</th>
+    <th class="col-unit">Unidad</th>
+    <th class="col-num">Precio</th>
+    <th class="col-date">Fecha</th>
+    <th class="col-actions"></th>
+  </tr>`;
+
+  const tbody = document.getElementById("catalog-tbody");
+  document.getElementById("catalog-empty").hidden = items.length > 0;
+  tbody.innerHTML = items.map(s => `
+    <tr>
+      <td class="mono">${esc(s.material_code || "—")}<div class="stamp-meta">${esc(s.material_description || "")}</div></td>
+      <td class="mono">${esc(s.code || "—")}</td>
+      <td>${esc(s.description || "—")}<div class="stamp-meta">${esc(s.proveedor)}</div></td>
+      <td>${esc(s.unit || "—")}</td>
+      <td class="num">${fmt(s.price)}</td>
+      <td>${esc(s.date || "—")}</td>
+      <td class="col-actions">
+        <button class="btn btn-sm btn-ghost" data-edit-sq="${s.id}">Editar</button>
+        <button class="btn btn-sm btn-danger" data-del-sq="${s.id}">×</button>
+      </td>
+    </tr>
+  `).join("");
+
+  tbody.querySelectorAll("[data-edit-sq]").forEach(b => b.addEventListener("click", () => {
+    const item = allSupplierQuotes.find(x => x.id == b.dataset.editSq);
+    openSupplierQuoteForm(item);
+  }));
+  tbody.querySelectorAll("[data-del-sq]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("¿Eliminar esta cotización de proveedor?")) return;
+    await api.del(`/api/suppliers/${b.dataset.delSq}`);
+    loadSupplierQuotesTab();
+  }));
+}
+
+async function openSupplierQuoteForm(item) {
+  const isNew = !item;
+  const materials = await api.get("/api/catalog/material");
+  const options = materials.map(m => `<option value="${m.id}" ${item && item.material_id == m.id ? "selected" : ""}>${esc(m.code)} — ${esc(m.description)}</option>`).join("");
+
+  showModal(`
+    <h2>${isNew ? "Nueva" : "Editar"} Cotización de Proveedor</h2>
+    <div class="field"><label>Material</label>
+      <select id="sq-material">${isNew ? '<option value="">— seleccionar material —</option>' : ""}${options}</select>
+    </div>
+    <div class="field"><label>Nombre del Proveedor</label><input id="sq-proveedor" value="${esc(item?.proveedor || "")}" placeholder="Ej. Ferretería Central"></div>
+    <div class="field"><label>Código Proveedor</label><input id="sq-code" value="${esc(item?.code || "")}"></div>
+    <div class="field"><label>Descripción Proveedor</label><input id="sq-desc" value="${esc(item?.description || "")}"></div>
+    <div class="field"><label>Unidad</label><input id="sq-unit" value="${esc(item?.unit || "")}"></div>
+    <div class="field"><label>Precio (L)</label><input id="sq-price" type="number" step="0.01" value="${item?.price ?? ""}"></div>
+    <div class="field"><label>Fecha</label><input id="sq-date" type="date" value="${esc(item?.date || new Date().toISOString().slice(0, 10))}"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="sq-cancel">Cancelar</button>
+      <button class="btn btn-primary" id="sq-save">Guardar</button>
+    </div>
+  `);
+
+  document.getElementById("sq-cancel").addEventListener("click", hideModal);
+  document.getElementById("sq-save").addEventListener("click", async () => {
+    const materialId = isNew ? document.getElementById("sq-material").value : item.material_id;
+    if (!materialId) { alert("Selecciona un material para vincular esta cotización."); return; }
+    const proveedor = document.getElementById("sq-proveedor").value.trim();
+    if (!proveedor) { alert("El nombre del proveedor es requerido."); return; }
+    const body = {
+      proveedor,
+      code: document.getElementById("sq-code").value,
+      description: document.getElementById("sq-desc").value,
+      unit: document.getElementById("sq-unit").value,
+      price: document.getElementById("sq-price").value,
+      date: document.getElementById("sq-date").value,
+    };
+    if (isNew) await api.post(`/api/materials/${materialId}/suppliers`, body);
+    else await api.put(`/api/suppliers/${item.id}`, body);
+    hideModal();
+    loadSupplierQuotesTab();
+  });
 }
 
 function openCatalogForm(item) {
@@ -201,10 +453,10 @@ function fichaSectionHtml(category, label, items) {
     <div class="section-title">${label}</div>
     <table class="line-table" data-section="${category}">
       <thead><tr>
-        <th style="width:22%">Del catálogo</th>
+        <th class="no-print" style="width:22%">Del catálogo</th>
         <th>Código</th><th>Descripción</th><th style="width:70px">Unidad</th>
         <th style="width:90px">Rendim.</th><th style="width:90px">Desp. %</th>
-        <th style="width:100px">P.Unit</th><th style="width:100px">Subtotal</th><th style="width:100px">Total</th><th style="width:36px"></th>
+        <th style="width:100px">P.Unit</th><th style="width:100px">Subtotal</th><th style="width:100px">Total</th><th class="no-print" style="width:36px"></th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -223,7 +475,7 @@ function fichaRowHtml(category, it) {
   const total = subtotal * (1 + (it.desperdicio_pct || 0) / 100);
   return `
     <tr data-row="${it._key}">
-      <td><select class="picker">${catalogOptionsHtml(category, it.code)}</select></td>
+      <td class="no-print"><select class="picker">${catalogOptionsHtml(category, it.code)}</select></td>
       <td><input class="f-code" value="${esc(it.code)}"></td>
       <td><input class="f-desc" value="${esc(it.description)}"></td>
       <td><input class="f-unit" value="${esc(it.unit)}"></td>
@@ -232,7 +484,7 @@ function fichaRowHtml(category, it) {
       <td><input class="f-price" type="number" step="0.01" value="${it.unit_price}"></td>
       <td class="num-cell f-subtotal">${fmt(subtotal)}</td>
       <td class="num-cell f-total">${fmt(total)}</td>
-      <td><button class="btn btn-sm btn-danger remove-row">×</button></td>
+      <td class="no-print"><button class="btn btn-sm btn-danger remove-row">×</button></td>
     </tr>
   `;
 }
@@ -250,6 +502,11 @@ async function renderFichaEditor() {
   const c = editingCard;
   const el = document.getElementById("ficha-editor");
   el.innerHTML = `
+    <div class="print-head">
+      <div class="print-title">Ficha de Costo ${esc(c.code)} — ${esc(c.name)}</div>
+      <div class="print-meta">Unidad: ${esc(c.unit || "—")} · Generado el ${new Date().toLocaleDateString("es-HN")}</div>
+    </div>
+
     <div class="editor-head">
       <div class="editor-fields">
         <div class="field narrow"><label>Código</label><input id="fc-code" value="${esc(c.code)}" placeholder="001"></div>
@@ -268,6 +525,7 @@ async function renderFichaEditor() {
 
     <div class="editor-actions">
       <button class="btn btn-primary" id="fc-save">Guardar Ficha</button>
+      <button class="btn btn-print" id="fc-print">🖨 Imprimir / Guardar PDF</button>
       <button class="btn btn-ghost" id="fc-cancel">Volver a la lista</button>
       ${c.id ? '<button class="btn btn-danger" id="fc-delete">Eliminar Ficha</button>' : ""}
     </div>
@@ -338,6 +596,7 @@ function bindFichaEvents() {
 
   document.getElementById("fc-cancel").addEventListener("click", loadCostCardList);
   document.getElementById("fc-save").addEventListener("click", saveFicha);
+  document.getElementById("fc-print").addEventListener("click", () => window.print());
   const delBtn = document.getElementById("fc-delete");
   if (delBtn) delBtn.addEventListener("click", async () => {
     if (!confirm("¿Eliminar esta ficha de costo? También se quitará de cotizaciones que la usen.")) return;
@@ -471,7 +730,7 @@ async function renderQuoteEditor() {
         <td class="num-cell">${fmt(unitCost)}</td>
         <td><input class="f-qty" type="number" step="0.01" value="${l.quantity}" style="width:90px"></td>
         <td class="num-cell f-line-total">${fmt(lineTotal)}</td>
-        <td><button class="btn btn-sm btn-danger remove-line">×</button></td>
+        <td class="no-print"><button class="btn btn-sm btn-danger remove-line">×</button></td>
       </tr>`;
   }).join("");
 
@@ -479,10 +738,15 @@ async function renderQuoteEditor() {
     <tr data-row="${f._key}">
       <td><input class="f-fee-desc" value="${esc(f.description)}" placeholder="Descripción"></td>
       <td><input class="f-fee-amt" type="number" step="0.01" value="${f.amount}" style="width:120px"></td>
-      <td><button class="btn btn-sm btn-danger remove-fee" data-cls="${cls}">×</button></td>
+      <td class="no-print"><button class="btn btn-sm btn-danger remove-fee" data-cls="${cls}">×</button></td>
     </tr>`).join("");
 
   el.innerHTML = `
+    <div class="print-head">
+      <div class="print-title">Cotización — ${esc(q.name)}</div>
+      <div class="print-meta">${q.client ? "Cliente: " + esc(q.client) + " · " : ""}Fecha: ${esc(q.date || "")}</div>
+    </div>
+
     <div class="editor-fields" style="margin-bottom:8px">
       <div class="field"><label>Nombre del proyecto</label><input id="q-name" value="${esc(q.name)}" style="min-width:260px"></div>
       <div class="field"><label>Cliente</label><input id="q-client" value="${esc(q.client)}"></div>
@@ -490,7 +754,7 @@ async function renderQuoteEditor() {
     </div>
 
     <div class="section-title">Partidas (Fichas de Costo)</div>
-    <div style="display:flex;gap:10px;margin:10px 0">
+    <div class="no-print" style="display:flex;gap:10px;margin:10px 0">
       <select id="q-add-card" style="flex:1;padding:8px;border:1px solid #c9c2ae">
         <option value="">— seleccionar ficha de costo para agregar —</option>
         ${cardOptions}
@@ -498,7 +762,7 @@ async function renderQuoteEditor() {
       <button class="btn btn-primary btn-sm" id="q-add-card-btn">+ Agregar</button>
     </div>
     <table class="line-table">
-      <thead><tr><th>Código</th><th>Actividad</th><th style="width:70px">Unidad</th><th style="width:110px">Costo Unit.</th><th style="width:100px">Cantidad</th><th style="width:120px">Total</th><th style="width:36px"></th></tr></thead>
+      <thead><tr><th>Código</th><th>Actividad</th><th style="width:70px">Unidad</th><th style="width:110px">Costo Unit.</th><th style="width:100px">Cantidad</th><th style="width:120px">Total</th><th class="no-print" style="width:36px"></th></tr></thead>
       <tbody id="q-lines-body">${lineRows}</tbody>
     </table>
 
@@ -514,6 +778,7 @@ async function renderQuoteEditor() {
 
     <div class="editor-actions">
       <button class="btn btn-primary" id="q-save">Guardar Cotización</button>
+      <button class="btn btn-print" id="q-print">🖨 Imprimir / Guardar PDF</button>
       <button class="btn btn-ghost" id="q-cancel">Volver a la lista</button>
       ${q.id ? '<button class="btn btn-danger" id="q-delete">Eliminar Cotización</button>' : ""}
     </div>
@@ -573,6 +838,7 @@ function bindQuoteEvents() {
 
   document.getElementById("q-cancel").addEventListener("click", loadQuoteList);
   document.getElementById("q-save").addEventListener("click", saveQuote);
+  document.getElementById("q-print").addEventListener("click", () => window.print());
   const delBtn = document.getElementById("q-delete");
   if (delBtn) delBtn.addEventListener("click", async () => {
     if (!confirm("¿Eliminar esta cotización?")) return;
@@ -619,4 +885,4 @@ async function saveQuote() {
 // Init
 // ============================================================================
 
-loadCatalog();
+loadQuoteList();

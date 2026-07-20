@@ -12,6 +12,23 @@ class Material(db.Model):
     unit_price = db.Column(db.Float, nullable=False, default=0)
     updated_at = db.Column(db.String(16))
 
+    suppliers = db.relationship("SupplierPrice", backref="material", cascade="all, delete-orphan")
+
+
+class SupplierPrice(db.Model):
+    """A specific supplier's (proveedor's) quote for a given Material.
+    The proveedor may use its own code/description for the item; price_min/max
+    on the Material are derived from these rows, they don't overwrite Material.unit_price."""
+    __tablename__ = "supplier_prices"
+    id = db.Column(db.Integer, primary_key=True)
+    material_id = db.Column(db.Integer, db.ForeignKey("materials.id"), nullable=False)
+    proveedor = db.Column(db.String(255), nullable=False)
+    code = db.Column(db.String(64))
+    description = db.Column(db.String(255))
+    unit = db.Column(db.String(32))
+    price = db.Column(db.Float, nullable=False, default=0)
+    date = db.Column(db.String(16))
+
 
 class Labor(db.Model):
     __tablename__ = "labor"

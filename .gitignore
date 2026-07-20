@@ -1,1 +1,9 @@
-pat.txt
+*.txt
+!requirements.txt
+.env
+*.pem
+*.key
+backend/quoting.db
+__pycache__/
+*.pyc
+venv/

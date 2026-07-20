@@ -11,7 +11,7 @@
 <body>
 
 <div class="app-shell">
-  <aside class="sidebar">
+  <aside class="sidebar no-print">
     <div class="brand">
       <span class="brand-mark">§</span>
       <div class="brand-text">
@@ -20,14 +20,14 @@
       </div>
     </div>
     <nav class="nav">
-      <button class="nav-item active" data-view="catalogs">
-        <span class="nav-code">01</span> Catálogos
+      <button class="nav-item active" data-view="quotes">
+        <span class="nav-code">01</span> Cotizaciones
       </button>
       <button class="nav-item" data-view="costcards">
         <span class="nav-code">02</span> Fichas de Costo
       </button>
-      <button class="nav-item" data-view="quotes">
-        <span class="nav-code">03</span> Cotizaciones
+      <button class="nav-item" data-view="catalogs">
+        <span class="nav-code">03</span> Catálogos
       </button>
     </nav>
     <div class="sidebar-foot">Precios actualizados según catálogo local</div>
@@ -36,7 +36,7 @@
   <main class="content">
 
     <!-- ============ CATALOGS VIEW ============ -->
-    <section id="view-catalogs" class="view active">
+    <section id="view-catalogs" class="view">
       <header class="view-header">
         <h1>Catálogos de Precios</h1>
         <p>Materiales, mano de obra y herramientas con precios de referencia.</p>
@@ -46,6 +46,7 @@
         <button class="tab active" data-cat="material">Materiales</button>
         <button class="tab" data-cat="labor">Mano de Obra</button>
         <button class="tab" data-cat="tool">Herramientas</button>
+        <button class="tab" data-cat="supplier">Cotizaciones de Proveedores</button>
       </div>
 
       <div class="panel">
@@ -54,16 +55,7 @@
           <button class="btn btn-primary" id="btn-new-catalog-item">+ Nuevo</button>
         </div>
         <table class="data-table" id="catalog-table">
-          <thead>
-            <tr>
-              <th class="col-code">Código</th>
-              <th>Descripción</th>
-              <th class="col-unit">Unidad</th>
-              <th class="col-num">Precio Unit.</th>
-              <th class="col-date">Actualizado</th>
-              <th class="col-actions"></th>
-            </tr>
-          </thead>
+          <thead id="catalog-thead"></thead>
           <tbody id="catalog-tbody"></tbody>
         </table>
         <div class="empty-state" id="catalog-empty" hidden>Sin artículos todavía. Agrega el primero.</div>
@@ -92,7 +84,7 @@
     </section>
 
     <!-- ============ QUOTES VIEW ============ -->
-    <section id="view-quotes" class="view">
+    <section id="view-quotes" class="view active">
       <header class="view-header">
         <h1>Cotizaciones</h1>
         <p>Selecciona fichas de costo, define cantidades y agrega transporte y otros gastos.</p>
