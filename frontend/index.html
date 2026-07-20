@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Costeo y Cotización</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">§</span>
+      <div class="brand-text">
+        <div class="brand-title">Costeo&nbsp;&amp;&nbsp;Cotización</div>
+        <div class="brand-sub">Ingeniería &amp; Construcción</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <button class="nav-item active" data-view="catalogs">
+        <span class="nav-code">01</span> Catálogos
+      </button>
+      <button class="nav-item" data-view="costcards">
+        <span class="nav-code">02</span> Fichas de Costo
+      </button>
+      <button class="nav-item" data-view="quotes">
+        <span class="nav-code">03</span> Cotizaciones
+      </button>
+    </nav>
+    <div class="sidebar-foot">Precios actualizados según catálogo local</div>
+  </aside>
+
+  <main class="content">
+
+    <!-- ============ CATALOGS VIEW ============ -->
+    <section id="view-catalogs" class="view active">
+      <header class="view-header">
+        <h1>Catálogos de Precios</h1>
+        <p>Materiales, mano de obra y herramientas con precios de referencia.</p>
+      </header>
+
+      <div class="tabs" id="catalog-tabs">
+        <button class="tab active" data-cat="material">Materiales</button>
+        <button class="tab" data-cat="labor">Mano de Obra</button>
+        <button class="tab" data-cat="tool">Herramientas</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel-toolbar">
+          <input type="search" id="catalog-search" placeholder="Buscar por código o descripción…">
+          <button class="btn btn-primary" id="btn-new-catalog-item">+ Nuevo</button>
+        </div>
+        <table class="data-table" id="catalog-table">
+          <thead>
+            <tr>
+              <th class="col-code">Código</th>
+              <th>Descripción</th>
+              <th class="col-unit">Unidad</th>
+              <th class="col-num">Precio Unit.</th>
+              <th class="col-date">Actualizado</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="catalog-tbody"></tbody>
+        </table>
+        <div class="empty-state" id="catalog-empty" hidden>Sin artículos todavía. Agrega el primero.</div>
+      </div>
+    </section>
+
+    <!-- ============ COST CARDS VIEW ============ -->
+    <section id="view-costcards" class="view">
+      <header class="view-header">
+        <h1>Fichas de Costo</h1>
+        <p>Arma el costo unitario de cada actividad a partir de materiales, mano de obra y herramientas.</p>
+      </header>
+
+      <div class="panel" id="costcards-list-panel">
+        <div class="panel-toolbar">
+          <input type="search" id="costcard-search" placeholder="Buscar ficha por código o nombre…">
+          <button class="btn btn-primary" id="btn-new-costcard">+ Nueva Ficha</button>
+        </div>
+        <div class="card-grid" id="costcard-grid"></div>
+        <div class="empty-state" id="costcard-empty" hidden>Aún no hay fichas de costo. Crea la primera.</div>
+      </div>
+
+      <div class="panel hidden" id="costcard-editor-panel">
+        <div class="ficha-editor" id="ficha-editor"></div>
+      </div>
+    </section>
+
+    <!-- ============ QUOTES VIEW ============ -->
+    <section id="view-quotes" class="view">
+      <header class="view-header">
+        <h1>Cotizaciones</h1>
+        <p>Selecciona fichas de costo, define cantidades y agrega transporte y otros gastos.</p>
+      </header>
+
+      <div class="panel" id="quotes-list-panel">
+        <div class="panel-toolbar">
+          <button class="btn btn-primary" id="btn-new-quote">+ Nueva Cotización</button>
+        </div>
+        <div class="card-grid" id="quote-grid"></div>
+        <div class="empty-state" id="quote-empty" hidden>Aún no hay cotizaciones. Crea la primera.</div>
+      </div>
+
+      <div class="panel hidden" id="quote-editor-panel">
+        <div class="quote-editor" id="quote-editor"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Generic modal for catalog item + fee forms -->
+<div class="modal-backdrop" id="modal-backdrop" hidden>
+  <div class="modal" id="modal-box"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
