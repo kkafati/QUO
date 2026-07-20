@@ -50,6 +50,26 @@ class Tool(db.Model):
     updated_at = db.Column(db.String(16))
 
 
+class Transport(db.Model):
+    __tablename__ = "transport"
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(64), nullable=False)
+    description = db.Column(db.String(255), nullable=False)
+    unit = db.Column(db.String(32), nullable=False)
+    unit_price = db.Column(db.Float, nullable=False, default=0)
+    updated_at = db.Column(db.String(16))
+
+
+class Gasto(db.Model):
+    __tablename__ = "gastos"
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(64), nullable=False)
+    description = db.Column(db.String(255), nullable=False)
+    unit = db.Column(db.String(32), nullable=False)
+    unit_price = db.Column(db.Float, nullable=False, default=0)
+    updated_at = db.Column(db.String(16))
+
+
 class CostCard(db.Model):
     __tablename__ = "cost_cards"
     id = db.Column(db.Integer, primary_key=True)
@@ -81,6 +101,7 @@ class Quote(db.Model):
     name = db.Column(db.String(255), nullable=False)
     client = db.Column(db.String(255))
     date = db.Column(db.String(16))
+    exento = db.Column(db.Boolean, nullable=False, default=False)
 
     lines = db.relationship("QuoteLine", backref="quote", cascade="all, delete-orphan")
     fees = db.relationship("QuoteFee", backref="quote", cascade="all, delete-orphan")
@@ -101,5 +122,9 @@ class QuoteFee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     quote_id = db.Column(db.Integer, db.ForeignKey("quotes.id"), nullable=False)
     category = db.Column(db.String(16), nullable=False)  # transportation | other
+    code = db.Column(db.String(64))
     description = db.Column(db.String(255))
-    amount = db.Column(db.Float, default=0)
+    unit = db.Column(db.String(32))
+    quantity = db.Column(db.Float, default=1)
+    unit_price = db.Column(db.Float, default=0)
+    amount = db.Column(db.Float, default=0)  # for "other": entered directly. for "transportation": quantity * unit_price

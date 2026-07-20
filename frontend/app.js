@@ -47,8 +47,16 @@ function showModal(html, wide) {
 function hideModal() {
   document.getElementById("modal-backdrop").hidden = true;
 }
+let backdropMouseDownWasSelf = false;
+document.getElementById("modal-backdrop").addEventListener("mousedown", (e) => {
+  backdropMouseDownWasSelf = e.target.id === "modal-backdrop";
+});
 document.getElementById("modal-backdrop").addEventListener("click", (e) => {
-  if (e.target.id === "modal-backdrop") hideModal();
+  if (e.target.id === "modal-backdrop" && backdropMouseDownWasSelf) hideModal();
+  backdropMouseDownWasSelf = false;
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !document.getElementById("modal-backdrop").hidden) hideModal();
 });
 
 // ============================================================================
@@ -56,8 +64,9 @@ document.getElementById("modal-backdrop").addEventListener("click", (e) => {
 // ============================================================================
 
 let currentCatalogCat = "material";
-let catalogCache = { material: [], labor: [], tool: [] };
-const CAT_LABELS = { material: "Materiales", labor: "Mano de Obra", tool: "Herramientas" };
+let catalogCache = { material: [], labor: [], tool: [], transport: [], gasto: [] };
+const CAT_LABELS = { material: "Materiales", labor: "Mano de Obra", tool: "Herramientas", transport: "Transporte", gasto: "Gastos" };
+const CODE_PLACEHOLDERS = { material: "Ej. X00", labor: "Ej. M00", tool: "Ej. H00", transport: "Ej. T00", gasto: "Ej. G00" };
 
 document.querySelectorAll("#catalog-tabs .tab").forEach(tab => {
   tab.addEventListener("click", () => {
@@ -93,8 +102,8 @@ function catalogTheadHtml() {
       <th>Descripción</th>
       <th class="col-unit">Unidad</th>
       <th class="col-num">Precio Unit.</th>
-      <th class="col-num">Precio Mín. (Proveedor)</th>
-      <th class="col-num">Precio Máx. (Proveedor)</th>
+      <th class="col-num">Precio Mín.</th>
+      <th class="col-num">Precio Máx.</th>
       <th class="col-date">Últ. Proveedor</th>
       <th class="col-actions"></th>
     </tr>`;
@@ -210,7 +219,7 @@ function renderSupplierTable(materialId, suppliers) {
       </tr></thead>
       <tbody id="sup-tbody">${rows}</tbody>
     </table>
-    <button class="add-row-btn" id="sup-add">+ Agregar cotización de proveedor</button>
+    <button class="add-row-btn" id="sup-add">+ Agregar</button>
   `;
 
   wrap.querySelectorAll("#sup-tbody tr").forEach(tr => {
@@ -363,12 +372,15 @@ async function openSupplierQuoteForm(item) {
 
 function openCatalogForm(item) {
   const isNew = !item;
+  const isMaterial = currentCatalogCat === "material";
   showModal(`
     <h2>${isNew ? "Nuevo" : "Editar"} — ${CAT_LABELS[currentCatalogCat]}</h2>
-    <div class="field"><label>Código</label><input id="mf-code" value="${esc(item?.code || "")}" placeholder="Ej. A-I-2"></div>
+    <div class="field"><label>Código</label><input id="mf-code" value="${esc(item?.code || "")}" placeholder="${CODE_PLACEHOLDERS[currentCatalogCat] || ""}"></div>
     <div class="field"><label>Descripción</label><input id="mf-desc" value="${esc(item?.description || "")}" placeholder="Descripción del artículo"></div>
     <div class="field"><label>Unidad</label><input id="mf-unit" value="${esc(item?.unit || "")}" placeholder="Unidad, Metros, Hora…"></div>
-    <div class="field"><label>Precio unitario (L)</label><input id="mf-price" type="number" step="0.01" value="${item?.unit_price ?? ""}"></div>
+    ${isMaterial
+      ? '<p class="stamp-meta" style="margin:0 0 8px">El precio se calcula automáticamente: el más alto entre las cotizaciones de proveedor más recientes (pestaña Cotizaciones de Proveedores).</p>'
+      : `<div class="field"><label>Precio unitario (L)</label><input id="mf-price" type="number" step="0.01" value="${item?.unit_price ?? ""}"></div>`}
     <div class="modal-actions">
       <button class="btn btn-ghost" id="mf-cancel">Cancelar</button>
       <button class="btn btn-primary" id="mf-save">Guardar</button>
@@ -380,8 +392,8 @@ function openCatalogForm(item) {
       code: document.getElementById("mf-code").value,
       description: document.getElementById("mf-desc").value,
       unit: document.getElementById("mf-unit").value,
-      unit_price: document.getElementById("mf-price").value,
     };
+    if (!isMaterial) body.unit_price = document.getElementById("mf-price").value;
     if (!body.code || !body.description) { alert("Código y descripción son requeridos."); return; }
     if (isNew) await api.post(`/api/catalog/${currentCatalogCat}`, body);
     else await api.put(`/api/catalog/${currentCatalogCat}/${item.id}`, body);
@@ -409,6 +421,8 @@ async function loadCostCardList() {
   renderCostCardGrid("");
 }
 
+const FICHA_SECTION_KEY = { material: "materials", labor: "labor", tool: "tools", transport: "transport", gasto: "gastos" };
+
 function renderCostCardGrid(filter) {
   const items = costCardsCache.filter(c =>
     !filter || c.code.toLowerCase().includes(filter) || c.name.toLowerCase().includes(filter));
@@ -418,7 +432,7 @@ function renderCostCardGrid(filter) {
     <div class="stamp-card" data-open="${c.id}">
       <div class="stamp-badge">${esc(c.code)}</div>
       <h3>${esc(c.name)}</h3>
-      <div class="stamp-meta">${esc(c.unit || "—")} · ${c.materials.length + c.labor.length + c.tools.length} insumos</div>
+      <div class="stamp-meta">${esc(c.unit || "—")} · ${c.materials.length + c.labor.length + c.tools.length + c.transport.length + c.gastos.length} insumos</div>
       <div class="stamp-total"><span class="lbl">Costo total unitario</span>${fmt(c.total_cost)}</div>
     </div>
   `).join("");
@@ -426,6 +440,33 @@ function renderCostCardGrid(filter) {
     const card = await api.get(`/api/costcards/${el.dataset.open}`);
     openFichaEditor(card);
   }));
+}
+
+async function refreshFichaPricesFromCatalog() {
+  // Force a fresh pull from the catalogs (not just "load if empty")
+  catalogCache.material = await api.get("/api/catalog/material");
+  catalogCache.labor = await api.get("/api/catalog/labor");
+  catalogCache.tool = await api.get("/api/catalog/tool");
+  catalogCache.transport = await api.get("/api/catalog/transport");
+  catalogCache.gasto = await api.get("/api/catalog/gasto");
+
+  const refreshGroup = (items, cat) => {
+    items.forEach(it => {
+      if (!it.code) return;
+      const match = catalogCache[cat].find(x => x.code === it.code);
+      if (match) {
+        it.description = match.description;
+        it.unit = match.unit;
+        it.unit_price = match.unit_price;
+      }
+    });
+  };
+  refreshGroup(editingCard.materials, "material");
+  refreshGroup(editingCard.labor, "labor");
+  refreshGroup(editingCard.tools, "tool");
+  refreshGroup(editingCard.transport, "transport");
+  refreshGroup(editingCard.gastos, "gasto");
+  renderFichaEditor();
 }
 
 function blankItem(category) {
@@ -436,11 +477,13 @@ function openFichaEditor(card) {
   editingCard = card ? JSON.parse(JSON.stringify(card)) : {
     id: null, code: "", name: "", unit: "",
     admin_pct: 10, utilidad_pct: 15,
-    materials: [], labor: [], tools: [],
+    materials: [], labor: [], tools: [], transport: [], gastos: [],
   };
   editingCard.materials.forEach(i => i._key = uid());
   editingCard.labor.forEach(i => i._key = uid());
   editingCard.tools.forEach(i => i._key = uid());
+  editingCard.transport.forEach(i => i._key = uid());
+  editingCard.gastos.forEach(i => i._key = uid());
 
   document.getElementById("costcards-list-panel").classList.add("hidden");
   document.getElementById("costcard-editor-panel").classList.remove("hidden");
@@ -460,7 +503,7 @@ function fichaSectionHtml(category, label, items) {
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <button class="add-row-btn" data-add="${category}">+ Agregar línea de ${label.toLowerCase()}</button>
+    <button class="add-row-btn" data-add="${category}">+ Agregar</button>
   `;
 }
 
@@ -490,7 +533,7 @@ function fichaRowHtml(category, it) {
 }
 
 async function ensureCatalogsLoaded() {
-  for (const cat of ["material", "labor", "tool"]) {
+  for (const cat of ["material", "labor", "tool", "transport", "gasto"]) {
     if (!catalogCache[cat] || catalogCache[cat].length === 0) {
       catalogCache[cat] = await api.get(`/api/catalog/${cat}`);
     }
@@ -520,11 +563,14 @@ async function renderFichaEditor() {
     ${fichaSectionHtml("material", "Materiales", c.materials)}
     ${fichaSectionHtml("labor", "Mano de Obra", c.labor)}
     ${fichaSectionHtml("tool", "Herramientas", c.tools)}
+    ${fichaSectionHtml("transport", "Transporte", c.transport)}
+    ${fichaSectionHtml("gasto", "Otros Gastos", c.gastos)}
 
     <div class="totals-box" id="ficha-totals"></div>
 
     <div class="editor-actions">
       <button class="btn btn-primary" id="fc-save">Guardar Ficha</button>
+      <button class="btn btn-amber" id="fc-refresh">🔄 Actualizar precios</button>
       <button class="btn btn-print" id="fc-print">🖨 Imprimir / Guardar PDF</button>
       <button class="btn btn-ghost" id="fc-cancel">Volver a la lista</button>
       ${c.id ? '<button class="btn btn-danger" id="fc-delete">Eliminar Ficha</button>' : ""}
@@ -541,7 +587,7 @@ function bindFichaEvents() {
   el.querySelectorAll(".add-row-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const cat = btn.dataset.add;
-      const key = cat === "material" ? "materials" : cat === "labor" ? "labor" : "tools";
+      const key = FICHA_SECTION_KEY[cat];
       editingCard[key].push(blankItem(cat));
       renderFichaEditor();
     });
@@ -549,7 +595,7 @@ function bindFichaEvents() {
 
   el.querySelectorAll("table[data-section]").forEach(table => {
     const cat = table.dataset.section;
-    const key = cat === "material" ? "materials" : cat === "labor" ? "labor" : "tools";
+    const key = FICHA_SECTION_KEY[cat];
 
     table.querySelectorAll(".remove-row").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -597,6 +643,7 @@ function bindFichaEvents() {
   document.getElementById("fc-cancel").addEventListener("click", loadCostCardList);
   document.getElementById("fc-save").addEventListener("click", saveFicha);
   document.getElementById("fc-print").addEventListener("click", () => window.print());
+  document.getElementById("fc-refresh").addEventListener("click", refreshFichaPricesFromCatalog);
   const delBtn = document.getElementById("fc-delete");
   if (delBtn) delBtn.addEventListener("click", async () => {
     if (!confirm("¿Eliminar esta ficha de costo? También se quitará de cotizaciones que la usen.")) return;
@@ -622,10 +669,12 @@ function computeFichaTotalsLocal() {
   const totalMaterials = sum(c.materials);
   const totalLabor = sum(c.labor);
   const totalTools = sum(c.tools);
-  const direct = totalMaterials + totalLabor + totalTools;
+  const totalTransport = sum(c.transport);
+  const totalGastos = sum(c.gastos);
+  const direct = totalMaterials + totalLabor + totalTools + totalTransport + totalGastos;
   const adminAmt = direct * ((parseFloat(document.getElementById("fc-admin")?.value) || 0) / 100);
   const utilAmt = direct * ((parseFloat(document.getElementById("fc-util")?.value) || 0) / 100);
-  return { totalMaterials, totalLabor, totalTools, direct, adminAmt, utilAmt, grand: direct + adminAmt + utilAmt };
+  return { totalMaterials, totalLabor, totalTools, totalTransport, totalGastos, direct, adminAmt, utilAmt, grand: direct + adminAmt + utilAmt };
 }
 
 function updateFichaTotals() {
@@ -634,6 +683,8 @@ function updateFichaTotals() {
     <div class="totals-row"><span>Total Materiales</span><span>${fmt(t.totalMaterials)}</span></div>
     <div class="totals-row"><span>Total Mano de Obra</span><span>${fmt(t.totalLabor)}</span></div>
     <div class="totals-row"><span>Total Herramientas</span><span>${fmt(t.totalTools)}</span></div>
+    <div class="totals-row"><span>Total Transporte</span><span>${fmt(t.totalTransport)}</span></div>
+    <div class="totals-row"><span>Total Otros Gastos</span><span>${fmt(t.totalGastos)}</span></div>
     <div class="totals-row"><strong>Costo Directo</strong><strong>${fmt(t.direct)}</strong></div>
     <div class="totals-row"><span>Gastos Administrativos</span><span>${fmt(t.adminAmt)}</span></div>
     <div class="totals-row"><span>Utilidad</span><span>${fmt(t.utilAmt)}</span></div>
@@ -660,6 +711,8 @@ async function saveFicha() {
       ...c.materials.map(i => ({ ...i, category: "material" })),
       ...c.labor.map(i => ({ ...i, category: "labor" })),
       ...c.tools.map(i => ({ ...i, category: "tool" })),
+      ...c.transport.map(i => ({ ...i, category: "transport" })),
+      ...c.gastos.map(i => ({ ...i, category: "gasto" })),
     ],
   };
   if (!body.code || !body.name) { alert("Código y nombre de actividad son requeridos."); return; }
@@ -700,14 +753,17 @@ async function loadQuoteList() {
 function openQuoteEditor(quote) {
   editingQuote = quote ? JSON.parse(JSON.stringify(quote)) : {
     id: null, name: "", client: "", date: new Date().toISOString().slice(0, 10),
-    lines: [], transportation: [], other_fees: [],
+    exento: false, lines: [],
   };
   editingQuote.lines.forEach(l => l._key = uid());
-  editingQuote.transportation.forEach(f => f._key = uid());
-  editingQuote.other_fees.forEach(f => f._key = uid());
 
   document.getElementById("quotes-list-panel").classList.add("hidden");
   document.getElementById("quote-editor-panel").classList.remove("hidden");
+  renderQuoteEditor();
+}
+
+async function refreshQuoteFromCatalog() {
+  costCardsCache = await api.get("/api/costcards");
   renderQuoteEditor();
 }
 
@@ -734,13 +790,6 @@ async function renderQuoteEditor() {
       </tr>`;
   }).join("");
 
-  const feeRows = (arr, cls) => arr.map(f => `
-    <tr data-row="${f._key}">
-      <td><input class="f-fee-desc" value="${esc(f.description)}" placeholder="Descripción"></td>
-      <td><input class="f-fee-amt" type="number" step="0.01" value="${f.amount}" style="width:120px"></td>
-      <td class="no-print"><button class="btn btn-sm btn-danger remove-fee" data-cls="${cls}">×</button></td>
-    </tr>`).join("");
-
   el.innerHTML = `
     <div class="print-head">
       <div class="print-title">Cotización — ${esc(q.name)}</div>
@@ -753,12 +802,13 @@ async function renderQuoteEditor() {
       <div class="field narrow"><label>Fecha</label><input id="q-date" type="date" value="${esc(q.date)}"></div>
     </div>
 
-    <div class="section-title">Partidas (Fichas de Costo)</div>
+    <div class="section-title">Items</div>
     <div class="no-print" style="display:flex;gap:10px;margin:10px 0">
       <select id="q-add-card" style="flex:1;padding:8px;border:1px solid #c9c2ae">
         <option value="">— seleccionar ficha de costo para agregar —</option>
         ${cardOptions}
       </select>
+      <input id="q-add-qty" type="number" step="0.01" value="1" placeholder="Cantidad" style="width:110px;padding:8px;border:1px solid #c9c2ae">
       <button class="btn btn-primary btn-sm" id="q-add-card-btn">+ Agregar</button>
     </div>
     <table class="line-table">
@@ -766,18 +816,14 @@ async function renderQuoteEditor() {
       <tbody id="q-lines-body">${lineRows}</tbody>
     </table>
 
-    <div class="section-title">Transporte</div>
-    <table class="line-table"><tbody id="q-transport-body">${feeRows(q.transportation, "transportation")}</tbody></table>
-    <button class="add-row-btn" id="q-add-transport">+ Agregar gasto de transporte</button>
-
-    <div class="section-title">Otros Gastos</div>
-    <table class="line-table"><tbody id="q-other-body">${feeRows(q.other_fees, "other")}</tbody></table>
-    <button class="add-row-btn" id="q-add-other">+ Agregar otro gasto</button>
-
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:18px 0 4px;justify-content:flex-end">
+      <input type="checkbox" id="q-exento" ${q.exento ? "checked" : ""}> Exento/Exonerado
+    </label>
     <div class="totals-box" id="quote-totals"></div>
 
     <div class="editor-actions">
       <button class="btn btn-primary" id="q-save">Guardar Cotización</button>
+      <button class="btn btn-amber" id="q-refresh">🔄 Actualizar precios</button>
       <button class="btn btn-print" id="q-print">🖨 Imprimir / Guardar PDF</button>
       <button class="btn btn-ghost" id="q-cancel">Volver a la lista</button>
       ${q.id ? '<button class="btn btn-danger" id="q-delete">Eliminar Cotización</button>' : ""}
@@ -794,7 +840,8 @@ function bindQuoteEvents() {
   document.getElementById("q-add-card-btn").addEventListener("click", () => {
     const sel = document.getElementById("q-add-card");
     if (!sel.value) return;
-    q.lines.push({ _key: uid(), cost_card_id: parseInt(sel.value), quantity: 1 });
+    const qty = parseFloat(document.getElementById("q-add-qty").value) || 1;
+    q.lines.push({ _key: uid(), cost_card_id: parseInt(sel.value), quantity: qty });
     renderQuoteEditor();
   });
 
@@ -813,32 +860,11 @@ function bindQuoteEvents() {
     });
   });
 
-  document.getElementById("q-add-transport").addEventListener("click", () => {
-    q.transportation.push({ _key: uid(), description: "", amount: 0 });
-    renderQuoteEditor();
-  });
-  document.getElementById("q-add-other").addEventListener("click", () => {
-    q.other_fees.push({ _key: uid(), description: "", amount: 0 });
-    renderQuoteEditor();
-  });
-
-  [["q-transport-body", q.transportation], ["q-other-body", q.other_fees]].forEach(([bodyId, arr]) => {
-    document.querySelectorAll(`#${bodyId} tr`).forEach(tr => {
-      const key = tr.dataset.row;
-      const fee = arr.find(f => f._key === key);
-      tr.querySelector(".f-fee-desc").addEventListener("input", (e) => { fee.description = e.target.value; });
-      tr.querySelector(".f-fee-amt").addEventListener("input", (e) => { fee.amount = parseFloat(e.target.value) || 0; updateQuoteTotals(); });
-      tr.querySelector(".remove-fee").addEventListener("click", () => {
-        if (bodyId === "q-transport-body") q.transportation = q.transportation.filter(f => f._key !== key);
-        else q.other_fees = q.other_fees.filter(f => f._key !== key);
-        renderQuoteEditor();
-      });
-    });
-  });
-
   document.getElementById("q-cancel").addEventListener("click", loadQuoteList);
   document.getElementById("q-save").addEventListener("click", saveQuote);
   document.getElementById("q-print").addEventListener("click", () => window.print());
+  document.getElementById("q-refresh").addEventListener("click", refreshQuoteFromCatalog);
+  document.getElementById("q-exento").addEventListener("change", updateQuoteTotals);
   const delBtn = document.getElementById("q-delete");
   if (delBtn) delBtn.addEventListener("click", async () => {
     if (!confirm("¿Eliminar esta cotización?")) return;
@@ -849,18 +875,17 @@ function bindQuoteEvents() {
 
 function updateQuoteTotals() {
   const q = editingQuote;
-  const linesTotal = q.lines.reduce((s, l) => {
+  const subtotal = q.lines.reduce((s, l) => {
     const card = costCardsCache.find(c => c.id == l.cost_card_id);
     return s + (card ? card.total_cost : 0) * (l.quantity || 0);
   }, 0);
-  const transportTotal = q.transportation.reduce((s, f) => s + (f.amount || 0), 0);
-  const otherTotal = q.other_fees.reduce((s, f) => s + (f.amount || 0), 0);
-  const grand = linesTotal + transportTotal + otherTotal;
+  const exento = document.getElementById("q-exento")?.checked || false;
+  const isvAmount = exento ? 0 : subtotal * 0.15;
+  const grand = subtotal + isvAmount;
 
   document.getElementById("quote-totals").innerHTML = `
-    <div class="totals-row"><span>Subtotal Fichas de Costo</span><span>${fmt(linesTotal)}</span></div>
-    <div class="totals-row"><span>Transporte</span><span>${fmt(transportTotal)}</span></div>
-    <div class="totals-row"><span>Otros Gastos</span><span>${fmt(otherTotal)}</span></div>
+    <div class="totals-row"><strong>Subtotal</strong><strong>${fmt(subtotal)}</strong></div>
+    <div class="totals-row"><span>ISV (15%)</span><span>${exento ? "Exento" : fmt(isvAmount)}</span></div>
     <div class="totals-row grand"><span>Costo Total Proyecto</span><span>${fmt(grand)}</span></div>
   `;
 }
@@ -871,9 +896,8 @@ async function saveQuote() {
     name: document.getElementById("q-name").value,
     client: document.getElementById("q-client").value,
     date: document.getElementById("q-date").value,
+    exento: document.getElementById("q-exento").checked,
     lines: q.lines.map(l => ({ cost_card_id: l.cost_card_id, quantity: l.quantity })),
-    transportation: q.transportation.map(f => ({ description: f.description, amount: f.amount })),
-    other_fees: q.other_fees.map(f => ({ description: f.description, amount: f.amount })),
   };
   if (!body.name) { alert("El proyecto necesita un nombre."); return; }
   if (q.id) await api.put(`/api/quotes/${q.id}`, body);

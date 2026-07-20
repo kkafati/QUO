@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
-from models import db, Material, Labor, Tool, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice
+from models import db, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
@@ -14,7 +14,7 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
 
-CATEGORY_MODELS = {"material": Material, "labor": Labor, "tool": Tool}
+CATEGORY_MODELS = {"material": Material, "labor": Labor, "tool": Tool, "transport": Transport, "gasto": Gasto}
 
 # ---------------------------------------------------------------------------
 # Static frontend
@@ -40,9 +40,21 @@ def catalog_to_dict(item):
     }
 
 
+def compute_material_auto_price(suppliers):
+    """Highest price among the supplier quotes sharing the most recent date."""
+    if not suppliers:
+        return None
+    max_date = max((s.date or "") for s in suppliers)
+    candidates = [s for s in suppliers if (s.date or "") == max_date]
+    return max(c.price for c in candidates)
+
+
 def material_to_dict(item):
     base = catalog_to_dict(item)
     suppliers = item.suppliers
+    auto_price = compute_material_auto_price(suppliers)
+    if auto_price is not None:
+        base["unit_price"] = auto_price
     if suppliers:
         cheapest = min(suppliers, key=lambda s: s.price)
         priciest = max(suppliers, key=lambda s: s.price)
@@ -201,7 +213,7 @@ def delete_supplier(supplier_id):
 
 def compute_card_totals(card):
     """Compute all derived totals for a cost card. Returns a dict."""
-    groups = {"material": [], "labor": [], "tool": []}
+    groups = {"material": [], "labor": [], "tool": [], "transport": [], "gasto": []}
     for it in card.items:
         rendimiento = it.rendimiento or 0
         desperdicio = (it.desperdicio_pct or 0) / 100.0
@@ -223,7 +235,9 @@ def compute_card_totals(card):
     total_materials = sum(x["total"] for x in groups["material"])
     total_labor = sum(x["total"] for x in groups["labor"])
     total_tools = sum(x["total"] for x in groups["tool"])
-    direct_cost = total_materials + total_labor + total_tools
+    total_transport = sum(x["total"] for x in groups["transport"])
+    total_gastos = sum(x["total"] for x in groups["gasto"])
+    direct_cost = total_materials + total_labor + total_tools + total_transport + total_gastos
     admin_amount = direct_cost * (card.admin_pct / 100.0)
     utilidad_amount = direct_cost * (card.utilidad_pct / 100.0)
     total_cost = direct_cost + admin_amount + utilidad_amount
@@ -238,9 +252,13 @@ def compute_card_totals(card):
         "materials": groups["material"],
         "labor": groups["labor"],
         "tools": groups["tool"],
+        "transport": groups["transport"],
+        "gastos": groups["gasto"],
         "total_materials": round(total_materials, 4),
         "total_labor": round(total_labor, 4),
         "total_tools": round(total_tools, 4),
+        "total_transport": round(total_transport, 4),
+        "total_gastos": round(total_gastos, 4),
         "direct_cost": round(direct_cost, 4),
         "admin_amount": round(admin_amount, 4),
         "utilidad_amount": round(utilidad_amount, 4),
@@ -347,24 +365,28 @@ def compute_quote_totals(quote):
     fees_total = 0.0
     for fee in quote.fees:
         fees_total += fee.amount or 0
-        fees[fee.category].append({
-            "id": fee.id,
-            "description": fee.description,
-            "amount": fee.amount,
-        })
+        entry = {"id": fee.id, "description": fee.description, "amount": fee.amount}
+        if fee.category == "transportation":
+            entry.update({"code": fee.code, "unit": fee.unit, "quantity": fee.quantity, "unit_price": fee.unit_price})
+        fees[fee.category].append(entry)
 
-    grand_total = lines_total + fees_total
+    subtotal = lines_total + fees_total
+    isv_amount = 0.0 if quote.exento else subtotal * 0.15
+    grand_total = subtotal + isv_amount
 
     return {
         "id": quote.id,
         "name": quote.name,
         "client": quote.client,
         "date": quote.date,
+        "exento": quote.exento,
         "lines": lines,
         "lines_total": round(lines_total, 2),
         "transportation": fees["transportation"],
         "other_fees": fees["other"],
         "fees_total": round(fees_total, 2),
+        "subtotal": round(subtotal, 2),
+        "isv_amount": round(isv_amount, 2),
         "grand_total": round(grand_total, 2),
     }
 
@@ -388,6 +410,7 @@ def create_quote():
         name=data.get("name", "").strip(),
         client=data.get("client", "").strip(),
         date=data.get("date") or datetime.utcnow().strftime("%Y-%m-%d"),
+        exento=bool(data.get("exento", False)),
     )
     db.session.add(quote)
     db.session.commit()
@@ -402,6 +425,8 @@ def update_quote(quote_id):
     quote.name = data.get("name", quote.name).strip()
     quote.client = data.get("client", quote.client).strip()
     quote.date = data.get("date", quote.date)
+    if "exento" in data:
+        quote.exento = bool(data.get("exento"))
     _sync_quote_children(quote, data)
     db.session.commit()
     return jsonify(compute_quote_totals(quote))
@@ -423,9 +448,15 @@ def _sync_quote_children(quote, data):
             db.session.delete(fee)
         db.session.flush()
         for fee in data.get("transportation", []):
+            qty = float(fee.get("quantity", 1) or 0)
+            price = float(fee.get("unit_price", 0) or 0)
             db.session.add(QuoteFee(quote_id=quote.id, category="transportation",
+                                     code=fee.get("code", ""),
                                      description=fee.get("description", ""),
-                                     amount=float(fee.get("amount", 0) or 0)))
+                                     unit=fee.get("unit", ""),
+                                     quantity=qty,
+                                     unit_price=price,
+                                     amount=qty * price))
         for fee in data.get("other_fees", []):
             db.session.add(QuoteFee(quote_id=quote.id, category="other",
                                      description=fee.get("description", ""),
