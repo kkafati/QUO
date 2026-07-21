@@ -74,7 +74,16 @@
           <input type="search" id="costcard-search" placeholder="Buscar ficha por código o nombre…">
           <button class="btn btn-primary" id="btn-new-costcard">+ Nueva Ficha</button>
         </div>
-        <div class="card-grid" id="costcard-grid"></div>
+        <table class="data-table" id="costcard-table">
+          <thead><tr>
+            <th class="col-code">Código</th>
+            <th>Actividad</th>
+            <th class="col-unit">Unidad</th>
+            <th class="col-num">Costo Total Unitario</th>
+            <th class="col-actions"></th>
+          </tr></thead>
+          <tbody id="costcard-tbody"></tbody>
+        </table>
         <div class="empty-state" id="costcard-empty" hidden>Aún no hay fichas de costo. Crea la primera.</div>
       </div>
 
@@ -93,7 +102,16 @@
         <div class="panel-toolbar">
           <button class="btn btn-primary" id="btn-new-quote">+ Nueva Cotización</button>
         </div>
-        <div class="card-grid" id="quote-grid"></div>
+        <table class="data-table" id="quote-table">
+          <thead><tr>
+            <th>Proyecto</th>
+            <th>Cliente</th>
+            <th class="col-date">Fecha</th>
+            <th class="col-num">Total</th>
+            <th class="col-actions"></th>
+          </tr></thead>
+          <tbody id="quote-tbody"></tbody>
+        </table>
         <div class="empty-state" id="quote-empty" hidden>Aún no hay cotizaciones. Crea la primera.</div>
       </div>
 

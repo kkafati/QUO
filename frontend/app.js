@@ -426,19 +426,29 @@ const FICHA_SECTION_KEY = { material: "materials", labor: "labor", tool: "tools"
 function renderCostCardGrid(filter) {
   const items = costCardsCache.filter(c =>
     !filter || c.code.toLowerCase().includes(filter) || c.name.toLowerCase().includes(filter));
-  const grid = document.getElementById("costcard-grid");
+  const tbody = document.getElementById("costcard-tbody");
   document.getElementById("costcard-empty").hidden = items.length > 0;
-  grid.innerHTML = items.map(c => `
-    <div class="stamp-card" data-open="${c.id}">
-      <div class="stamp-badge">${esc(c.code)}</div>
-      <h3>${esc(c.name)}</h3>
-      <div class="stamp-meta">${esc(c.unit || "—")} · ${c.materials.length + c.labor.length + c.tools.length + c.transport.length + c.gastos.length} insumos</div>
-      <div class="stamp-total"><span class="lbl">Costo total unitario</span>${fmt(c.total_cost)}</div>
-    </div>
+  tbody.innerHTML = items.map(c => `
+    <tr>
+      <td class="mono">${esc(c.code)}</td>
+      <td>${esc(c.name)}</td>
+      <td>${esc(c.unit || "—")}</td>
+      <td class="num">${fmt(c.total_cost)}</td>
+      <td class="col-actions">
+        <button class="btn btn-sm btn-ghost" data-open="${c.id}">Abrir</button>
+        <button class="btn btn-sm btn-danger" data-del-card="${c.id}">×</button>
+      </td>
+    </tr>
   `).join("");
-  grid.querySelectorAll("[data-open]").forEach(el => el.addEventListener("click", async () => {
+  tbody.querySelectorAll("[data-open]").forEach(el => el.addEventListener("click", async () => {
     const card = await api.get(`/api/costcards/${el.dataset.open}`);
     openFichaEditor(card);
+  }));
+  tbody.querySelectorAll("[data-del-card]").forEach(btn => btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (!confirm("¿Eliminar esta ficha de costo?")) return;
+    await api.del(`/api/costcards/${btn.dataset.delCard}`);
+    loadCostCardList();
   }));
 }
 
@@ -734,19 +744,29 @@ async function loadQuoteList() {
   quotesCache = await api.get("/api/quotes");
   document.getElementById("quote-editor-panel").classList.add("hidden");
   document.getElementById("quotes-list-panel").classList.remove("hidden");
-  const grid = document.getElementById("quote-grid");
+  const tbody = document.getElementById("quote-tbody");
   document.getElementById("quote-empty").hidden = quotesCache.length > 0;
-  grid.innerHTML = quotesCache.map(q => `
-    <div class="stamp-card" data-open="${q.id}">
-      <div class="stamp-badge">${esc(q.date || "")}</div>
-      <h3>${esc(q.name)}</h3>
-      <div class="stamp-meta">${esc(q.client || "Sin cliente")} · ${q.lines.length} partidas</div>
-      <div class="stamp-total"><span class="lbl">Costo total del proyecto</span>${fmt(q.grand_total)}</div>
-    </div>
+  tbody.innerHTML = quotesCache.map(q => `
+    <tr>
+      <td>${esc(q.name)}</td>
+      <td>${esc(q.client || "—")}</td>
+      <td>${esc(q.date || "—")}</td>
+      <td class="num">${fmt(q.grand_total)}</td>
+      <td class="col-actions">
+        <button class="btn btn-sm btn-ghost" data-open="${q.id}">Abrir</button>
+        <button class="btn btn-sm btn-danger" data-del-quote="${q.id}">×</button>
+      </td>
+    </tr>
   `).join("");
-  grid.querySelectorAll("[data-open]").forEach(el => el.addEventListener("click", async () => {
+  tbody.querySelectorAll("[data-open]").forEach(el => el.addEventListener("click", async () => {
     const q = await api.get(`/api/quotes/${el.dataset.open}`);
     openQuoteEditor(q);
+  }));
+  tbody.querySelectorAll("[data-del-quote]").forEach(btn => btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (!confirm("¿Eliminar esta cotización?")) return;
+    await api.del(`/api/quotes/${btn.dataset.delQuote}`);
+    loadQuoteList();
   }));
 }
 
@@ -799,7 +819,7 @@ async function renderQuoteEditor() {
     <div class="editor-fields" style="margin-bottom:8px">
       <div class="field"><label>Nombre del proyecto</label><input id="q-name" value="${esc(q.name)}" style="min-width:260px"></div>
       <div class="field"><label>Cliente</label><input id="q-client" value="${esc(q.client)}"></div>
-      <div class="field narrow"><label>Fecha</label><input id="q-date" type="date" value="${esc(q.date)}"></div>
+      <div class="field"><label>Fecha</label><input id="q-date" type="date" value="${esc(q.date)}" style="min-width:160px;width:160px"></div>
     </div>
 
     <div class="section-title">Items</div>
@@ -816,8 +836,8 @@ async function renderQuoteEditor() {
       <tbody id="q-lines-body">${lineRows}</tbody>
     </table>
 
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:18px 0 4px;justify-content:flex-end">
-      <input type="checkbox" id="q-exento" ${q.exento ? "checked" : ""}> Exento/Exonerado
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:18px 0 4px;justify-content:flex-end;color:#8a8478">
+      <input type="checkbox" id="q-exento" style="accent-color:#8a8478" ${q.exento ? "checked" : ""}> Exento/Exonerado
     </label>
     <div class="totals-box" id="quote-totals"></div>
 
@@ -886,7 +906,7 @@ function updateQuoteTotals() {
   document.getElementById("quote-totals").innerHTML = `
     <div class="totals-row"><strong>Subtotal</strong><strong>${fmt(subtotal)}</strong></div>
     <div class="totals-row"><span>ISV (15%)</span><span>${exento ? "Exento" : fmt(isvAmount)}</span></div>
-    <div class="totals-row grand"><span>Costo Total Proyecto</span><span>${fmt(grand)}</span></div>
+    <div class="totals-row grand"><span>Total</span><span>${fmt(grand)}</span></div>
   `;
 }
 

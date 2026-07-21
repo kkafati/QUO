@@ -128,3 +128,13 @@ class QuoteFee(db.Model):
     quantity = db.Column(db.Float, default=1)
     unit_price = db.Column(db.Float, default=0)
     amount = db.Column(db.Float, default=0)  # for "other": entered directly. for "transportation": quantity * unit_price
+
+
+class RegulacionStudy(db.Model):
+    """A saved study from the Planificador de Demanda y Regulación tool.
+    'data' stores the tool's full state (project fields + node graph) as JSON."""
+    __tablename__ = "regulacion_studies"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    data = db.Column(db.Text, nullable=False)
+    updated_at = db.Column(db.String(32))

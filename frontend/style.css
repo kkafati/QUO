@@ -561,6 +561,7 @@ button, input { font-family: inherit; }
 @media print {
   .no-print,
   .sidebar,
+  .view-header,
   .panel-toolbar,
   .tabs,
   .editor-actions,

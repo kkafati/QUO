@@ -1,12 +1,15 @@
 import os
+import json
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
-from models import db, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice
+from models import db, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
+LANDING_DIR = os.path.join(os.path.dirname(BASE_DIR), "landing")
+REGULACION_DIR = os.path.join(os.path.dirname(BASE_DIR), "regulacion")
 
-app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
+app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/cotizaciones")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(BASE_DIR, "quoting.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db.init_app(app)
@@ -21,8 +24,19 @@ CATEGORY_MODELS = {"material": Material, "labor": Labor, "tool": Tool, "transpor
 # ---------------------------------------------------------------------------
 
 @app.route("/")
+def landing():
+    return send_from_directory(LANDING_DIR, "index.html")
+
+
+@app.route("/cotizaciones/")
 def index():
     return send_from_directory(FRONTEND_DIR, "index.html")
+
+
+@app.route("/regulación/")
+@app.route("/regulacion/")
+def regulacion():
+    return send_from_directory(REGULACION_DIR, "index.html")
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +482,61 @@ def _sync_quote_children(quote, data):
 def delete_quote(quote_id):
     quote = Quote.query.get_or_404(quote_id)
     db.session.delete(quote)
+    db.session.commit()
+    return "", 204
+
+
+# ---------------------------------------------------------------------------
+# Regulación studies (Planificador de Demanda) - save/load full tool state
+# ---------------------------------------------------------------------------
+
+def regulacion_summary(r):
+    return {"id": r.id, "name": r.name, "updated_at": r.updated_at}
+
+
+@app.route("/api/regulacion", methods=["GET"])
+def list_regulacion_studies():
+    rows = RegulacionStudy.query.order_by(RegulacionStudy.id.desc()).all()
+    return jsonify([regulacion_summary(r) for r in rows])
+
+
+@app.route("/api/regulacion/<int:study_id>", methods=["GET"])
+def get_regulacion_study(study_id):
+    r = RegulacionStudy.query.get_or_404(study_id)
+    return jsonify({**regulacion_summary(r), "data": json.loads(r.data)})
+
+
+@app.route("/api/regulacion", methods=["POST"])
+def create_regulacion_study():
+    body = request.json or {}
+    name = (body.get("name") or "").strip() or "Estudio sin título"
+    r = RegulacionStudy(
+        name=name,
+        data=json.dumps(body.get("data", {})),
+        updated_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
+    )
+    db.session.add(r)
+    db.session.commit()
+    return jsonify(regulacion_summary(r)), 201
+
+
+@app.route("/api/regulacion/<int:study_id>", methods=["PUT"])
+def update_regulacion_study(study_id):
+    r = RegulacionStudy.query.get_or_404(study_id)
+    body = request.json or {}
+    if "name" in body and (body["name"] or "").strip():
+        r.name = body["name"].strip()
+    if "data" in body:
+        r.data = json.dumps(body["data"])
+    r.updated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    db.session.commit()
+    return jsonify(regulacion_summary(r))
+
+
+@app.route("/api/regulacion/<int:study_id>", methods=["DELETE"])
+def delete_regulacion_study(study_id):
+    r = RegulacionStudy.query.get_or_404(study_id)
+    db.session.delete(r)
     db.session.commit()
     return "", 204
 

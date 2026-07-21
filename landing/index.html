@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ingeniería &amp; Construcción</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blueprint-navy: #0f2942;
+    --blueprint-navy-deep: #0a1d30;
+    --blueprint-line: #1e4d73;
+    --blueprint-cyan: #5fc9e8;
+    --paper: #f6f3ea;
+    --ink: #16232f;
+    --ink-soft: #55636e;
+    --amber: #d98f3b;
+    --amber-deep: #b5701f;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; min-height: 100vh;
+    font-family: 'IBM Plex Sans', sans-serif;
+    background:
+      linear-gradient(var(--blueprint-navy-deep), var(--blueprint-navy-deep)),
+      repeating-linear-gradient(0deg, var(--blueprint-line) 0px, var(--blueprint-line) 1px, transparent 1px, transparent 28px),
+      repeating-linear-gradient(90deg, var(--blueprint-line) 0px, var(--blueprint-line) 1px, transparent 1px, transparent 28px);
+    background-blend-mode: normal, overlay, overlay;
+    color: var(--paper);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    background: var(--paper);
+    color: var(--ink);
+    border: 1px solid var(--ink);
+    box-shadow: 8px 8px 0 rgba(0,0,0,0.35);
+    max-width: 560px;
+    width: 90%;
+    padding: 48px 40px;
+    text-align: center;
+  }
+  .mark {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 34px;
+    font-weight: 700;
+    color: var(--blueprint-navy);
+    border: 1.5px solid var(--blueprint-navy);
+    width: 60px; height: 60px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 24px;
+    transform: rotate(-2deg);
+  }
+  h1 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 24px;
+    margin: 0 0 8px;
+  }
+  p.sub {
+    color: var(--ink-soft);
+    font-size: 15px;
+    margin: 0 0 32px;
+    line-height: 1.5;
+  }
+  .btn {
+    display: inline-block;
+    background: var(--ink);
+    color: var(--paper);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 14px 28px;
+    border: 1px solid var(--ink);
+    transition: background 0.15s ease;
+  }
+  .btn:hover { background: #2a3947; }
+  .foot {
+    margin-top: 28px;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="mark">§</div>
+    <h1>Ingeniería &amp; Construcción</h1>
+    <p class="sub">Sitio en construcción. Mientras tanto, accede al sistema de costeo y cotización de proyectos.</p>
+    <a class="btn" href="/cotizaciones/">Ir al sistema de cotizaciones →</a>
+    <div style="height:12px"></div>
+    <a class="btn" href="/regulación/">Planificador de demanda y regulación →</a>
+    <div class="foot">Reemplaza esta página con tu sitio principal cuando esté listo.</div>
+  </div>
+</body>
+</html>

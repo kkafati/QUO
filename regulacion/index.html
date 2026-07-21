@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Planificador de Demanda y Dimensionamiento de Transformador</title>
+<style>
+  :root{
+    --bg:#0B1220; --panel:#121A2B; --panel2:#0E1524; --line:#25324A;
+    --text:#E7ECF5; --sub:#8B96AC; --cyan:#4FD1C5; --amber:#F2A93B; --red:#E86A5C;
+    --mono: ui-monospace,"SF Mono",Consolas,"Liberation Mono",Menlo,monospace;
+    --sans: -apple-system,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); padding:32px 20px 80px;}
+  .wrap{max-width:1180px; margin:0 auto;}
+  header{margin-bottom:32px; border-bottom:1px solid var(--line); padding-bottom:20px;}
+  .eyebrow{font-family:var(--mono); font-size:11px; letter-spacing:.18em; color:var(--cyan); text-transform:uppercase;}
+  h1{font-size:25px; margin:6px 0 4px; font-weight:650; letter-spacing:-0.01em;}
+  .subtitle{color:var(--sub); font-size:13.5px; max-width:680px; line-height:1.5;}
+
+  section{margin-bottom:32px;}
+  .sec-head{display:flex; align-items:baseline; gap:10px; margin-bottom:14px;}
+  .sec-num{font-family:var(--mono); color:var(--sub); font-size:12px;}
+  .sec-title{font-size:14px; font-weight:650; text-transform:uppercase; letter-spacing:.08em;}
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:20px;}
+
+  .paramrow{display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;}
+  .field{display:flex; flex-direction:column; gap:5px;}
+  .field label{font-size:11px; color:var(--sub); text-transform:uppercase; letter-spacing:.05em;}
+  .field input, .field select{
+    background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    padding:7px 9px; border-radius:6px; font-family:var(--mono); font-size:13px; width:150px;
+  }
+  .field .hintline{font-size:10.5px; color:var(--sub); font-family:var(--sans); max-width:160px;}
+
+  button{
+    font-family:var(--sans); font-size:12.5px; font-weight:600; cursor:pointer;
+    border-radius:7px; border:1px solid var(--line); background:var(--panel2); color:var(--text);
+    padding:7px 12px; transition:.15s;
+  }
+  button:hover{border-color:var(--cyan); color:var(--cyan);}
+  button.primary{background:var(--cyan); color:#06231F; border:none;}
+  button.primary:hover{filter:brightness(1.08); color:#06231F;}
+  button.ghost{background:transparent;}
+  button.danger:hover{border-color:var(--red); color:var(--red);}
+  button.small{padding:4px 8px; font-size:11px;}
+
+  .canvas-shell{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px; overflow:auto; position:relative;}
+  #diagramSvg{display:block; margin:0 auto; min-width:600px;}
+
+  .node-circle{cursor:pointer;}
+  .node-circle.selected{stroke:var(--cyan); stroke-width:2.5;}
+  .plus-btn{cursor:pointer;}
+  .plus-btn circle{fill:var(--panel2); stroke:var(--cyan); stroke-width:1.3;}
+  .plus-btn text{fill:var(--cyan); font-family:var(--mono);}
+  .plus-btn:hover circle{fill:var(--cyan);}
+  .plus-btn:hover text{fill:#06231F;}
+
+  .side-panel{margin-top:14px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:14px 16px;}
+  .side-panel h3{margin:0 0 10px; font-size:13px; letter-spacing:.03em; color:var(--text);}
+  .addform{display:flex; gap:10px; align-items:flex-end; margin-top:8px; flex-wrap:wrap;}
+  .addform .field input{width:110px;}
+  .dirbtns{display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;}
+
+  table{width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12.5px;}
+  th{text-align:left; color:var(--sub); font-weight:500; padding:6px; border-bottom:1px solid var(--line); font-size:11px; text-transform:uppercase; letter-spacing:.04em;}
+  td{padding:5px 6px; border-bottom:1px solid #1b2438;}
+  .tbl-scroll{max-height:340px; overflow-y:auto;}
+
+  .kpi-grid{display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:18px;}
+  @media(max-width:820px){.kpi-grid{grid-template-columns:1fr 1fr;}}
+  .kpi{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px;}
+  .kpi .lbl{font-size:10.5px; color:var(--sub); text-transform:uppercase; letter-spacing:.06em;}
+  .kpi .val{font-family:var(--mono); font-size:22px; margin-top:6px; font-weight:600;}
+  .kpi .sub{font-size:11px; color:var(--sub); margin-top:4px;}
+  .kpi.warn .val{color:var(--amber);}
+  .kpi.crit .val{color:var(--red);}
+  .kpi.ok .val{color:var(--cyan);}
+
+  .chart-card{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px;}
+  .chart-title{font-size:12.5px; color:var(--sub); text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px;}
+  .legend{display:flex; gap:14px; flex-wrap:wrap; margin:6px 0 4px; font-family:var(--mono); font-size:11.5px;}
+  .legend span{display:flex; align-items:center; gap:6px;}
+  .swatch{width:14px; height:3px; border-radius:2px; flex-shrink:0;}
+
+  footer{color:var(--sub); font-size:11.5px; margin-top:40px; border-top:1px solid var(--line); padding-top:14px; font-family:var(--mono);}
+  .hint{color:var(--sub); font-size:11.5px; margin-top:8px; line-height:1.5;}
+  .msg{font-size:12px; margin-top:6px;}
+
+  /* ---------- print sheet (built dynamically, hidden on screen) ---------- */
+  #printSheet{display:none;}
+  #printSheet h1{font-size:18px; margin:0 0 4px;}
+  #printSheet h2{font-size:13px; margin:14px 0 6px; border-bottom:1px solid #ccc; padding-bottom:4px;}
+  #printSheet h3{font-size:11.5px; margin:10px 0 5px; border-bottom:1px solid #ccc; padding-bottom:3px;}
+  #printSheet .print-meta{font-size:11px; color:#333; line-height:1.5;}
+  #printSheet .print-diagram svg{width:auto; height:auto; max-width:100%; max-height:240mm; display:block; margin:0 auto;}
+  #printSheet table{width:100%; border-collapse:collapse; font-size:9.5px; margin-bottom:8px;}
+  #printSheet th, #printSheet td{border:1px solid #ccc; padding:2.5px 5px; text-align:left;}
+  #printSheet .kpi-grid{display:flex; flex-wrap:wrap; gap:5px 22px; margin-bottom:8px;}
+  #printSheet .kpi{border:none; background:none; padding:0; border-radius:0;}
+  #printSheet .kpi .lbl{font-size:8px; color:#555; text-transform:uppercase; line-height:1.2;}
+  #printSheet .kpi .val{font-size:11px; font-weight:700; color:#111; margin-top:1px; line-height:1.2;}
+  #printSheet .kpi .sub{font-size:8px; color:#555; margin-top:0; line-height:1.2;}
+
+  #printSheet .two-col-row{display:flex; gap:10px; align-items:flex-start;}
+  #printSheet .two-col-row > div{min-width:0;}
+  #printSheet .two-col-row > div:first-child{flex:0 0 45%;}
+  #printSheet .two-col-row > div:last-child{flex:1;}
+  #printSheet .two-col-row table{table-layout:fixed; font-size:9.5px;}
+  #printSheet .two-col-row th{white-space:normal; overflow:visible; text-overflow:clip; word-break:break-word; line-height:1.15; font-size:9px;}
+  #printSheet .two-col-row td{padding:2.5px 4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  #printSheet thead th{border-bottom:1.5px solid #333;}
+  #printSheet .print-chart svg{width:100%; height:auto; max-height:140px;}
+  #printSheet .print-chart .legend{font-size:9px; color:#333;}
+  #printSheet .param-chips{display:flex; flex-wrap:wrap; gap:4px 16px; font-size:9.5px; margin-bottom:8px;}
+  #printSheet .param-chips b{font-weight:700;}
+  #printSheet #yearTable th, #printSheet #yearTable td{text-align:center;}
+
+  @media print{
+    .wrap > *:not(#printSheet){ display:none !important; }
+    #printSheet{
+      display:block; background:#fff; color:#111; padding:0;
+    }
+    #printSheet svg text{fill:#111 !important;}
+    #printSheet svg line, #printSheet svg path{stroke:#555;}
+    #printSheet h2, #printSheet table{break-inside:avoid;}
+    #printSheet .two-col-row{break-inside:avoid;}
+    #printSheet .print-diagram-page{break-before:page;}
+    @page{ margin:12mm; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Planificación de redes secundarias · Asignación de demanda</div>
+    <h1>Planificador Gráfico de Demanda y Dimensionamiento de Transformador</h1>
+    <div class="subtitle">Dibuja el circuito nodo por nodo desde el transformador, asigna abonados por nodo, y proyecta el crecimiento de la demanda según las tablas de asignación y coincidencia para recomendar el tamaño de transformador al final del período.</div>
+  </header>
+
+  <!-- 00 PROJECT INFO -->
+  <section>
+    <div class="sec-head"><span class="sec-num">00</span><span class="sec-title">Datos del proyecto</span></div>
+    <div class="panel">
+      <div class="paramrow">
+        <div class="field" style="width:240px;"><label>Nombre del proyecto</label><input type="text" id="projName" style="width:240px;"></div>
+        <div class="field" style="width:280px;"><label>Dirección del proyecto</label><input type="text" id="projAddress" style="width:280px;"></div>
+        <div class="field" style="width:220px;"><label>Diseñado por</label><input type="text" id="projDesigner" style="width:220px;"></div>
+      </div>
+      <div class="paramrow" style="margin-top:14px; border-top:1px solid var(--line); padding-top:14px;">
+        <div class="field" style="width:260px;">
+          <label>Estudios guardados</label>
+          <select id="savedStudiesSelect" style="width:260px;">
+            <option value="">— Cargar estudio guardado —</option>
+          </select>
+        </div>
+        <button onclick="openSelectedStudy()">Abrir</button>
+        <button class="danger" onclick="deleteSelectedStudy()">Eliminar</button>
+        <button class="primary" onclick="saveStudy()">💾 Guardar</button>
+        <button class="ghost" onclick="saveAsNewStudy()">Guardar como nuevo</button>
+        <span class="msg" id="saveStatus"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 01 DIAGRAM -->
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><span class="sec-title">Diagrama del circuito</span></div>
+    <div class="canvas-shell">
+      <svg id="diagramSvg"></svg>
+    </div>
+    <div class="side-panel" id="sidePanel">
+      <h3>Selecciona un nodo en el diagrama para editarlo o agregar ramales.</h3>
+    </div>
+    <div class="hint">Haz clic en el transformador o en cualquier nodo para seleccionarlo. Desde el panel puedes agregar un nodo nuevo hacia izquierda, derecha, arriba o abajo (una sola línea por dirección, igual que un circuito radial real), fijar la distancia al nodo padre y el número de abonados que conecta.</div>
+  </section>
+
+  <!-- 02 PARAMETERS -->
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><span class="sec-title">Parámetros generales</span></div>
+    <div class="panel">
+      <div class="paramrow">
+        <div class="field">
+          <label>Nombre del transformador</label>
+          <input type="text" id="transformerName" value="T1" style="width:100px;">
+        </div>
+        <div class="field">
+          <label>Potencia nominal actual del transformador (kVA)</label>
+          <select id="ratedKVA">
+            <option value="10">10</option>
+            <option value="15">15</option>
+            <option value="25" selected>25</option>
+            <option value="37.5">37.5</option>
+            <option value="50">50</option>
+          </select>
+        </div>
+      </div>
+      <div class="paramrow" style="margin-top:14px; align-items:flex-start;">
+        <div class="field"><label>V base (V)</label><input type="number" id="vbase" value="240"></div>
+        <div class="field"><label>Tipo de circuito</label>
+          <select id="circuitFactor">
+            <option value="2" selected>1φ 2 hilos</option>
+            <option value="1">3φ / neutro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Factor objetivo de carga (seguridad)</label>
+          <input type="number" id="safetyFactor" value="0.90" step="0.01">
+          <div class="hintline">Tamaño recomendado = demanda final ÷ este factor (la demanda no debe superar este % de la placa).</div>
+        </div>
+        <div class="field">
+          <label>Factor de pérdidas (FP→FC)</label>
+          <input type="number" id="llf" value="0.83" step="0.01">
+          <div class="hintline">Convierte la pérdida pico (kW) a pérdida de energía anual (kWh): pérdida × FP→FC × 8760h.</div>
+        </div>
+      </div>
+      <div class="paramrow" style="margin-top:14px; align-items:flex-start;">
+        <div class="field"><label>Año inicial</label><input type="number" id="startYear" value="2026"></div>
+        <div class="field"><label># de años a proyectar</label><input type="number" id="years" value="15"></div>
+        <div class="field">
+          <label>Tipo de área / edificación</label>
+          <select id="sector" onchange="onSectorChange()">
+            <option value="suburbano">Ingresos mínimos / Suburbana (3.00%)</option>
+            <option value="r4">Edificación R-4 (2.00%)</option>
+            <option value="r3">Edificación R-3 (1.50%)</option>
+            <option value="r2">Edificación R-2 (1.25%)</option>
+            <option value="r1">Edificación R-1 (1.00%)</option>
+          </select>
+        </div>
+        <div class="field" id="areaFieldWrap" style="display:none;">
+          <label>Área promedio del lote R-1 (m²)</label>
+          <input type="number" id="r1Area" value="440" onchange="onSectorChange()">
+        </div>
+        <div class="field">
+          <label>Factor de coincidencia (servicio)</label>
+          <input type="number" id="coincOverride" step="0.01">
+          <div class="hintline">Auto-calculado según el # total de abonados conectados; editable.</div>
+        </div>
+        <div class="field">
+          <label>Demanda inicial por abonado (kVA)</label>
+          <input type="number" id="kvaUser" step="0.01">
+          <div class="hintline">Auto-calculada según tabla de asignación y temperatura; editable.</div>
+        </div>
+        <div class="field"><label>Temperatura ambiente (°C)</label><input type="number" id="temp" value="25" onchange="onSectorChange()"></div>
+        <div class="field"><label>Factor de potencia</label><input type="number" id="pf" value="0.90" step="0.01"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 LINES -->
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><span class="sec-title">Líneas Ni–Nf (conductor)</span></div>
+    <div class="panel">
+      <div class="tbl-scroll">
+        <table id="lineCableTable">
+          <thead><tr><th>Ni</th><th>Nf</th><th>Distancia (m)</th><th>Conductor</th><th>R (Ω)</th><th>jX (Ω)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="hint">Cada nodo (excepto el transformador) tiene una sola línea entrante desde su padre. Elige el conductor para calcular R y jX automáticamente según Ω/km × longitud, o selecciona "Personalizado" para escribirlos tú mismo. Estos valores son de referencia (60Hz, ~75°C); sustitúyelos por datos del fabricante para diseño final.</div>
+    </div>
+  </section>
+
+  <div class="paramrow" style="margin-bottom:32px;">
+    <button class="primary" onclick="generateReport()">Generar informe →</button>
+    <button class="ghost" id="printBtn" onclick="printReport()" style="display:none;">🖨 Imprimir informe</button>
+    <span class="msg" id="validateMsg"></span>
+  </div>
+
+  <!-- 04 REPORT -->
+  <section id="reportSection" style="display:none;">
+    <div class="sec-head"><span class="sec-num">04</span><span class="sec-title">Informe de crecimiento y dimensionamiento</span></div>
+
+    <div class="kpi-grid">
+      <div class="kpi"><div class="lbl">Abonados totales</div><div class="val" id="kpiUsers">–</div><div class="sub" id="kpiUsersSub"></div></div>
+      <div class="kpi"><div class="lbl">Cantidad de nodos</div><div class="val" id="kpiNodeCount">–</div><div class="sub">nodos en el circuito</div></div>
+      <div class="kpi"><div class="lbl">Demanda diversificada año 0</div><div class="val" id="kpiD0">–</div><div class="sub">kVA en transformador</div></div>
+      <div class="kpi"><div class="lbl" id="kpiEndLabel">Demanda al final</div><div class="val" id="kpiDEnd">–</div><div class="sub" id="kpiDEndSub"></div></div>
+      <div class="kpi ok" id="kpiRecCard"><div class="lbl">Transformador recomendado</div><div class="val" id="kpiRec">–</div><div class="sub" id="kpiRecSub"></div></div>
+    </div>
+
+    <div class="chart-card" style="margin-bottom:18px;">
+      <div class="chart-title">Demanda proyectada del transformador vs. capacidad instalada</div>
+      <div id="demandChart"></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px;">
+      <div class="chart-title" style="margin-bottom:10px;">Proyección año a año</div>
+      <div class="tbl-scroll">
+        <table id="yearTable">
+          <thead><tr><th>Año</th><th>% Regulación</th><th>Demanda (kVA)</th><th>P (kW)</th><th>Q (kVAr)</th><th>% de carga vs. placa actual</th><th>Pérdida pico (kW)</th><th>Pérdida energía (kWh/año)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="chart-title" style="margin-bottom:10px;">Detalle por nodo (año 0, carga diversificada)</div>
+      <div class="tbl-scroll">
+        <table id="nodeTable">
+          <thead><tr><th>Nodo</th><th>Voltage (V)</th><th>R%</th><th>P (kW)</th><th>jQ (kVAr)</th><th># abonados</th><th>kVA diversif.</th><th>Distancia (m)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Asignación de demanda base y factores de coincidencia según tablas de estándar de diseño de redes de distribución (asignación de demanda por tipo de edificación y # de usuarios). El crecimiento se aplica de forma compuesta anual sobre la demanda diversificada total: D(n) = D(0)·(1+g)ⁿ. El tamaño recomendado de transformador redondea hacia arriba al tamaño comercial típico más cercano; verifica contra el catálogo de tu empresa distribuidora.
+  </footer>
+
+  <div id="printSheet"></div>
+</div>
+
+<script>
+// ---------- reference tables from the utility's demand-assignment standard ----------
+const sectorData = {
+  suburbano: {label:"Ingresos mínimos / Suburbana", kva:1.0, growth:3.00},
+  r4:        {label:"R-4",  kva:1.5, growth:2.00},
+  r3:        {label:"R-3",  kva:2.0, growth:1.50},
+  r2:        {label:"R-2",  kva:3.0, growth:1.25},
+  r1:        {label:"R-1",  kva:5.2, growth:1.00},
+};
+const coincidenceTable = [
+  [1,1,1.00],[2,2,0.93],[3,3,0.85],[4,4,0.77],[5,5,0.69],[6,6,0.67],[7,7,0.66],
+  [8,8,0.65],[9,9,0.64],[10,11,0.63],[12,13,0.62],[14,16,0.61],[17,22,0.60],
+  [23,28,0.59],[29,34,0.58],[35,41,0.57],[42,51,0.56],[52,63,0.55],[64,999999,0.54]
+];
+const stdTransformerSizes = [5,10,15,25,37.5,50,75,100,112.5,150,167,225,300,500];
+
+// Typical reference conductor data (Ω/km, ~60Hz AC resistance @75°C, reactance for
+// typical secondary/service spacing). Reference values only — replace with
+// manufacturer or utility data for final design.
+const wireCatalog = {
+  custom:   {label:"Personalizado (manual)", r:null, x:null},
+  "al-6":   {label:"Aluminio (AAC) 6 AWG",   r:2.130, x:0.300},
+  "al-4":   {label:"Aluminio (AAC) 4 AWG",   r:1.339, x:0.300},
+  "al-2":   {label:"Aluminio (AAC) 2 AWG",   r:0.843, x:0.305},
+  "al-1/0": {label:"Aluminio (AAC) 1/0 AWG", r:0.531, x:0.310},
+  "al-2/0": {label:"Aluminio (AAC) 2/0 AWG", r:0.421, x:0.310},
+  "al-4/0": {label:"Aluminio (AAC) 4/0 AWG", r:0.265, x:0.315},
+  "al-250": {label:"Aluminio (AAC) 250 kcmil", r:0.220, x:0.320},
+  "cu-6":   {label:"Cobre 6 AWG",   r:1.310, x:0.300},
+  "cu-4":   {label:"Cobre 4 AWG",   r:0.824, x:0.300},
+  "cu-2":   {label:"Cobre 2 AWG",   r:0.518, x:0.305},
+  "cu-1/0": {label:"Cobre 1/0 AWG", r:0.328, x:0.310},
+  "cu-2/0": {label:"Cobre 2/0 AWG", r:0.260, x:0.310},
+  "cu-4/0": {label:"Cobre 4/0 AWG", r:0.163, x:0.315},
+};
+
+// Reference conditions the catalog r-values above are quoted at, and the
+// per-material "inferred zero-resistance" temperature constant (IACS/EC-grade
+// aluminum) used to shift resistance with the operating temperature.
+const R_REF_TEMP = 75;     // °C — catalog resistance baseline
+const R_REF_AMBIENT = 25;  // °C — assumed ambient behind that baseline
+function materialConstant(wireKey){ return wireKey.startsWith("al") ? 228.1 : 234.5; }
+
+function coincidenceFactor(n){
+  if(n<=0) return 1;
+  const row = coincidenceTable.find(([lo,hi])=>n>=lo && n<=hi);
+  return row ? row[2] : 0.54;
+}
+function recommendTransformerSize(requiredKVA){
+  return stdTransformerSizes.find(s=>s>=requiredKVA) ?? stdTransformerSizes[stdTransformerSizes.length-1];
+}
+function kvaPerUserForSector(sectorKey, area, tempC){
+  const s = sectorData[sectorKey];
+  let base = s.kva;
+  if(sectorKey === "r1" && area){
+    const extraArea = Math.max(0, area - 440);
+    const extraKVA = Math.min(3.8, Math.floor(extraArea/100)*1.2); // caps at 9.0 total (440m² base=5.2 + 3.8 = 9.0 @750m²)
+    base = 5.2 + extraKVA;
+  }
+  if(tempC >= 40) base *= 1.25;
+  return base;
+}
+
+// ---------- node graph state ----------
+// nodes: { T: {id:'T', parent:null, dir:'root', distance:0, users:0, children:{left:null,right:null,up:null,down:null}} , ... }
+let nodes = {
+  T: {id:"T", parent:null, dir:"root", distance:0, users:0, children:{left:null,right:null,up:null,down:null}}
+};
+let nextId = 1;
+let selectedId = "T";
+
+const DIR_LABEL = {left:"Izquierda", right:"Derecha", up:"Arriba", down:"Abajo"};
+const DIR_DELTA = {left:[-1,0], right:[1,0], up:[0,-1], down:[0,1]};
+const DIR_OPPOSITE = {left:"right", right:"left", up:"down", down:"up"};
+
+function onSectorChange(){
+  const sector = document.getElementById("sector").value;
+  document.getElementById("areaFieldWrap").style.display = sector === "r1" ? "flex" : "none";
+  const area = sector === "r1" ? +document.getElementById("r1Area").value : null;
+  const temp = +document.getElementById("temp").value;
+  document.getElementById("kvaUser").value = kvaPerUserForSector(sector, area, temp).toFixed(2);
+  recomputeAllCableRX();
+}
+
+function totalUsers(){
+  return Object.values(nodes).reduce((a,n)=>a+(n.users||0), 0);
+}
+function onUsersOrGraphChange(){
+  const n = totalUsers();
+  document.getElementById("coincOverride").value = coincidenceFactor(n).toFixed(2);
+}
+
+// ---------- line / conductor table ----------
+function computeNodeRX(n){
+  const w = wireCatalog[n.wire];
+  if(w && w.r !== null){
+    const tempEl = document.getElementById("temp");
+    const tempC = tempEl ? +tempEl.value : R_REF_AMBIENT;
+    const M = materialConstant(n.wire);
+    const opTemp = R_REF_TEMP + (tempC - R_REF_AMBIENT); // conductor runs hotter as ambient rises
+    const rPerKmAdjusted = w.r * (M + opTemp) / (M + R_REF_TEMP);
+    n.r = +(rPerKmAdjusted * n.distance / 1000).toFixed(5);
+    n.x = +(w.x * n.distance / 1000).toFixed(5); // reactance depends on geometry, not temperature
+  }
+}
+function recomputeAllCableRX(){
+  Object.values(nodes).forEach(n=>{
+    if(n.id !== "T" && n.wire && n.wire !== "custom") computeNodeRX(n);
+  });
+  renderLineCableTable();
+}
+function onCableWireChange(id, key){
+  const n = nodes[id];
+  n.wire = key;
+  computeNodeRX(n);
+  renderLineCableTable();
+}
+function onCableDistanceChange(id, val){
+  nodes[id].distance = +val;
+  computeNodeRX(nodes[id]);
+  renderDiagram(); // distance also drives the diagram label
+}
+function onCableRXManualChange(id, field, val){
+  nodes[id][field] = +val;
+  nodes[id].wire = "custom";
+  renderLineCableTable();
+}
+function renderLineCableTable(){
+  const tb = document.querySelector("#lineCableTable tbody");
+  if(!tb) return;
+  const options = Object.entries(wireCatalog).map(([key,w])=>`<option value="${key}">${w.label}</option>`).join("");
+  tb.innerHTML = Object.values(nodes).filter(n=>n.id!=="T").map(n=>{
+    const opts = options.replace(`value="${n.wire}"`, `value="${n.wire}" selected`);
+    return `<tr>
+      <td>${n.parent}</td><td>${n.id}</td>
+      <td><input type="number" value="${n.distance}" onchange="onCableDistanceChange('${n.id}',this.value)" style="width:70px;"></td>
+      <td><select onchange="onCableWireChange('${n.id}',this.value)" style="width:190px;">${opts}</select></td>
+      <td><input type="number" step="0.0001" value="${n.r}" onchange="onCableRXManualChange('${n.id}','r',this.value)" style="width:80px;"></td>
+      <td><input type="number" step="0.0001" value="${n.x}" onchange="onCableRXManualChange('${n.id}','x',this.value)" style="width:80px;"></td>
+    </tr>`;
+  }).join("");
+}
+
+// ---------- diagram rendering ----------
+const STEP = 100, R = 22;
+function computeLayout(){
+  const pos = {};
+  function walk(id, gx, gy){
+    pos[id] = {gx, gy};
+    const n = nodes[id];
+    Object.entries(n.children).forEach(([dir, childId])=>{
+      if(childId){
+        const [dx,dy] = DIR_DELTA[dir];
+        walk(childId, gx+dx, gy+dy);
+      }
+    });
+  }
+  walk("T", 0, 0);
+  return pos;
+}
+
+function renderDiagram(){
+  const pos = computeLayout();
+  const gxs = Object.values(pos).map(p=>p.gx), gys = Object.values(pos).map(p=>p.gy);
+  const minGx = Math.min(...gxs), maxGx = Math.max(...gxs);
+  const minGy = Math.min(...gys), maxGy = Math.max(...gys);
+  const pad = 60;
+  const W = (maxGx-minGx)*STEP + pad*2;
+  const H = (maxGy-minGy)*STEP + pad*2;
+  const px = gx => pad + (gx-minGx)*STEP;
+  const py = gy => pad + (gy-minGy)*STEP;
+
+  let edges = "", nodesSvg = "", plusSvg = "";
+
+  Object.values(nodes).forEach(n=>{
+    const p = pos[n.id];
+    const cx = px(p.gx), cy = py(p.gy);
+
+    // edge to parent + distance label
+    if(n.parent){
+      const pp = pos[n.parent];
+      const pcx = px(pp.gx), pcy = py(pp.gy);
+      edges += `<line x1="${pcx}" y1="${pcy}" x2="${cx}" y2="${cy}" stroke="#3A4864" stroke-width="2"/>`;
+      const mx = (pcx+cx)/2, my = (pcy+cy)/2;
+      edges += `<rect class="dist-bg" x="${mx-24}" y="${my-10}" width="48" height="18" rx="4" fill="#0E1524" stroke="#25324A"/>
+        <text x="${mx}" y="${my+4}" font-size="10.5" text-anchor="middle" fill="#8B96AC" font-family="ui-monospace,monospace">${n.distance}m</text>`;
+    }
+
+    const isT = n.id === "T";
+    const fill = isT ? "#F2A93B" : "#4FD1C5";
+    const labelFill = isT ? "#0B1220" : "#06231F";
+    const selCls = n.id === selectedId ? "selected" : "";
+    nodesSvg += `<g class="node-circle ${selCls}" onclick="selectNode('${n.id}')">
+        <circle class="node-shape" cx="${cx}" cy="${cy}" r="${R}" fill="${fill}" stroke="#0B1220" stroke-width="2"/>
+        <text x="${cx}" y="${cy-2}" font-size="10" text-anchor="middle" fill="${labelFill}" stroke="none" font-weight="700" font-family="ui-monospace,monospace">${isT?"TF":n.id}</text>
+        <text x="${cx}" y="${cy+11}" font-size="9" text-anchor="middle" fill="${labelFill}" stroke="none" font-family="ui-monospace,monospace">${(n.users||0)}u</text>
+      </g>`;
+
+    // plus buttons for empty directions (skip the direction back toward the parent)
+    const blockedDir = isT ? null : DIR_OPPOSITE[n.dir];
+    Object.entries(DIR_DELTA).forEach(([dir,[dx,dy]])=>{
+      if(!n.children[dir] && dir !== blockedDir){
+        const bx = cx + dx*(STEP*0.42), by = cy + dy*(STEP*0.42);
+        plusSvg += `<g class="plus-btn" onclick="promptAddNode('${n.id}','${dir}')">
+          <circle cx="${bx}" cy="${by}" r="10"/>
+          <text x="${bx}" y="${by+4}" font-size="13" text-anchor="middle">+</text>
+        </g>`;
+      }
+    });
+  });
+
+  const svg = document.getElementById("diagramSvg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("width", Math.min(W,1100));
+  svg.setAttribute("height", H);
+  svg.innerHTML = edges + nodesSvg + plusSvg;
+
+  renderSidePanel();
+  renderLineCableTable();
+}
+
+function selectNode(id){ selectedId = id; renderDiagram(); }
+
+function renderSidePanel(){
+  const n = nodes[selectedId];
+  const host = document.getElementById("sidePanel");
+  if(!n){ host.innerHTML = "<h3>Selecciona un nodo.</h3>"; return; }
+
+  let html = "";
+  if(n.id === "T"){
+    html += `<h3>Transformador (nodo raíz)</h3>
+      <div class="paramrow">
+        <div class="field"><label># de abonados en el transformador</label><input type="number" value="${n.users}" onchange="updateNode('${n.id}','users',this.value)"></div>
+      </div>`;
+  } else {
+    html += `<h3>Nodo ${n.id} <span style="color:var(--sub);font-weight:400;">— ramal ${DIR_LABEL[n.dir]} desde ${n.parent}</span></h3>
+      <div class="paramrow">
+        <div class="field"><label>Distancia al padre (m)</label><input type="number" value="${n.distance}" onchange="updateNode('${n.id}','distance',this.value)"></div>
+        <div class="field"><label># de abonados en este nodo</label><input type="number" value="${n.users}" onchange="updateNode('${n.id}','users',this.value)"></div>
+        <div class="field"><label>&nbsp;</label><button class="danger ghost" onclick="deleteNode('${n.id}')">Eliminar nodo (y ramales hijos)</button></div>
+      </div>`;
+  }
+
+  if(n.id !== "T"){
+    const blockedDir = DIR_OPPOSITE[n.dir];
+    const freeDirs = Object.entries(n.children).filter(([dir,c])=>!c && dir !== blockedDir).map(([dir])=>dir);
+    if(freeDirs.length){
+      html += `<div class="dirbtns">`;
+      freeDirs.forEach(dir=>{
+        html += `<button class="small" onclick="promptAddNode('${n.id}','${dir}')">+ agregar ${DIR_LABEL[dir]}</button>`;
+      });
+      html += `</div>`;
+    } else {
+      html += `<div class="hintline" style="margin-top:8px;">Las 4 direcciones de este nodo ya están ocupadas.</div>`;
+    }
+  }
+
+  html += `<div id="addFormHost"></div>`;
+  host.innerHTML = html;
+}
+
+function promptAddNode(parentId, dir){
+  const host = document.getElementById("addFormHost");
+  if(!host) return;
+  host.innerHTML = `<div class="addform">
+      <div class="field"><label>Distancia (m)</label><input type="number" id="newDist" value="30"></div>
+      <div class="field"><label># abonados</label><input type="number" id="newUsers" value="1"></div>
+      <button class="primary small" onclick="confirmAddNode('${parentId}','${dir}')">Agregar nodo</button>
+      <button class="ghost small" onclick="renderSidePanel()">Cancelar</button>
+    </div>`;
+}
+
+function confirmAddNode(parentId, dir){
+  const distance = +document.getElementById("newDist").value;
+  const users = +document.getElementById("newUsers").value;
+  const id = "N" + (nextId++);
+  nodes[id] = {id, parent:parentId, dir, distance, users, wire:"al-1/0", r:0, x:0, children:{left:null,right:null,up:null,down:null}};
+  computeNodeRX(nodes[id]);
+  nodes[parentId].children[dir] = id;
+  selectedId = id;
+  onUsersOrGraphChange();
+  renderDiagram();
+}
+
+function updateNode(id, field, val){
+  nodes[id][field] = +val;
+  if(field === "distance") computeNodeRX(nodes[id]);
+  onUsersOrGraphChange();
+  renderDiagram();
+}
+
+function deleteNode(id){
+  const n = nodes[id];
+  // cascade delete descendants
+  function collectDescendants(nid, acc){
+    acc.push(nid);
+    Object.values(nodes[nid].children).forEach(c=>{ if(c) collectDescendants(c, acc); });
+    return acc;
+  }
+  const toDelete = collectDescendants(id, []);
+  toDelete.forEach(nid=>delete nodes[nid]);
+  if(n.parent) nodes[n.parent].children[n.dir] = null;
+  selectedId = "T";
+  onUsersOrGraphChange();
+  renderDiagram();
+}
+
+// ---------- report generation ----------
+function buildBasePQ(kvaUser, coinc, pf){
+  const theta = Math.acos(pf);
+  const base = {};
+  Object.values(nodes).forEach(n=>{
+    if(n.id === "T") return;
+    const S0 = n.users * kvaUser * coinc;
+    base[n.id] = {p: S0*pf, q: S0*Math.sin(theta)};
+  });
+  return base;
+}
+function downstreamPQatYear(id, base, growthFactor){
+  const n = nodes[id];
+  let p = 0, q = 0;
+  if(id !== "T"){
+    p = base[id].p * growthFactor;
+    q = base[id].q * growthFactor;
+  }
+  Object.values(n.children).forEach(childId=>{
+    if(childId){
+      const d = downstreamPQatYear(childId, base, growthFactor);
+      p += d.p; q += d.q;
+    }
+  });
+  return {p,q};
+}
+function computePeakLossForYear(base, growthFactor, vbase, factor){
+  let totalLossKW = 0;
+  Object.values(nodes).forEach(n=>{
+    if(n.id === "T") return;
+    const d = downstreamPQatYear(n.id, base, growthFactor);
+    const S = Math.sqrt(d.p*d.p + d.q*d.q); // kVA
+    const I = S*1000/vbase; // A
+    totalLossKW += factor * I*I * n.r / 1000;
+  });
+  return totalLossKW;
+}
+function computeVoltagesForYear(base, growthFactor, vbase, factor){
+  const V = {T: vbase};
+  function walk(id){
+    const n = nodes[id];
+    Object.values(n.children).forEach(childId=>{
+      if(childId){
+        const child = nodes[childId];
+        const d = downstreamPQatYear(childId, base, growthFactor);
+        const dV = factor * (d.p*1000*child.r + d.q*1000*child.x) / vbase;
+        V[childId] = V[id] - dV;
+        walk(childId);
+      }
+    });
+  }
+  walk("T");
+  return V;
+}
+function computeMaxRegulationForYear(base, growthFactor, vbase, factor){
+  const V = computeVoltagesForYear(base, growthFactor, vbase, factor);
+  return Math.max(...Object.entries(V).filter(([id])=>id!=="T").map(([,v])=>(vbase-v)/vbase*100), 0);
+}
+function cumulativeDistance(id){
+  let d = 0, cur = nodes[id];
+  while(cur && cur.parent){
+    d += cur.distance;
+    cur = nodes[cur.parent];
+  }
+  return d;
+}
+
+function svgLineChart(hostId, seriesList, labels, yFmt, refLine, yAxisLabel, xAxisLabel){
+  const host = document.getElementById(hostId);
+  const W = 900, H = 280, padL = 60, padR = 20, padT = 16, padB = 46;
+  let allVals = seriesList.flatMap(s=>s.data);
+  if(refLine !== undefined) allVals = allVals.concat([refLine]);
+  const yMax = Math.max(...allVals) * 1.15;
+  const yMin = 0;
+  const n = labels.length;
+  const x = i => padL + (W-padL-padR) * (i/(n-1));
+  const y = v => H-padB - (H-padT-padB) * ((v-yMin)/(yMax-yMin || 1));
+
+  let grid = "";
+  for(let g=0; g<=4; g++){
+    const val = yMin + (yMax-yMin)*g/4;
+    const yy = y(val);
+    grid += `<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="#25324A" stroke-width="1"/>`;
+    grid += `<text x="${padL-8}" y="${yy+4}" font-size="10.5" fill="#8B96AC" text-anchor="end" font-family="ui-monospace,monospace">${yFmt(val)}</text>`;
+  }
+  let xticks = "";
+  const step = Math.max(1, Math.round(n/8));
+  for(let i=0;i<n;i+=step){
+    xticks += `<text x="${x(i)}" y="${H-padB+18}" font-size="10.5" fill="#8B96AC" text-anchor="middle" font-family="ui-monospace,monospace">${labels[i]}</text>`;
+  }
+
+  let axisTitles = "";
+  if(yAxisLabel){
+    const ayx = 16, ayy = (padT + (H-padB))/2;
+    axisTitles += `<text x="${ayx}" y="${ayy}" font-size="11" fill="#8B96AC" text-anchor="middle" font-family="ui-monospace,monospace" transform="rotate(-90 ${ayx} ${ayy})">${yAxisLabel}</text>`;
+  }
+  if(xAxisLabel){
+    axisTitles += `<text x="${(padL+(W-padR))/2}" y="${H-6}" font-size="11" fill="#8B96AC" text-anchor="middle" font-family="ui-monospace,monospace">${xAxisLabel}</text>`;
+  }
+
+  let refSvg = "";
+  if(refLine !== undefined){
+    refSvg = `<line x1="${padL}" y1="${y(refLine)}" x2="${W-padR}" y2="${y(refLine)}" stroke="#F2A93B" stroke-width="1.5" stroke-dasharray="5,4"/>
+      <text x="${W-padR}" y="${y(refLine)-6}" font-size="10.5" fill="#F2A93B" text-anchor="end" font-family="ui-monospace,monospace">placa actual: ${yFmt(refLine)}</text>`;
+  }
+
+  let paths = "", inlineLabels = "";
+  seriesList.forEach(s=>{
+    const d = s.data.map((v,i)=> (i===0?"M":"L") + x(i).toFixed(1) + "," + y(v).toFixed(1)).join(" ");
+    paths += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2.4"/>`;
+    s.data.forEach((v,i)=>{ paths += `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="2.6" fill="${s.color}"/>`; });
+    // label sits right next to the line's last point instead of in a legend below the chart
+    const lastI = s.data.length-1;
+    const lx = x(lastI), ly = y(s.data[lastI]);
+    inlineLabels += `<text x="${lx-8}" y="${ly-10}" font-size="11" font-weight="700" text-anchor="end" fill="${s.color}" font-family="ui-monospace,monospace">${s.label}</text>`;
+  });
+
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;">${grid}${xticks}${axisTitles}${refSvg}${paths}${inlineLabels}</svg>`;
+}
+
+function generateReport(){
+  const startYear = Math.round(+document.getElementById("startYear").value);
+  const years = Math.max(1, Math.round(+document.getElementById("years").value));
+  const sector = document.getElementById("sector").value;
+  const pf = +document.getElementById("pf").value;
+  const ratedKVA = +document.getElementById("ratedKVA").value;
+  const safetyFactor = +document.getElementById("safetyFactor").value;
+  const kvaUser = +document.getElementById("kvaUser").value;
+  const coinc = +document.getElementById("coincOverride").value;
+  const vbase = +document.getElementById("vbase").value;
+  const circuitFactor = +document.getElementById("circuitFactor").value;
+  const llf = +document.getElementById("llf").value;
+  const g = sectorData[sector].growth / 100;
+  const n = totalUsers();
+
+  if(n <= 0){
+    document.getElementById("validateMsg").textContent = "⚠ Agrega al menos un nodo con abonados antes de generar el informe.";
+    document.getElementById("validateMsg").style.color = "var(--red)";
+    return;
+  }
+  document.getElementById("validateMsg").textContent = `✓ ${n} abonados en ${Object.keys(nodes).length-1} nodos.`;
+  document.getElementById("validateMsg").style.color = "var(--cyan)";
+
+  const connectedKVA = n * kvaUser;
+  const D0 = connectedKVA * coinc;
+
+  const yearsArr = Array.from({length:years+1}, (_,i)=>i);
+  const demandSeries = yearsArr.map(y => D0 * Math.pow(1+g, y));
+  const DEnd = demandSeries[demandSeries.length-1];
+  const requiredKVA = DEnd / safetyFactor;
+  const recSize = recommendTransformerSize(requiredKVA);
+
+  // KPIs
+  document.getElementById("kpiUsers").textContent = n;
+  document.getElementById("kpiUsersSub").textContent = `Factor de coincidencia: ${coinc}`;
+  document.getElementById("kpiNodeCount").textContent = Object.keys(nodes).length - 1;
+  document.getElementById("kpiD0").textContent = D0.toFixed(2);
+  document.getElementById("kpiEndLabel").textContent = `Demanda año ${startYear+years}`;
+  document.getElementById("kpiDEnd").textContent = DEnd.toFixed(2);
+  document.getElementById("kpiDEndSub").textContent = `+${((DEnd/D0-1)*100).toFixed(1)}% vs. año 0`;
+
+  const recCard = document.getElementById("kpiRecCard");
+  recCard.className = "kpi " + (recSize < ratedKVA ? "ok" : recSize === ratedKVA ? "warn" : "crit");
+  document.getElementById("kpiRec").textContent = recSize + " kVA";
+
+  // demand chart
+  const labels = yearsArr.map(y=>startYear+y);
+  svgLineChart("demandChart",
+    [{label:"Demanda proyectada (kVA)", color:"#4FD1C5", data:demandSeries}],
+    labels, v=>v.toFixed(1), ratedKVA, "kVA", "Año");
+
+  // year table (now including network losses, computed from each line's R,X
+  // via a downstream power sweep that scales with the same growth factor)
+  const baseNodePQ = buildBasePQ(kvaUser, coinc, pf);
+  const tb = document.querySelector("#yearTable tbody");
+  tb.innerHTML = yearsArr.map(y=>{
+    const d = demandSeries[y];
+    const p = d*pf;
+    const q = d*Math.sqrt(1-pf*pf);
+    const pctLoad = (d/ratedKVA*100);
+    const color = pctLoad>100 ? "var(--red)" : pctLoad>90 ? "var(--amber)" : "var(--text)";
+    const growthFactor = Math.pow(1+g, y);
+    const perp = computePeakLossForYear(baseNodePQ, growthFactor, vbase, circuitFactor);
+    const pere = perp * llf * 8760;
+    const maxReg = computeMaxRegulationForYear(baseNodePQ, growthFactor, vbase, circuitFactor);
+    return `<tr><td>${startYear+y}</td><td>${maxReg.toFixed(2)}%</td><td>${d.toFixed(2)}</td>
+      <td>${p.toFixed(2)}</td><td>${q.toFixed(2)}</td>
+      <td style="color:${color}">${pctLoad.toFixed(1)}%</td>
+      <td>${perp.toFixed(3)}</td><td>${pere.toFixed(0)}</td></tr>`;
+  }).join("");
+
+  // node table (diversified load per node, year 0): each lot's demand is
+  // the base kVA/user reduced by the transformer's coincidence factor,
+  // then split into P/jQ using the power factor — same convention used
+  // in the underlying demand-assignment study. Includes the transformer's
+  // own directly-connected users (no line, no voltage drop) as a row.
+  // Voltage/R% come from the year-0 voltage sweep; distance is cumulative
+  // from the transformer (T) to that node, not just the local segment.
+  const theta = Math.acos(pf);
+  const V0map = computeVoltagesForYear(baseNodePQ, 1, vbase, circuitFactor);
+  const ntb = document.querySelector("#nodeTable tbody");
+  const rows = [];
+  const T = nodes["T"];
+  if(T.users > 0){
+    const sT = T.users * kvaUser * coinc;
+    rows.push(`<tr><td>T</td><td>${vbase.toFixed(2)} V</td><td>0.00%</td><td>${(sT*pf).toFixed(2)}</td><td>${(sT*Math.sin(theta)).toFixed(2)}</td><td>${T.users}</td><td>${sT.toFixed(2)}</td><td>0</td></tr>`);
+  }
+  Object.values(nodes).filter(nd=>nd.id!=="T").forEach(nd=>{
+    const sNode = nd.users * kvaUser * coinc;
+    const pNode = sNode * pf;
+    const qNode = sNode * Math.sin(theta);
+    const V = V0map[nd.id];
+    const regPct = (vbase - V) / vbase * 100;
+    const cumDist = cumulativeDistance(nd.id);
+    rows.push(`<tr><td>${nd.id}</td><td>${V.toFixed(2)} V</td><td>${regPct.toFixed(2)}%</td><td>${pNode.toFixed(2)}</td><td>${qNode.toFixed(2)}</td><td>${nd.users}</td><td>${sNode.toFixed(2)}</td><td>${cumDist}</td></tr>`);
+  });
+  ntb.innerHTML = rows.join("");
+
+  document.getElementById("reportSection").style.display = "block";
+  document.getElementById("printBtn").style.display = "inline-block";
+  document.getElementById("reportSection").scrollIntoView({behavior:"smooth"});
+}
+
+// ---------- print report ----------
+function abbrevWireLabel(key){
+  if(key === "custom") return "Personalizado";
+  const [mat, size] = key.split("-");
+  const matAbbr = mat === "al" ? "AAC" : "Cu";
+  if(size === "250") return `(${matAbbr})250 kcmil`;
+  return `(${matAbbr})${size} AWG`;
+}
+
+// Which cardinal directions around a node are NOT already used by a line
+// (either to its parent, or to one of its children) — in priority order.
+function freeDirections(n){
+  const occupied = new Set();
+  if(n.parent) occupied.add(DIR_OPPOSITE[n.dir]);
+  Object.entries(n.children).forEach(([dir,child])=>{ if(child) occupied.add(dir); });
+  return ["right","down","left","up"].filter(d=>!occupied.has(d));
+}
+function labelPlacement(cx, cy, dir, r){
+  switch(dir){
+    case "left":  return {x:cx-r-4, y:cy+3, anchor:"end"};
+    case "down":  return {x:cx, y:cy+r+13, anchor:"middle"};
+    case "up":    return {x:cx, y:cy-r-6, anchor:"middle"};
+    case "right": return {x:cx+r+4, y:cy+3, anchor:"start"};
+    default: {
+      // fully surrounded (all 4 sides carry a line): tuck the label into the
+      // diagonal gap between two lines instead, where nothing else is drawn
+      const off = r + 8;
+      return {x:cx+off, y:cy-off, anchor:"start"};
+    }
+  }
+}
+
+function buildPrintDiagramSVG(ratedKVA, transformerName){
+  const pos = computeLayout();
+  const gxs = Object.values(pos).map(p=>p.gx), gys = Object.values(pos).map(p=>p.gy);
+  const minGx = Math.min(...gxs), maxGx = Math.max(...gxs);
+  const minGy = Math.min(...gys), maxGy = Math.max(...gys);
+  // uniform padding on every side: the transformer symbol can now be rotated
+  // toward whichever side is free, so it may extend in any direction.
+  const pad = 100;
+  const W = (maxGx-minGx)*STEP + pad*2;
+  const H = (maxGy-minGy)*STEP + pad*2;
+  const px = gx => pad + (gx-minGx)*STEP;
+  const py = gy => pad + (gy-minGy)*STEP;
+  const NODE_R = 5;
+
+  // Decide up front how the transformer symbol will be oriented. If at least
+  // one cardinal side is free, point it straight there (as before). If every
+  // side already carries a line, rotate it 45° into a diagonal gap instead —
+  // none of the 4 straight lines run diagonally, so the tip can still touch
+  // the dot without overlapping anything, and no line needs rerouting.
+  const T = nodes["T"];
+  const Tp = pos["T"];
+  const cxT = px(Tp.gx), cyT = py(Tp.gy);
+  const freeT = freeDirections(T);
+  const s = 12, boxW = 82, boxH = 30, gap = 8;
+  let tTrianglePts, tbx, tby;
+
+  if(freeT.length > 0){
+    const tDir = freeT[0];
+    if(tDir === "up"){
+      const baseY = cyT - s*2;
+      tTrianglePts = `${cxT},${cyT} ${cxT-s},${baseY} ${cxT+s},${baseY}`;
+      tbx = cxT - boxW/2; tby = baseY - gap - boxH;
+    } else if(tDir === "down"){
+      const baseY = cyT + s*2;
+      tTrianglePts = `${cxT},${cyT} ${cxT-s},${baseY} ${cxT+s},${baseY}`;
+      tbx = cxT - boxW/2; tby = baseY + gap;
+    } else if(tDir === "left"){
+      const baseX = cxT - s*2;
+      tTrianglePts = `${cxT},${cyT} ${baseX},${cyT-s} ${baseX},${cyT+s}`;
+      tbx = baseX - gap - boxW; tby = cyT - boxH/2;
+    } else {
+      const baseX = cxT + s*2;
+      tTrianglePts = `${cxT},${cyT} ${baseX},${cyT-s} ${baseX},${cyT+s}`;
+      tbx = baseX + gap; tby = cyT - boxH/2;
+    }
+  } else {
+    // fully surrounded: point the triangle up-and-right, biased steep
+    // (65° from horizontal) and with extra clearance so the info box lands
+    // well above the neighboring horizontal line's distance label instead
+    // of overlapping it.
+    const theta = 65 * Math.PI/180;
+    const ne = {x:Math.cos(theta), y:-Math.sin(theta)};
+    const perp = {x:Math.sin(theta), y:Math.cos(theta)};
+    const diagGap = 18;
+    const baseCenter = {x:cxT + ne.x*s*2, y:cyT + ne.y*s*2};
+    const baseLeft = {x:baseCenter.x - perp.x*s, y:baseCenter.y - perp.y*s};
+    const baseRight = {x:baseCenter.x + perp.x*s, y:baseCenter.y + perp.y*s};
+    tTrianglePts = `${cxT},${cyT} ${baseLeft.x},${baseLeft.y} ${baseRight.x},${baseRight.y}`;
+    const boxAnchor = {x:baseCenter.x + ne.x*diagGap, y:baseCenter.y + ne.y*diagGap};
+    tbx = boxAnchor.x; tby = boxAnchor.y - boxH/2;
+  }
+
+  let edges = "", shapes = "", labels = "";
+
+  Object.values(nodes).forEach(n=>{
+    const p = pos[n.id];
+    const cx = px(p.gx), cy = py(p.gy);
+
+    if(n.parent){
+      const pp = pos[n.parent];
+      const pcx = px(pp.gx), pcy = py(pp.gy);
+      edges += `<line x1="${pcx}" y1="${pcy}" x2="${cx}" y2="${cy}" stroke="#555" stroke-width="1.3"/>`;
+      const mx = (pcx+cx)/2, my = (pcy+cy)/2;
+      const horizontal = pcy === cy;
+      if(horizontal){
+        edges += `<text x="${mx}" y="${my-5}" font-size="9" text-anchor="middle" fill="#111" font-family="monospace">${n.distance}m</text>`;
+      } else {
+        edges += `<text x="${mx+9}" y="${my}" font-size="9" text-anchor="middle" fill="#111" font-family="monospace" transform="rotate(-90 ${mx+9} ${my})">${n.distance}m</text>`;
+      }
+    }
+
+    const free = freeDirections(n);
+
+    if(n.id === "T"){
+      shapes += `<polygon points="${tTrianglePts}" fill="none" stroke="#000" stroke-width="1.4"/>`;
+      shapes += `<rect x="${tbx}" y="${tby}" width="${boxW}" height="${boxH}" fill="#ffffff" stroke="#333"/>
+        <text x="${tbx+boxW/2}" y="${tby+13}" font-size="10" text-anchor="middle" fill="#111" font-family="monospace" font-weight="700">${transformerName}</text>
+        <text x="${tbx+boxW/2}" y="${tby+26}" font-size="10" text-anchor="middle" fill="#111" font-family="monospace">1x${ratedKVA}KVA</text>`;
+      shapes += `<circle cx="${cx}" cy="${cy}" r="${NODE_R}" fill="#000"/>`;
+      if(n.users > 0){
+        const labelDir = free[0]; // undefined when fully surrounded -> diagonal fallback
+        const lp = labelPlacement(cx, cy, labelDir, NODE_R);
+        labels += `<text x="${lp.x}" y="${lp.y}" font-size="9" text-anchor="${lp.anchor}" fill="#111" font-family="monospace">${n.users}u</text>`;
+      }
+    } else {
+      shapes += `<circle cx="${cx}" cy="${cy}" r="${NODE_R}" fill="#000"/>`;
+      const dir = free[0];
+      const lp = labelPlacement(cx, cy, dir, NODE_R);
+      labels += `<text x="${lp.x}" y="${lp.y}" font-size="9.5" text-anchor="${lp.anchor}" fill="#111" font-family="monospace">${n.id} · ${n.users}u</text>`;
+    }
+  });
+
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;">${edges}${shapes}${labels}</svg>`;
+}
+
+function buildPrintSheet(){
+  const projName = document.getElementById("projName").value || "Estudio de demanda y dimensionamiento de transformador";
+  const projAddress = document.getElementById("projAddress").value || "—";
+  const projDesigner = document.getElementById("projDesigner").value || "—";
+  const today = new Date().toLocaleDateString("es-HN", {year:"numeric", month:"long", day:"numeric"});
+
+  const sectorSel = document.getElementById("sector");
+  const sectorLabel = sectorSel.options[sectorSel.selectedIndex].text;
+  const circuitSel = document.getElementById("circuitFactor");
+  const circuitLabel = circuitSel.options[circuitSel.selectedIndex].text;
+
+  const startYear = document.getElementById("startYear").value;
+  const years = document.getElementById("years").value;
+  const pf = document.getElementById("pf").value;
+  const temp = document.getElementById("temp").value;
+  const kvaUser = document.getElementById("kvaUser").value;
+  const coinc = document.getElementById("coincOverride").value;
+  const transformerName = document.getElementById("transformerName").value || "T1";
+  const ratedKVA = document.getElementById("ratedKVA").value;
+  const safetyFactor = document.getElementById("safetyFactor").value;
+  const vbase = document.getElementById("vbase").value;
+  const llf = document.getElementById("llf").value;
+
+  const paramsHtml = `<div class="param-chips">
+    <span><b>Año inicial:</b> ${startYear}</span>
+    <span><b>N.º de años:</b> ${years}</span>
+    <span><b>Tipo de área:</b> ${sectorLabel}</span>
+    <span><b>Temp. ambiente:</b> ${temp} °C</span>
+    <span><b>Factor de potencia:</b> ${pf}</span>
+    <span><b>kVA/abonado:</b> ${kvaUser}</span>
+    <span><b>Fact. coincidencia:</b> ${coinc}</span>
+    <span><b>Transformador:</b> ${transformerName} — ${ratedKVA} kVA</span>
+    <span><b>Fact. objetivo de carga:</b> ${safetyFactor}</span>
+    <span><b>V base:</b> ${vbase} V</span>
+    <span><b>Tipo de circuito:</b> ${circuitLabel}</span>
+    <span><b>Fact. pérdidas (FP→FC):</b> ${llf}</span>
+  </div>`;
+
+  const lineRows = Object.values(nodes).filter(n=>n.id!=="T").map(n=>{
+    return `<tr><td>${n.parent}</td><td>${n.id}</td><td>${n.distance}</td><td>${abbrevWireLabel(n.wire)}</td><td>${n.r}</td><td>${n.x}</td></tr>`;
+  }).join("");
+  const lineasHtml = `<table>
+    <colgroup>
+      <col style="width:9%"><col style="width:9%"><col style="width:13%">
+      <col style="width:29%"><col style="width:20%"><col style="width:20%">
+    </colgroup>
+    <thead><tr><th>Ni</th><th>Nf</th><th>D(M)</th><th>Conductor</th><th>R (Ω)</th><th>jX (Ω)</th></tr></thead>
+    <tbody>${lineRows}</tbody></table>`;
+
+  const diagramSvg = buildPrintDiagramSVG(ratedKVA, transformerName);
+
+  const kpiHtml = document.querySelector(".kpi-grid") ? document.querySelector(".kpi-grid").outerHTML : "";
+  const demandChartHtml = document.getElementById("demandChart") ? document.getElementById("demandChart").innerHTML : "";
+  let yearTableHtml = document.getElementById("yearTable") ? document.getElementById("yearTable").outerHTML : "";
+  yearTableHtml = yearTableHtml.replace(/ style="color:[^"]*"/g, "");
+  let nodeTableHtml = document.getElementById("nodeTable") ? document.getElementById("nodeTable").outerHTML : "";
+  nodeTableHtml = nodeTableHtml
+    .replace(">Voltage (V)<", ">[V]<")
+    .replace("># abonados<", "># ABON.<")
+    .replace(">Distancia (m)<", ">DIST.(M)<")
+    .replace('<table id="nodeTable">', `<table id="nodeTable"><colgroup>
+      <col style="width:10%"><col style="width:16%"><col style="width:10%">
+      <col style="width:11%"><col style="width:12%"><col style="width:10%">
+      <col style="width:16%"><col style="width:15%">
+    </colgroup>`);
+
+  document.getElementById("printSheet").innerHTML = `
+    <div class="print-header">
+      <h1>${projName}</h1>
+      <div class="print-meta">
+        <div><strong>Dirección del proyecto:</strong> ${projAddress}</div>
+        <div><strong>Diseñado por:</strong> ${projDesigner}</div>
+        <div><strong>Fecha del informe:</strong> ${today}</div>
+      </div>
+    </div>
+
+    <h2>Parámetros generales</h2>
+    ${paramsHtml}
+
+    <h2>Informe de crecimiento y dimensionamiento</h2>
+    ${kpiHtml}
+    <h3>Demanda proyectada del transformador</h3>
+    <div class="print-chart">${demandChartHtml}</div>
+    <h3>Proyección año a año</h3>
+    ${yearTableHtml}
+
+    <div class="two-col-row">
+      <div>
+        <h2>Líneas Ni–Nf</h2>
+        ${lineasHtml}
+      </div>
+      <div>
+        <h3>Nodos (Año 0)</h3>
+        ${nodeTableHtml}
+      </div>
+    </div>
+
+    <div class="print-diagram-page">
+      <h2>Diagrama del circuito</h2>
+      <div class="print-diagram">${diagramSvg}</div>
+    </div>
+  `;
+}
+function printReport(){
+  buildPrintSheet();
+  window.print();
+}
+
+// ---------- save / load studies ----------
+let currentStudyId = null;
+let currentStudyName = "";
+
+function serializeState(){
+  const val = id => { const el = document.getElementById(id); return el ? el.value : ""; };
+  return {
+    projName: val("projName"), projAddress: val("projAddress"), projDesigner: val("projDesigner"),
+    transformerName: val("transformerName"), ratedKVA: val("ratedKVA"), vbase: val("vbase"),
+    circuitFactor: val("circuitFactor"), safetyFactor: val("safetyFactor"), llf: val("llf"),
+    startYear: val("startYear"), years: val("years"), sector: val("sector"), r1Area: val("r1Area"),
+    coincOverride: val("coincOverride"), kvaUser: val("kvaUser"), temp: val("temp"), pf: val("pf"),
+    nodes: JSON.parse(JSON.stringify(nodes)), nextId, selectedId,
+  };
+}
+
+function applyState(state){
+  const setVal = (id, v) => { if(v===undefined || v===null) return; const el = document.getElementById(id); if(el) el.value = v; };
+
+  nodes = state.nodes ? JSON.parse(JSON.stringify(state.nodes)) :
+    { T: {id:"T", parent:null, dir:"root", distance:0, users:0, children:{left:null,right:null,up:null,down:null}} };
+  nextId = state.nextId || 1;
+  selectedId = (state.selectedId && nodes[state.selectedId]) ? state.selectedId : "T";
+
+  setVal("projName", state.projName);
+  setVal("projAddress", state.projAddress);
+  setVal("projDesigner", state.projDesigner);
+  setVal("transformerName", state.transformerName);
+  setVal("ratedKVA", state.ratedKVA);
+  setVal("vbase", state.vbase);
+  setVal("circuitFactor", state.circuitFactor);
+  setVal("safetyFactor", state.safetyFactor);
+  setVal("llf", state.llf);
+  setVal("startYear", state.startYear);
+  setVal("years", state.years);
+  setVal("sector", state.sector);
+  setVal("r1Area", state.r1Area);
+  setVal("temp", state.temp);
+  setVal("pf", state.pf);
+
+  onSectorChange();       // sets area-field visibility, recalculates kvaUser + cable R/X against the restored nodes
+  onUsersOrGraphChange(); // recalculates coincidence factor from restored user counts
+  setVal("kvaUser", state.kvaUser);            // re-apply saved value in case it was manually overridden
+  setVal("coincOverride", state.coincOverride);
+
+  document.getElementById("reportSection").style.display = "none";
+  document.getElementById("printBtn").style.display = "none";
+  document.getElementById("validateMsg").textContent = "";
+
+  renderDiagram();
+}
+
+async function refreshStudyList(){
+  const sel = document.getElementById("savedStudiesSelect");
+  try{
+    const res = await fetch("/api/regulacion");
+    const list = await res.json();
+    sel.innerHTML = '<option value="">— Cargar estudio guardado —</option>' +
+      list.map(s => `<option value="${s.id}">${s.name}${s.updated_at ? " ("+s.updated_at+")" : ""}</option>`).join("");
+    if(currentStudyId) sel.value = currentStudyId;
+  }catch(e){
+    sel.innerHTML = '<option value="">(no se pudo cargar la lista)</option>';
+  }
+}
+
+async function openSelectedStudy(){
+  const sel = document.getElementById("savedStudiesSelect");
+  if(!sel.value) return;
+  const res = await fetch("/api/regulacion/" + sel.value);
+  if(!res.ok){ alert("No se pudo abrir el estudio."); return; }
+  const study = await res.json();
+  applyState(study.data);
+  currentStudyId = study.id;
+  currentStudyName = study.name;
+  document.getElementById("saveStatus").textContent = "Editando: " + study.name;
+}
+
+async function saveStudy(){
+  const suggested = currentStudyName || document.getElementById("projName").value || "Estudio sin título";
+  const name = prompt("Nombre del estudio:", suggested);
+  if(name === null) return; // cancelled
+  const payload = { name: name.trim() || suggested, data: serializeState() };
+  const url = currentStudyId ? ("/api/regulacion/" + currentStudyId) : "/api/regulacion";
+  const method = currentStudyId ? "PUT" : "POST";
+  const res = await fetch(url, { method, headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+  if(!res.ok){ alert("No se pudo guardar el estudio."); return; }
+  const saved = await res.json();
+  currentStudyId = saved.id;
+  currentStudyName = saved.name;
+  document.getElementById("saveStatus").textContent = "Guardado: " + saved.name + (saved.updated_at ? " ("+saved.updated_at+")" : "");
+  await refreshStudyList();
+}
+
+function saveAsNewStudy(){
+  currentStudyId = null;
+  saveStudy();
+}
+
+async function deleteSelectedStudy(){
+  const sel = document.getElementById("savedStudiesSelect");
+  if(!sel.value) return;
+  if(!confirm("¿Eliminar este estudio guardado? Esta acción no se puede deshacer.")) return;
+  await fetch("/api/regulacion/" + sel.value, { method: "DELETE" });
+  if(String(currentStudyId) === sel.value){
+    currentStudyId = null;
+    currentStudyName = "";
+    document.getElementById("saveStatus").textContent = "";
+  }
+  await refreshStudyList();
+}
+
+// ---------- init ----------
+onSectorChange();
+onUsersOrGraphChange();
+renderDiagram();
+refreshStudyList();
+</script>
+</body>
+</html>
