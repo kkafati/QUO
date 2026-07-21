@@ -119,7 +119,7 @@ def run():
             return CostCardItem(category=cat, code=code, description=desc, unit=unit,
                                  rendimiento=rendimiento, desperdicio_pct=desperdicio, unit_price=price)
 
-        card1 = CostCard(account_id=aid, code="001", name="Instalación de poste PM-30 con crucetas y aisladores", unit="Unidad", admin_pct=10, utilidad_pct=15)
+        card1 = CostCard(account_id=aid, code="001", name="Instalación de poste PM-30 con crucetas y aisladores", unit="Unidad", admin_pct=10, utilidad_pct=15, created_at=TODAY, updated_at=TODAY)
         card1.items = [
             item("material", "X01", materials["X01"].description, "Unidad", 1, 5, 9800),
             item("material", "X05", materials["X05"].description, "Unidad", 1, 5, 1260),
@@ -133,7 +133,7 @@ def run():
         ]
         db.session.add(card1)
 
-        card2 = CostCard(account_id=aid, code="002", name="Tendido de cable SF#2 ACSR", unit="Metro", admin_pct=10, utilidad_pct=15)
+        card2 = CostCard(account_id=aid, code="002", name="Tendido de cable SF#2 ACSR", unit="Metro", admin_pct=10, utilidad_pct=15, created_at=TODAY, updated_at=TODAY)
         card2.items = [
             item("material", "X04", materials["X04"].description, "Metros", 1, 5, 64),
             item("labor", "M01", labor["M01"].description, "Hora", 0.05, 0, 350),
@@ -142,7 +142,7 @@ def run():
         ]
         db.session.add(card2)
 
-        card3 = CostCard(account_id=aid, code="003", name="Instalación de transformador TS-15", unit="Unidad", admin_pct=10, utilidad_pct=15)
+        card3 = CostCard(account_id=aid, code="003", name="Instalación de transformador TS-15", unit="Unidad", admin_pct=10, utilidad_pct=15, created_at=TODAY, updated_at=TODAY)
         card3.items = [
             item("material", "X03", materials["X03"].description, "Unidad", 1, 2, 87500),
             item("material", "X07", materials["X07"].description, "Unidad", 4, 5, 4300),

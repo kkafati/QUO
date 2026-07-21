@@ -116,6 +116,7 @@ function catalogTheadHtml() {
     return `<tr>
       <th class="col-code">Código</th>
       <th class="col-date">Fecha Agregado</th>
+      <th class="col-date">Fecha Modificación</th>
       <th>Descripción</th>
       <th class="col-unit">Unidad</th>
       <th class="col-num">Precio Unit.</th>
@@ -130,7 +131,7 @@ function catalogTheadHtml() {
     <th>Descripción</th>
     <th class="col-unit">Unidad</th>
     <th class="col-num">Precio Unit.</th>
-    <th class="col-date">Actualizado</th>
+    <th class="col-date">Fecha Modificación</th>
     <th class="col-actions"></th>
   </tr>`;
 }
@@ -152,6 +153,7 @@ function renderCatalogTable(filter) {
         <tr>
           <td class="mono">${esc(i.code)}</td>
           <td>${esc(i.created_at || "—")}</td>
+          <td>${esc(i.updated_at || "—")}</td>
           <td>${esc(i.description)}</td>
           <td>${esc(i.unit)}</td>
           <td class="num">${fmt(i.unit_price)}</td>
@@ -455,8 +457,10 @@ function renderCostCardGrid(filter) {
     <tr>
       <td class="mono">${esc(c.code)}</td>
       <td>${esc(c.name)}</td>
+      <td class="desc-cell" title="${esc(c.description || "")}">${esc(c.description || "—")}</td>
       <td>${esc(c.unit || "—")}</td>
       <td class="num">${fmt(c.total_cost)}</td>
+      <td title="Creado: ${esc(c.created_at || "—")}">${esc(c.updated_at || "—")}</td>
       <td class="col-actions">
         <button class="btn btn-sm btn-ghost" data-open="${c.id}">Abrir</button>
         <button class="btn btn-sm btn-danger" data-del-card="${c.id}">×</button>
@@ -581,6 +585,7 @@ async function renderFichaEditor() {
     <div class="print-head">
       <div class="print-title">Ficha de Costo ${esc(c.code)} — ${esc(c.name)}</div>
       <div class="print-meta">Unidad: ${esc(c.unit || "—")} · Generado el ${new Date().toLocaleDateString("es-HN")}</div>
+      ${c.description ? `<div class="print-meta" style="margin-top:4px">${esc(c.description)}</div>` : ""}
     </div>
 
     <div class="editor-head">
@@ -590,6 +595,10 @@ async function renderFichaEditor() {
         <div class="field"><label>Unidad de medida</label><input id="fc-unit" value="${esc(c.unit)}" placeholder="Unidad, Metro…"></div>
         <div class="field narrow"><label>Gastos admin. %</label><input id="fc-admin" type="number" step="0.01" value="${c.admin_pct}"></div>
         <div class="field narrow"><label>Utilidad %</label><input id="fc-util" type="number" step="0.01" value="${c.utilidad_pct}"></div>
+      </div>
+      <div class="field" style="width:100%; margin-top:10px;">
+        <label>Descripción</label>
+        <textarea id="fc-description" placeholder="Detalle de la actividad, alcance, notas…" style="width:100%; min-height:70px; padding:8px 10px; border:1px solid #c9c2ae; font-size:13px; font-family:inherit; background:var(--paper); resize:vertical;">${esc(c.description || "")}</textarea>
       </div>
     </div>
 
@@ -737,6 +746,7 @@ async function saveFicha() {
   const body = {
     code: document.getElementById("fc-code").value,
     name: document.getElementById("fc-name").value,
+    description: document.getElementById("fc-description").value,
     unit: document.getElementById("fc-unit").value,
     admin_pct: document.getElementById("fc-admin").value,
     utilidad_pct: document.getElementById("fc-util").value,

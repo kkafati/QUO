@@ -92,9 +92,12 @@ class CostCard(db.Model):
     account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
     code = db.Column(db.String(64), nullable=False)
     name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text)
     unit = db.Column(db.String(32), default="")
     admin_pct = db.Column(db.Float, nullable=False, default=10)
     utilidad_pct = db.Column(db.Float, nullable=False, default=15)
+    created_at = db.Column(db.String(16))  # set once, when the ficha is first created
+    updated_at = db.Column(db.String(16))  # refreshed on every edit
 
     items = db.relationship("CostCardItem", backref="cost_card", cascade="all, delete-orphan")
 

@@ -349,6 +349,9 @@ def compute_card_totals(card):
         "id": card.id,
         "code": card.code,
         "name": card.name,
+        "description": card.description,
+        "created_at": card.created_at,
+        "updated_at": card.updated_at,
         "unit": card.unit,
         "admin_pct": card.admin_pct,
         "utilidad_pct": card.utilidad_pct,
@@ -397,9 +400,12 @@ def create_costcard():
         account_id=current_account_id(),
         code=code,
         name=data.get("name", "").strip(),
+        description=data.get("description", "").strip(),
         unit=data.get("unit", "").strip(),
         admin_pct=float(data.get("admin_pct", 10) or 0),
         utilidad_pct=float(data.get("utilidad_pct", 15) or 0),
+        created_at=datetime.utcnow().strftime("%Y-%m-%d"),
+        updated_at=datetime.utcnow().strftime("%Y-%m-%d"),
     )
     db.session.add(card)
     db.session.commit()
@@ -417,9 +423,13 @@ def update_costcard(card_id):
         return jsonify({"error": f"El código de ficha '{new_code}' ya está en uso."}), 400
     card.code = new_code
     card.name = data.get("name", card.name).strip()
+    card.description = data.get("description", card.description or "").strip()
     card.unit = data.get("unit", card.unit).strip()
     card.admin_pct = float(data.get("admin_pct", card.admin_pct) or 0)
     card.utilidad_pct = float(data.get("utilidad_pct", card.utilidad_pct) or 0)
+    if not card.created_at:
+        card.created_at = datetime.utcnow().strftime("%Y-%m-%d")
+    card.updated_at = datetime.utcnow().strftime("%Y-%m-%d")
     if "items" in data:
         _sync_items(card, data["items"])
     db.session.commit()

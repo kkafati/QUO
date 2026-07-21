@@ -337,6 +337,15 @@ button, input { font-family: inherit; }
 .mono { font-family: var(--font-display); }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 
+.desc-cell {
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
 .empty-state {
   text-align: center;
   padding: 40px 20px;
