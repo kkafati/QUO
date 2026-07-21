@@ -125,6 +125,7 @@ def compute_material_auto_price(suppliers):
 
 def material_to_dict(item):
     base = catalog_to_dict(item)
+    base["created_at"] = item.created_at
     suppliers = item.suppliers
     auto_price = compute_material_auto_price(suppliers)
     if auto_price is not None:
@@ -166,14 +167,20 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
     @login_required
     def create_item():
         data = request.json or {}
-        item = Model(
+        code = data.get("code", "").strip()
+        if Model.query.filter_by(account_id=current_account_id(), code=code).first():
+            return jsonify({"error": f"El código '{code}' ya está en uso."}), 400
+        kwargs = dict(
             account_id=current_account_id(),
-            code=data.get("code", "").strip(),
+            code=code,
             description=data.get("description", "").strip(),
             unit=data.get("unit", "").strip(),
             unit_price=float(data.get("unit_price", 0) or 0),
             updated_at=datetime.utcnow().strftime("%Y-%m-%d"),
         )
+        if category == "material":
+            kwargs["created_at"] = datetime.utcnow().strftime("%Y-%m-%d")
+        item = Model(**kwargs)
         db.session.add(item)
         db.session.commit()
         return jsonify(to_dict(item)), 201
@@ -183,7 +190,10 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
     def update_item(item_id):
         item = Model.query.filter_by(id=item_id, account_id=current_account_id()).first_or_404()
         data = request.json or {}
-        item.code = data.get("code", item.code).strip()
+        new_code = data.get("code", item.code).strip()
+        if new_code != item.code and Model.query.filter_by(account_id=current_account_id(), code=new_code).first():
+            return jsonify({"error": f"El código '{new_code}' ya está en uso."}), 400
+        item.code = new_code
         item.description = data.get("description", item.description).strip()
         item.unit = data.get("unit", item.unit).strip()
         item.unit_price = float(data.get("unit_price", item.unit_price) or 0)
@@ -380,9 +390,12 @@ def get_costcard(card_id):
 @login_required
 def create_costcard():
     data = request.json or {}
+    code = data.get("code", "").strip()
+    if CostCard.query.filter_by(account_id=current_account_id(), code=code).first():
+        return jsonify({"error": f"El código de ficha '{code}' ya está en uso."}), 400
     card = CostCard(
         account_id=current_account_id(),
-        code=data.get("code", "").strip(),
+        code=code,
         name=data.get("name", "").strip(),
         unit=data.get("unit", "").strip(),
         admin_pct=float(data.get("admin_pct", 10) or 0),
@@ -399,7 +412,10 @@ def create_costcard():
 def update_costcard(card_id):
     card = CostCard.query.filter_by(id=card_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
-    card.code = data.get("code", card.code).strip()
+    new_code = data.get("code", card.code).strip()
+    if new_code != card.code and CostCard.query.filter_by(account_id=current_account_id(), code=new_code).first():
+        return jsonify({"error": f"El código de ficha '{new_code}' ya está en uso."}), 400
+    card.code = new_code
     card.name = data.get("name", card.name).strip()
     card.unit = data.get("unit", card.unit).strip()
     card.admin_pct = float(data.get("admin_pct", card.admin_pct) or 0)

@@ -43,13 +43,13 @@ def run():
 
         # ---------------- Materiales ----------------
         materials = {
-            "X01": Material(account_id=aid, code="X01", description="Poste PM-30 clase 5", unit="Unidad", unit_price=0, updated_at=TODAY),
-            "X02": Material(account_id=aid, code="X02", description="Poste PM-40 clase 5", unit="Unidad", unit_price=0, updated_at=TODAY),
-            "X03": Material(account_id=aid, code="X03", description="Transformador TS-15", unit="Unidad", unit_price=0, updated_at=TODAY),
+            "X01": Material(account_id=aid, code="X01", description="Poste PM-30 clase 5", unit="Unidad", unit_price=0, created_at=TODAY, updated_at=TODAY),
+            "X02": Material(account_id=aid, code="X02", description="Poste PM-40 clase 5", unit="Unidad", unit_price=0, created_at=TODAY, updated_at=TODAY),
+            "X03": Material(account_id=aid, code="X03", description="Transformador TS-15", unit="Unidad", unit_price=0, created_at=TODAY, updated_at=TODAY),
             "X04": Material(account_id=aid, code="X04", description="Cable SF#2 ACSR-1FASE", unit="Metros", unit_price=0, updated_at=TODAY),
-            "X05": Material(account_id=aid, code="X05", description="Cruceta CS-2", unit="Unidad", unit_price=0, updated_at=TODAY),
-            "X06": Material(account_id=aid, code="X06", description="Aislador tipo Pin", unit="Unidad", unit_price=0, updated_at=TODAY),
-            "X07": Material(account_id=aid, code="X07", description="Grapa de retención LL40W", unit="Unidad", unit_price=0, updated_at=TODAY),
+            "X05": Material(account_id=aid, code="X05", description="Cruceta CS-2", unit="Unidad", unit_price=0, created_at=TODAY, updated_at=TODAY),
+            "X06": Material(account_id=aid, code="X06", description="Aislador tipo Pin", unit="Unidad", unit_price=0, created_at=TODAY, updated_at=TODAY),
+            "X07": Material(account_id=aid, code="X07", description="Grapa de retención LL40W", unit="Unidad", unit_price=0, created_at=TODAY, updated_at=TODAY),
         }
         for m in materials.values():
             db.session.add(m)

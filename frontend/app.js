@@ -10,10 +10,18 @@ function handleAuthFailure(res) {
   return res;
 }
 
+async function parseApiResponse(res) {
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || "Ocurrió un error inesperado.");
+  }
+  return data;
+}
+
 const api = {
   get: (url) => fetch(url).then(handleAuthFailure).then(r => r.json()),
-  post: (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(handleAuthFailure).then(r => r.json()),
-  put: (url, body) => fetch(url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(handleAuthFailure).then(r => r.json()),
+  post: (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(handleAuthFailure).then(parseApiResponse),
+  put: (url, body) => fetch(url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(handleAuthFailure).then(parseApiResponse),
   del: (url) => fetch(url, { method: "DELETE" }).then(handleAuthFailure),
 };
 
@@ -107,6 +115,7 @@ function catalogTheadHtml() {
   if (currentCatalogCat === "material") {
     return `<tr>
       <th class="col-code">Código</th>
+      <th class="col-date">Fecha Agregado</th>
       <th>Descripción</th>
       <th class="col-unit">Unidad</th>
       <th class="col-num">Precio Unit.</th>
@@ -142,6 +151,7 @@ function renderCatalogTable(filter) {
       return `
         <tr>
           <td class="mono">${esc(i.code)}</td>
+          <td>${esc(i.created_at || "—")}</td>
           <td>${esc(i.description)}</td>
           <td>${esc(i.unit)}</td>
           <td class="num">${fmt(i.unit_price)}</td>
@@ -403,8 +413,13 @@ function openCatalogForm(item) {
     };
     if (!isMaterial) body.unit_price = document.getElementById("mf-price").value;
     if (!body.code || !body.description) { alert("Código y descripción son requeridos."); return; }
-    if (isNew) await api.post(`/api/catalog/${currentCatalogCat}`, body);
-    else await api.put(`/api/catalog/${currentCatalogCat}/${item.id}`, body);
+    try {
+      if (isNew) await api.post(`/api/catalog/${currentCatalogCat}`, body);
+      else await api.put(`/api/catalog/${currentCatalogCat}/${item.id}`, body);
+    } catch (err) {
+      alert(err.message);
+      return;
+    }
     hideModal();
     loadCatalog();
   });
@@ -734,8 +749,13 @@ async function saveFicha() {
     ],
   };
   if (!body.code || !body.name) { alert("Código y nombre de actividad son requeridos."); return; }
-  if (c.id) await api.put(`/api/costcards/${c.id}`, body);
-  else await api.post("/api/costcards", body);
+  try {
+    if (c.id) await api.put(`/api/costcards/${c.id}`, body);
+    else await api.post("/api/costcards", body);
+  } catch (err) {
+    alert(err.message);
+    return;
+  }
   loadCostCardList();
 }
 

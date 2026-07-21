@@ -21,7 +21,8 @@ class Material(db.Model):
     description = db.Column(db.String(255), nullable=False)
     unit = db.Column(db.String(32), nullable=False)
     unit_price = db.Column(db.Float, nullable=False, default=0)
-    updated_at = db.Column(db.String(16))
+    created_at = db.Column(db.String(16))  # set once, when the material is first added
+    updated_at = db.Column(db.String(16))  # refreshed on every edit
 
     suppliers = db.relationship("SupplierPrice", backref="material", cascade="all, delete-orphan")
 
