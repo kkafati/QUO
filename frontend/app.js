@@ -2,11 +2,19 @@
 // Helpers
 // ============================================================================
 
+function handleAuthFailure(res) {
+  if (res.status === 401) {
+    window.location.href = "/login?next=" + encodeURIComponent(window.location.pathname);
+    throw new Error("not authenticated");
+  }
+  return res;
+}
+
 const api = {
-  get: (url) => fetch(url).then(r => r.json()),
-  post: (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.json()),
-  put: (url, body) => fetch(url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.json()),
-  del: (url) => fetch(url, { method: "DELETE" }),
+  get: (url) => fetch(url).then(handleAuthFailure).then(r => r.json()),
+  post: (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(handleAuthFailure).then(r => r.json()),
+  put: (url, body) => fetch(url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(handleAuthFailure).then(r => r.json()),
+  del: (url) => fetch(url, { method: "DELETE" }).then(handleAuthFailure),
 };
 
 function fmt(n) {
@@ -925,8 +933,20 @@ async function saveQuote() {
   loadQuoteList();
 }
 
+async function loadAccountInfo() {
+  try {
+    const res = await fetch("/api/me");
+    const me = await res.json();
+    const el = document.getElementById("topbarClient");
+    if (el) el.textContent = me.authenticated ? (me.company_name || "—") : "—";
+  } catch (e) {
+    // non-fatal — leave the placeholder
+  }
+}
+
 // ============================================================================
 // Init
 // ============================================================================
 
+loadAccountInfo();
 loadQuoteList();

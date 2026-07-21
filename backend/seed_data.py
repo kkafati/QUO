@@ -14,9 +14,13 @@ from datetime import date
 
 from app import app
 from models import (
-    db, Material, SupplierPrice, Labor, Tool, Transport, Gasto,
+    db, Account, Material, SupplierPrice, Labor, Tool, Transport, Gasto,
     CostCard, CostCardItem, Quote, QuoteLine,
 )
+from werkzeug.security import generate_password_hash
+
+DEMO_USERNAME = "demo"
+DEMO_PASSWORD = "demo1234"
 
 TODAY = date.today().strftime("%Y-%m-%d")
 
@@ -26,15 +30,26 @@ def run():
         db.drop_all()
         db.create_all()
 
+        account = Account(
+            company_name="Empresa Demo",
+            username=DEMO_USERNAME,
+            password_hash=generate_password_hash(DEMO_PASSWORD),
+            created_at=TODAY,
+        )
+        db.session.add(account)
+        db.session.flush()
+        aid = account.id
+
+
         # ---------------- Materiales ----------------
         materials = {
-            "X01": Material(code="X01", description="Poste PM-30 clase 5", unit="Unidad", unit_price=0, updated_at=TODAY),
-            "X02": Material(code="X02", description="Poste PM-40 clase 5", unit="Unidad", unit_price=0, updated_at=TODAY),
-            "X03": Material(code="X03", description="Transformador TS-15", unit="Unidad", unit_price=0, updated_at=TODAY),
-            "X04": Material(code="X04", description="Cable SF#2 ACSR-1FASE", unit="Metros", unit_price=0, updated_at=TODAY),
-            "X05": Material(code="X05", description="Cruceta CS-2", unit="Unidad", unit_price=0, updated_at=TODAY),
-            "X06": Material(code="X06", description="Aislador tipo Pin", unit="Unidad", unit_price=0, updated_at=TODAY),
-            "X07": Material(code="X07", description="Grapa de retención LL40W", unit="Unidad", unit_price=0, updated_at=TODAY),
+            "X01": Material(account_id=aid, code="X01", description="Poste PM-30 clase 5", unit="Unidad", unit_price=0, updated_at=TODAY),
+            "X02": Material(account_id=aid, code="X02", description="Poste PM-40 clase 5", unit="Unidad", unit_price=0, updated_at=TODAY),
+            "X03": Material(account_id=aid, code="X03", description="Transformador TS-15", unit="Unidad", unit_price=0, updated_at=TODAY),
+            "X04": Material(account_id=aid, code="X04", description="Cable SF#2 ACSR-1FASE", unit="Metros", unit_price=0, updated_at=TODAY),
+            "X05": Material(account_id=aid, code="X05", description="Cruceta CS-2", unit="Unidad", unit_price=0, updated_at=TODAY),
+            "X06": Material(account_id=aid, code="X06", description="Aislador tipo Pin", unit="Unidad", unit_price=0, updated_at=TODAY),
+            "X07": Material(account_id=aid, code="X07", description="Grapa de retención LL40W", unit="Unidad", unit_price=0, updated_at=TODAY),
         }
         for m in materials.values():
             db.session.add(m)
@@ -63,36 +78,36 @@ def run():
 
         # ---------------- Mano de Obra ----------------
         labor = {
-            "M01": Labor(code="M01", description="Cuadrilla de instalación (linero + ayudante)", unit="Hora", unit_price=350, updated_at=TODAY),
-            "M02": Labor(code="M02", description="Electricista certificado", unit="Hora", unit_price=280, updated_at=TODAY),
-            "M03": Labor(code="M03", description="Ayudante de línea", unit="Hora", unit_price=150, updated_at=TODAY),
+            "M01": Labor(account_id=aid, code="M01", description="Cuadrilla de instalación (linero + ayudante)", unit="Hora", unit_price=350, updated_at=TODAY),
+            "M02": Labor(account_id=aid, code="M02", description="Electricista certificado", unit="Hora", unit_price=280, updated_at=TODAY),
+            "M03": Labor(account_id=aid, code="M03", description="Ayudante de línea", unit="Hora", unit_price=150, updated_at=TODAY),
         }
         for l in labor.values():
             db.session.add(l)
 
         # ---------------- Herramientas ----------------
         tools = {
-            "H01": Tool(code="H01", description="Grúa hidráulica 10T", unit="Día", unit_price=4500, updated_at=TODAY),
-            "H02": Tool(code="H02", description="Excavadora compacta", unit="Día", unit_price=3800, updated_at=TODAY),
-            "H03": Tool(code="H03", description="Equipo de puesta a tierra", unit="Día", unit_price=900, updated_at=TODAY),
-            "H04": Tool(code="H04", description="Camión canasta (hidrogrúa)", unit="Día", unit_price=5200, updated_at=TODAY),
+            "H01": Tool(account_id=aid, code="H01", description="Grúa hidráulica 10T", unit="Día", unit_price=4500, updated_at=TODAY),
+            "H02": Tool(account_id=aid, code="H02", description="Excavadora compacta", unit="Día", unit_price=3800, updated_at=TODAY),
+            "H03": Tool(account_id=aid, code="H03", description="Equipo de puesta a tierra", unit="Día", unit_price=900, updated_at=TODAY),
+            "H04": Tool(account_id=aid, code="H04", description="Camión canasta (hidrogrúa)", unit="Día", unit_price=5200, updated_at=TODAY),
         }
         for t in tools.values():
             db.session.add(t)
 
         # ---------------- Transporte ----------------
         transport = {
-            "T01": Transport(code="T01", description="Flete camión 10T", unit="Viaje", unit_price=3500, updated_at=TODAY),
-            "T02": Transport(code="T02", description="Flete camión plataforma", unit="Viaje", unit_price=5800, updated_at=TODAY),
+            "T01": Transport(account_id=aid, code="T01", description="Flete camión 10T", unit="Viaje", unit_price=3500, updated_at=TODAY),
+            "T02": Transport(account_id=aid, code="T02", description="Flete camión plataforma", unit="Viaje", unit_price=5800, updated_at=TODAY),
         }
         for tr in transport.values():
             db.session.add(tr)
 
         # ---------------- Otros Gastos ----------------
         gastos = {
-            "G01": Gasto(code="G01", description="Permisos municipales", unit="Global", unit_price=6000, updated_at=TODAY),
-            "G02": Gasto(code="G02", description="Supervisión y fiscalización ENEE", unit="Global", unit_price=15000, updated_at=TODAY),
-            "G03": Gasto(code="G03", description="Seguro de obra (póliza)", unit="Global", unit_price=8000, updated_at=TODAY),
+            "G01": Gasto(account_id=aid, code="G01", description="Permisos municipales", unit="Global", unit_price=6000, updated_at=TODAY),
+            "G02": Gasto(account_id=aid, code="G02", description="Supervisión y fiscalización ENEE", unit="Global", unit_price=15000, updated_at=TODAY),
+            "G03": Gasto(account_id=aid, code="G03", description="Seguro de obra (póliza)", unit="Global", unit_price=8000, updated_at=TODAY),
         }
         for g in gastos.values():
             db.session.add(g)
@@ -104,7 +119,7 @@ def run():
             return CostCardItem(category=cat, code=code, description=desc, unit=unit,
                                  rendimiento=rendimiento, desperdicio_pct=desperdicio, unit_price=price)
 
-        card1 = CostCard(code="001", name="Instalación de poste PM-30 con crucetas y aisladores", unit="Unidad", admin_pct=10, utilidad_pct=15)
+        card1 = CostCard(account_id=aid, code="001", name="Instalación de poste PM-30 con crucetas y aisladores", unit="Unidad", admin_pct=10, utilidad_pct=15)
         card1.items = [
             item("material", "X01", materials["X01"].description, "Unidad", 1, 5, 9800),
             item("material", "X05", materials["X05"].description, "Unidad", 1, 5, 1260),
@@ -118,7 +133,7 @@ def run():
         ]
         db.session.add(card1)
 
-        card2 = CostCard(code="002", name="Tendido de cable SF#2 ACSR", unit="Metro", admin_pct=10, utilidad_pct=15)
+        card2 = CostCard(account_id=aid, code="002", name="Tendido de cable SF#2 ACSR", unit="Metro", admin_pct=10, utilidad_pct=15)
         card2.items = [
             item("material", "X04", materials["X04"].description, "Metros", 1, 5, 64),
             item("labor", "M01", labor["M01"].description, "Hora", 0.05, 0, 350),
@@ -127,7 +142,7 @@ def run():
         ]
         db.session.add(card2)
 
-        card3 = CostCard(code="003", name="Instalación de transformador TS-15", unit="Unidad", admin_pct=10, utilidad_pct=15)
+        card3 = CostCard(account_id=aid, code="003", name="Instalación de transformador TS-15", unit="Unidad", admin_pct=10, utilidad_pct=15)
         card3.items = [
             item("material", "X03", materials["X03"].description, "Unidad", 1, 2, 87500),
             item("material", "X07", materials["X07"].description, "Unidad", 4, 5, 4300),
@@ -143,7 +158,7 @@ def run():
         db.session.flush()
 
         # ---------------- Cotizaciones ----------------
-        quote1 = Quote(name="Proyecto Ampliación El Rosario", client="ENEE", date=TODAY, exento=False)
+        quote1 = Quote(account_id=aid, name="Proyecto Ampliación El Rosario", client="ENEE", date=TODAY, exento=False)
         quote1.lines = [
             QuoteLine(cost_card_id=card1.id, quantity=24),
             QuoteLine(cost_card_id=card2.id, quantity=2900),
@@ -151,7 +166,7 @@ def run():
         ]
         db.session.add(quote1)
 
-        quote2 = Quote(name="Proyecto Comunidad La Esperanza", client="Alcaldía Municipal", date=TODAY, exento=True)
+        quote2 = Quote(account_id=aid, name="Proyecto Comunidad La Esperanza", client="Alcaldía Municipal", date=TODAY, exento=True)
         quote2.lines = [
             QuoteLine(cost_card_id=card1.id, quantity=5),
             QuoteLine(cost_card_id=card3.id, quantity=1),
@@ -160,7 +175,7 @@ def run():
 
         db.session.commit()
 
-        print("Seed data created:")
+        print("Seed data created for account 'Empresa Demo':")
         print(f"  Materiales: {Material.query.count()}")
         print(f"  Cotizaciones de Proveedores: {SupplierPrice.query.count()}")
         print(f"  Mano de Obra: {Labor.query.count()}")
@@ -169,6 +184,10 @@ def run():
         print(f"  Gastos: {Gasto.query.count()}")
         print(f"  Fichas de Costo: {CostCard.query.count()}")
         print(f"  Cotizaciones: {Quote.query.count()}")
+        print()
+        print(f"Inicia sesion en /login con:")
+        print(f"  Usuario:    {DEMO_USERNAME}")
+        print(f"  Contraseña: {DEMO_PASSWORD}")
 
 
 if __name__ == "__main__":

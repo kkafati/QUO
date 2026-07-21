@@ -12,6 +12,17 @@
   }
   *{box-sizing:border-box;}
   body{margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); padding:32px 20px 80px;}
+  .topbar{
+    position:sticky; top:0; z-index:60; height:40px;
+    display:flex; align-items:center; gap:8px; padding:0 20px;
+    background:var(--panel2); border-bottom:1px solid var(--line);
+    color:var(--text); font-size:12px; margin:-32px -20px 32px;
+  }
+  .topbar-label{font-family:var(--mono); text-transform:uppercase; letter-spacing:.05em; color:var(--cyan); font-size:10.5px;}
+  #topbarClient{font-weight:600;}
+  .topbar-logout{margin-left:auto; color:var(--cyan); text-decoration:none;}
+  .topbar-logout:hover{text-decoration:underline;}
+  @media print{ .topbar{display:none;} }
   .wrap{max-width:1180px; margin:0 auto;}
   header{margin-bottom:32px; border-bottom:1px solid var(--line); padding-bottom:20px;}
   .eyebrow{font-family:var(--mono); font-size:11px; letter-spacing:.18em; color:var(--cyan); text-transform:uppercase;}
@@ -132,6 +143,11 @@
 </style>
 </head>
 <body>
+<div class="topbar">
+  <span class="topbar-label">Cliente:</span>
+  <span id="topbarClient">—</span>
+  <a href="/logout" class="topbar-logout">Cerrar sesión</a>
+</div>
 <div class="wrap">
 
   <header>
@@ -1093,6 +1109,15 @@ function printReport(){
 let currentStudyId = null;
 let currentStudyName = "";
 
+async function apiFetch(url, opts){
+  const res = await fetch(url, opts);
+  if(res.status === 401){
+    window.location.href = "/login?next=" + encodeURIComponent(window.location.pathname);
+    throw new Error("not authenticated");
+  }
+  return res;
+}
+
 function serializeState(){
   const val = id => { const el = document.getElementById(id); return el ? el.value : ""; };
   return {
@@ -1144,7 +1169,7 @@ function applyState(state){
 async function refreshStudyList(){
   const sel = document.getElementById("savedStudiesSelect");
   try{
-    const res = await fetch("/api/regulacion");
+    const res = await apiFetch("/api/regulacion");
     const list = await res.json();
     sel.innerHTML = '<option value="">— Cargar estudio guardado —</option>' +
       list.map(s => `<option value="${s.id}">${s.name}${s.updated_at ? " ("+s.updated_at+")" : ""}</option>`).join("");
@@ -1157,7 +1182,7 @@ async function refreshStudyList(){
 async function openSelectedStudy(){
   const sel = document.getElementById("savedStudiesSelect");
   if(!sel.value) return;
-  const res = await fetch("/api/regulacion/" + sel.value);
+  const res = await apiFetch("/api/regulacion/" + sel.value);
   if(!res.ok){ alert("No se pudo abrir el estudio."); return; }
   const study = await res.json();
   applyState(study.data);
@@ -1173,7 +1198,7 @@ async function saveStudy(){
   const payload = { name: name.trim() || suggested, data: serializeState() };
   const url = currentStudyId ? ("/api/regulacion/" + currentStudyId) : "/api/regulacion";
   const method = currentStudyId ? "PUT" : "POST";
-  const res = await fetch(url, { method, headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+  const res = await apiFetch(url, { method, headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload) });
   if(!res.ok){ alert("No se pudo guardar el estudio."); return; }
   const saved = await res.json();
   currentStudyId = saved.id;
@@ -1191,7 +1216,7 @@ async function deleteSelectedStudy(){
   const sel = document.getElementById("savedStudiesSelect");
   if(!sel.value) return;
   if(!confirm("¿Eliminar este estudio guardado? Esta acción no se puede deshacer.")) return;
-  await fetch("/api/regulacion/" + sel.value, { method: "DELETE" });
+  await apiFetch("/api/regulacion/" + sel.value, { method: "DELETE" });
   if(String(currentStudyId) === sel.value){
     currentStudyId = null;
     currentStudyName = "";
@@ -1200,11 +1225,21 @@ async function deleteSelectedStudy(){
   await refreshStudyList();
 }
 
+async function loadAccountInfo(){
+  try{
+    const res = await fetch("/api/me");
+    const me = await res.json();
+    const el = document.getElementById("topbarClient");
+    if(el) el.textContent = me.authenticated ? (me.company_name || "—") : "—";
+  }catch(e){ /* non-fatal */ }
+}
+
 // ---------- init ----------
 onSectorChange();
 onUsersOrGraphChange();
 renderDiagram();
 refreshStudyList();
+loadAccountInfo();
 </script>
 </body>
 </html>

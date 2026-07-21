@@ -16,6 +16,10 @@
   --font-body: 'IBM Plex Sans', sans-serif;
 }
 
+:root {
+  --topbar-height: 44px;
+}
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -28,10 +32,47 @@ html, body {
 
 button, input { font-family: inherit; }
 
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  height: var(--topbar-height);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px;
+  background: var(--blueprint-navy-deep);
+  border-bottom: 1px solid var(--blueprint-line);
+  color: var(--paper);
+  font-size: 12.5px;
+}
+
+.topbar-label {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--blueprint-cyan);
+  font-size: 11px;
+}
+
+#topbarClient {
+  font-weight: 600;
+}
+
+.topbar-logout {
+  margin-left: auto;
+  color: var(--blueprint-cyan);
+  text-decoration: none;
+}
+
+.topbar-logout:hover {
+  text-decoration: underline;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: 260px 1fr;
-  min-height: 100vh;
+  min-height: calc(100vh - var(--topbar-height));
 }
 
 /* ---------------- Sidebar ---------------- */
@@ -48,8 +89,8 @@ button, input { font-family: inherit; }
   display: flex;
   flex-direction: column;
   position: sticky;
-  top: 0;
-  height: 100vh;
+  top: var(--topbar-height);
+  height: calc(100vh - var(--topbar-height));
 }
 
 .brand {

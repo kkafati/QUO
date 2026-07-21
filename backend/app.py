@@ -1,23 +1,81 @@
 import os
 import json
+from functools import wraps
 from datetime import datetime
-from flask import Flask, request, jsonify, send_from_directory
-from models import db, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy
+from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
+from werkzeug.security import check_password_hash
+from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
 LANDING_DIR = os.path.join(os.path.dirname(BASE_DIR), "landing")
 REGULACION_DIR = os.path.join(os.path.dirname(BASE_DIR), "regulacion")
+AUTH_DIR = os.path.join(os.path.dirname(BASE_DIR), "auth")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/cotizaciones")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(BASE_DIR, "quoting.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+# IMPORTANT: change this to a long random value before deploying for real.
+# Anyone who has this value can forge login sessions.
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-change-me-before-deploying")
 db.init_app(app)
 
 with app.app_context():
     db.create_all()
 
 CATEGORY_MODELS = {"material": Material, "labor": Labor, "tool": Tool, "transport": Transport, "gasto": Gasto}
+
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+
+def current_account_id():
+    return session.get("account_id")
+
+
+def login_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not current_account_id():
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "not_authenticated"}), 401
+            return redirect(url_for("login", next=request.path))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+@app.route("/login", methods=["GET"])
+def login():
+    return send_from_directory(AUTH_DIR, "login.html")
+
+
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    data = request.json or {}
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    account = Account.query.filter_by(username=username).first()
+    if not account or not check_password_hash(account.password_hash, password):
+        return jsonify({"error": "Usuario o contraseña incorrectos."}), 401
+    session["account_id"] = account.id
+    session["company_name"] = account.company_name
+    session.permanent = True
+    return jsonify({"ok": True, "company_name": account.company_name})
+
+
+@app.route("/api/me", methods=["GET"])
+def api_me():
+    if not current_account_id():
+        return jsonify({"authenticated": False})
+    return jsonify({"authenticated": True, "company_name": session.get("company_name")})
+
+
+@app.route("/logout", methods=["GET", "POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
 
 # ---------------------------------------------------------------------------
 # Static frontend
@@ -29,18 +87,20 @@ def landing():
 
 
 @app.route("/cotizaciones/")
+@login_required
 def index():
     return send_from_directory(FRONTEND_DIR, "index.html")
 
 
 @app.route("/regulación/")
 @app.route("/regulacion/")
+@login_required
 def regulacion():
     return send_from_directory(REGULACION_DIR, "index.html")
 
 
 # ---------------------------------------------------------------------------
-# Catalog endpoints (materials / labor / tools) - shared shape
+# Catalog endpoints (materials / labor / tools / transport / gasto) - shared shape
 # ---------------------------------------------------------------------------
 
 def catalog_to_dict(item):
@@ -94,17 +154,20 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
     endpoint = f"catalog_{category}"
 
     @app.route(f"/api/catalog/{category}", methods=["GET"], endpoint=f"{endpoint}_list")
+    @login_required
     def list_items():
         q = request.args.get("q", "").strip().lower()
-        items = Model.query.order_by(Model.code).all()
+        items = Model.query.filter_by(account_id=current_account_id()).order_by(Model.code).all()
         if q:
             items = [i for i in items if q in i.code.lower() or q in i.description.lower()]
         return jsonify([to_dict(i) for i in items])
 
     @app.route(f"/api/catalog/{category}", methods=["POST"], endpoint=f"{endpoint}_create")
+    @login_required
     def create_item():
         data = request.json or {}
         item = Model(
+            account_id=current_account_id(),
             code=data.get("code", "").strip(),
             description=data.get("description", "").strip(),
             unit=data.get("unit", "").strip(),
@@ -116,8 +179,9 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
         return jsonify(to_dict(item)), 201
 
     @app.route(f"/api/catalog/{category}/<int:item_id>", methods=["PUT"], endpoint=f"{endpoint}_update")
+    @login_required
     def update_item(item_id):
-        item = Model.query.get_or_404(item_id)
+        item = Model.query.filter_by(id=item_id, account_id=current_account_id()).first_or_404()
         data = request.json or {}
         item.code = data.get("code", item.code).strip()
         item.description = data.get("description", item.description).strip()
@@ -128,8 +192,9 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
         return jsonify(to_dict(item))
 
     @app.route(f"/api/catalog/{category}/<int:item_id>", methods=["DELETE"], endpoint=f"{endpoint}_delete")
+    @login_required
     def delete_item(item_id):
-        item = Model.query.get_or_404(item_id)
+        item = Model.query.filter_by(id=item_id, account_id=current_account_id()).first_or_404()
         db.session.delete(item)
         db.session.commit()
         return "", 204
@@ -157,9 +222,12 @@ def supplier_to_dict(s):
 
 
 @app.route("/api/suppliers", methods=["GET"])
+@login_required
 def list_all_suppliers():
     q = request.args.get("q", "").strip().lower()
-    rows = SupplierPrice.query.order_by(SupplierPrice.date.desc()).all()
+    rows = (SupplierPrice.query.join(Material)
+            .filter(Material.account_id == current_account_id())
+            .order_by(SupplierPrice.date.desc()).all())
     result = []
     for s in rows:
         d = supplier_to_dict(s)
@@ -175,15 +243,17 @@ def list_all_suppliers():
 
 
 @app.route("/api/materials/<int:material_id>/suppliers", methods=["GET"])
+@login_required
 def list_suppliers(material_id):
-    Material.query.get_or_404(material_id)
+    Material.query.filter_by(id=material_id, account_id=current_account_id()).first_or_404()
     rows = SupplierPrice.query.filter_by(material_id=material_id).order_by(SupplierPrice.date.desc()).all()
     return jsonify([supplier_to_dict(s) for s in rows])
 
 
 @app.route("/api/materials/<int:material_id>/suppliers", methods=["POST"])
+@login_required
 def create_supplier(material_id):
-    Material.query.get_or_404(material_id)
+    Material.query.filter_by(id=material_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
     s = SupplierPrice(
         material_id=material_id,
@@ -199,9 +269,17 @@ def create_supplier(material_id):
     return jsonify(supplier_to_dict(s)), 201
 
 
+def _owned_supplier_or_404(supplier_id):
+    s = SupplierPrice.query.filter_by(id=supplier_id).first_or_404()
+    if not s.material or s.material.account_id != current_account_id():
+        abort(404)
+    return s
+
+
 @app.route("/api/suppliers/<int:supplier_id>", methods=["PUT"])
+@login_required
 def update_supplier(supplier_id):
-    s = SupplierPrice.query.get_or_404(supplier_id)
+    s = _owned_supplier_or_404(supplier_id)
     data = request.json or {}
     s.proveedor = data.get("proveedor", s.proveedor).strip()
     s.code = data.get("code", s.code)
@@ -214,8 +292,9 @@ def update_supplier(supplier_id):
 
 
 @app.route("/api/suppliers/<int:supplier_id>", methods=["DELETE"])
+@login_required
 def delete_supplier(supplier_id):
-    s = SupplierPrice.query.get_or_404(supplier_id)
+    s = _owned_supplier_or_404(supplier_id)
     db.session.delete(s)
     db.session.commit()
     return "", 204
@@ -281,24 +360,28 @@ def compute_card_totals(card):
 
 
 @app.route("/api/costcards", methods=["GET"])
+@login_required
 def list_costcards():
     q = request.args.get("q", "").strip().lower()
-    cards = CostCard.query.order_by(CostCard.code).all()
+    cards = CostCard.query.filter_by(account_id=current_account_id()).order_by(CostCard.code).all()
     if q:
         cards = [c for c in cards if q in c.code.lower() or q in c.name.lower()]
     return jsonify([compute_card_totals(c) for c in cards])
 
 
 @app.route("/api/costcards/<int:card_id>", methods=["GET"])
+@login_required
 def get_costcard(card_id):
-    card = CostCard.query.get_or_404(card_id)
+    card = CostCard.query.filter_by(id=card_id, account_id=current_account_id()).first_or_404()
     return jsonify(compute_card_totals(card))
 
 
 @app.route("/api/costcards", methods=["POST"])
+@login_required
 def create_costcard():
     data = request.json or {}
     card = CostCard(
+        account_id=current_account_id(),
         code=data.get("code", "").strip(),
         name=data.get("name", "").strip(),
         unit=data.get("unit", "").strip(),
@@ -312,8 +395,9 @@ def create_costcard():
 
 
 @app.route("/api/costcards/<int:card_id>", methods=["PUT"])
+@login_required
 def update_costcard(card_id):
-    card = CostCard.query.get_or_404(card_id)
+    card = CostCard.query.filter_by(id=card_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
     card.code = data.get("code", card.code).strip()
     card.name = data.get("name", card.name).strip()
@@ -346,8 +430,9 @@ def _sync_items(card, items_data):
 
 
 @app.route("/api/costcards/<int:card_id>", methods=["DELETE"])
+@login_required
 def delete_costcard(card_id):
-    card = CostCard.query.get_or_404(card_id)
+    card = CostCard.query.filter_by(id=card_id, account_id=current_account_id()).first_or_404()
     db.session.delete(card)
     db.session.commit()
     return "", 204
@@ -406,21 +491,25 @@ def compute_quote_totals(quote):
 
 
 @app.route("/api/quotes", methods=["GET"])
+@login_required
 def list_quotes():
-    quotes = Quote.query.order_by(Quote.id.desc()).all()
+    quotes = Quote.query.filter_by(account_id=current_account_id()).order_by(Quote.id.desc()).all()
     return jsonify([compute_quote_totals(q) for q in quotes])
 
 
 @app.route("/api/quotes/<int:quote_id>", methods=["GET"])
+@login_required
 def get_quote(quote_id):
-    quote = Quote.query.get_or_404(quote_id)
+    quote = Quote.query.filter_by(id=quote_id, account_id=current_account_id()).first_or_404()
     return jsonify(compute_quote_totals(quote))
 
 
 @app.route("/api/quotes", methods=["POST"])
+@login_required
 def create_quote():
     data = request.json or {}
     quote = Quote(
+        account_id=current_account_id(),
         name=data.get("name", "").strip(),
         client=data.get("client", "").strip(),
         date=data.get("date") or datetime.utcnow().strftime("%Y-%m-%d"),
@@ -433,8 +522,9 @@ def create_quote():
 
 
 @app.route("/api/quotes/<int:quote_id>", methods=["PUT"])
+@login_required
 def update_quote(quote_id):
-    quote = Quote.query.get_or_404(quote_id)
+    quote = Quote.query.filter_by(id=quote_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
     quote.name = data.get("name", quote.name).strip()
     quote.client = data.get("client", quote.client).strip()
@@ -447,14 +537,19 @@ def update_quote(quote_id):
 
 
 def _sync_quote_children(quote, data):
+    account_id = current_account_id()
     if "lines" in data:
         for ln in list(quote.lines):
             db.session.delete(ln)
         db.session.flush()
         for ln in data["lines"]:
+            # verify the referenced cost card actually belongs to this account
+            card = CostCard.query.filter_by(id=ln["cost_card_id"], account_id=account_id).first()
+            if not card:
+                continue
             db.session.add(QuoteLine(
                 quote_id=quote.id,
-                cost_card_id=ln["cost_card_id"],
+                cost_card_id=card.id,
                 quantity=float(ln.get("quantity", 0) or 0),
             ))
     if "transportation" in data or "other_fees" in data:
@@ -479,8 +574,9 @@ def _sync_quote_children(quote, data):
 
 
 @app.route("/api/quotes/<int:quote_id>", methods=["DELETE"])
+@login_required
 def delete_quote(quote_id):
-    quote = Quote.query.get_or_404(quote_id)
+    quote = Quote.query.filter_by(id=quote_id, account_id=current_account_id()).first_or_404()
     db.session.delete(quote)
     db.session.commit()
     return "", 204
@@ -495,22 +591,26 @@ def regulacion_summary(r):
 
 
 @app.route("/api/regulacion", methods=["GET"])
+@login_required
 def list_regulacion_studies():
-    rows = RegulacionStudy.query.order_by(RegulacionStudy.id.desc()).all()
+    rows = RegulacionStudy.query.filter_by(account_id=current_account_id()).order_by(RegulacionStudy.id.desc()).all()
     return jsonify([regulacion_summary(r) for r in rows])
 
 
 @app.route("/api/regulacion/<int:study_id>", methods=["GET"])
+@login_required
 def get_regulacion_study(study_id):
-    r = RegulacionStudy.query.get_or_404(study_id)
+    r = RegulacionStudy.query.filter_by(id=study_id, account_id=current_account_id()).first_or_404()
     return jsonify({**regulacion_summary(r), "data": json.loads(r.data)})
 
 
 @app.route("/api/regulacion", methods=["POST"])
+@login_required
 def create_regulacion_study():
     body = request.json or {}
     name = (body.get("name") or "").strip() or "Estudio sin título"
     r = RegulacionStudy(
+        account_id=current_account_id(),
         name=name,
         data=json.dumps(body.get("data", {})),
         updated_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
@@ -521,8 +621,9 @@ def create_regulacion_study():
 
 
 @app.route("/api/regulacion/<int:study_id>", methods=["PUT"])
+@login_required
 def update_regulacion_study(study_id):
-    r = RegulacionStudy.query.get_or_404(study_id)
+    r = RegulacionStudy.query.filter_by(id=study_id, account_id=current_account_id()).first_or_404()
     body = request.json or {}
     if "name" in body and (body["name"] or "").strip():
         r.name = body["name"].strip()
@@ -534,8 +635,9 @@ def update_regulacion_study(study_id):
 
 
 @app.route("/api/regulacion/<int:study_id>", methods=["DELETE"])
+@login_required
 def delete_regulacion_study(study_id):
-    r = RegulacionStudy.query.get_or_404(study_id)
+    r = RegulacionStudy.query.filter_by(id=study_id, account_id=current_account_id()).first_or_404()
     db.session.delete(r)
     db.session.commit()
     return "", 204

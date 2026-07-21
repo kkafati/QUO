@@ -3,9 +3,20 @@ from flask_sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
 
+class Account(db.Model):
+    """A client/company tenant. One login per account (not per individual user)."""
+    __tablename__ = "accounts"
+    id = db.Column(db.Integer, primary_key=True)
+    company_name = db.Column(db.String(255), nullable=False)
+    username = db.Column(db.String(80), nullable=False, unique=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.String(16))
+
+
 class Material(db.Model):
     __tablename__ = "materials"
     id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
     code = db.Column(db.String(64), nullable=False)
     description = db.Column(db.String(255), nullable=False)
     unit = db.Column(db.String(32), nullable=False)
@@ -33,6 +44,7 @@ class SupplierPrice(db.Model):
 class Labor(db.Model):
     __tablename__ = "labor"
     id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
     code = db.Column(db.String(64), nullable=False)
     description = db.Column(db.String(255), nullable=False)
     unit = db.Column(db.String(32), nullable=False)
@@ -43,6 +55,7 @@ class Labor(db.Model):
 class Tool(db.Model):
     __tablename__ = "tools"
     id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
     code = db.Column(db.String(64), nullable=False)
     description = db.Column(db.String(255), nullable=False)
     unit = db.Column(db.String(32), nullable=False)
@@ -53,6 +66,7 @@ class Tool(db.Model):
 class Transport(db.Model):
     __tablename__ = "transport"
     id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
     code = db.Column(db.String(64), nullable=False)
     description = db.Column(db.String(255), nullable=False)
     unit = db.Column(db.String(32), nullable=False)
@@ -63,6 +77,7 @@ class Transport(db.Model):
 class Gasto(db.Model):
     __tablename__ = "gastos"
     id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
     code = db.Column(db.String(64), nullable=False)
     description = db.Column(db.String(255), nullable=False)
     unit = db.Column(db.String(32), nullable=False)
@@ -73,6 +88,7 @@ class Gasto(db.Model):
 class CostCard(db.Model):
     __tablename__ = "cost_cards"
     id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
     code = db.Column(db.String(64), nullable=False)
     name = db.Column(db.String(255), nullable=False)
     unit = db.Column(db.String(32), default="")
@@ -86,7 +102,7 @@ class CostCardItem(db.Model):
     __tablename__ = "cost_card_items"
     id = db.Column(db.Integer, primary_key=True)
     cost_card_id = db.Column(db.Integer, db.ForeignKey("cost_cards.id"), nullable=False)
-    category = db.Column(db.String(16), nullable=False)  # material | labor | tool
+    category = db.Column(db.String(16), nullable=False)  # material | labor | tool | transport | gasto
     code = db.Column(db.String(64))
     description = db.Column(db.String(255))
     unit = db.Column(db.String(32))
@@ -98,6 +114,7 @@ class CostCardItem(db.Model):
 class Quote(db.Model):
     __tablename__ = "quotes"
     id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
     name = db.Column(db.String(255), nullable=False)
     client = db.Column(db.String(255))
     date = db.Column(db.String(16))
@@ -135,6 +152,7 @@ class RegulacionStudy(db.Model):
     'data' stores the tool's full state (project fields + node graph) as JSON."""
     __tablename__ = "regulacion_studies"
     id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
     name = db.Column(db.String(255), nullable=False)
     data = db.Column(db.Text, nullable=False)
     updated_at = db.Column(db.String(32))

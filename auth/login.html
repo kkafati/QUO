@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iniciar sesión</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blueprint-navy: #0f2942;
+    --blueprint-navy-deep: #0a1d30;
+    --blueprint-line: #1e4d73;
+    --blueprint-cyan: #5fc9e8;
+    --paper: #f6f3ea;
+    --ink: #16232f;
+    --ink-soft: #55636e;
+    --red: #b5453b;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; min-height: 100vh;
+    font-family: 'IBM Plex Sans', sans-serif;
+    background:
+      linear-gradient(var(--blueprint-navy-deep), var(--blueprint-navy-deep)),
+      repeating-linear-gradient(0deg, var(--blueprint-line) 0px, var(--blueprint-line) 1px, transparent 1px, transparent 28px),
+      repeating-linear-gradient(90deg, var(--blueprint-line) 0px, var(--blueprint-line) 1px, transparent 1px, transparent 28px);
+    background-blend-mode: normal, overlay, overlay;
+    color: var(--paper);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    background: var(--paper);
+    color: var(--ink);
+    border: 1px solid var(--ink);
+    box-shadow: 8px 8px 0 rgba(0,0,0,0.35);
+    max-width: 380px;
+    width: 90%;
+    padding: 40px 36px;
+  }
+  .mark {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--blueprint-navy);
+    border: 1.5px solid var(--blueprint-navy);
+    width: 54px; height: 54px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 20px;
+    transform: rotate(-2deg);
+  }
+  h1 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 18px;
+    margin: 0 0 24px;
+    text-align: center;
+  }
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+    font-weight: 600;
+    margin-bottom: 5px;
+  }
+  .field input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #c9c2ae;
+    background: #fff;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  button {
+    width: 100%;
+    background: var(--ink);
+    color: var(--paper);
+    border: 1px solid var(--ink);
+    padding: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    margin-top: 6px;
+  }
+  button:hover { background: #2a3947; }
+  .error {
+    background: #fbeceb;
+    border: 1px solid var(--red);
+    color: var(--red);
+    font-size: 13px;
+    padding: 9px 12px;
+    margin-bottom: 16px;
+    display: none;
+  }
+</style>
+</head>
+<body>
+  <form class="card" id="loginForm">
+    <div class="mark">§</div>
+    <h1>Iniciar sesión</h1>
+    <div class="error" id="errorBox"></div>
+    <div class="field">
+      <label>Usuario</label>
+      <input type="text" id="username" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label>Contraseña</label>
+      <input type="password" id="password" autocomplete="current-password" required>
+    </div>
+    <button type="submit">Entrar</button>
+  </form>
+
+<script>
+document.getElementById("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errorBox = document.getElementById("errorBox");
+  errorBox.style.display = "none";
+  const username = document.getElementById("username").value;
+  const password = document.getElementById("password").value;
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      errorBox.textContent = data.error || "No se pudo iniciar sesión.";
+      errorBox.style.display = "block";
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("next");
+    window.location.href = (next && next.startsWith("/")) ? next : "/cotizaciones/";
+  } catch (err) {
+    errorBox.textContent = "Error de conexión. Intenta de nuevo.";
+    errorBox.style.display = "block";
+  }
+});
+</script>
+</body>
+</html>
