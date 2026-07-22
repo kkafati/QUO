@@ -480,6 +480,7 @@ function renderCostCardGrid(filter) {
 }
 
 async function refreshFichaPricesFromCatalog() {
+  syncTopFieldsToCard();
   // Force a fresh pull from the catalogs (not just "load if empty")
   catalogCache.material = await api.get("/api/catalog/material");
   catalogCache.labor = await api.get("/api/catalog/labor");
@@ -623,11 +624,22 @@ async function renderFichaEditor() {
   updateFichaTotals();
 }
 
+function syncTopFieldsToCard() {
+  const get = (id) => { const el = document.getElementById(id); return el ? el.value : undefined; };
+  if (document.getElementById("fc-code")) editingCard.code = get("fc-code");
+  if (document.getElementById("fc-name")) editingCard.name = get("fc-name");
+  if (document.getElementById("fc-unit")) editingCard.unit = get("fc-unit");
+  if (document.getElementById("fc-description")) editingCard.description = get("fc-description");
+  if (document.getElementById("fc-admin")) editingCard.admin_pct = get("fc-admin");
+  if (document.getElementById("fc-util")) editingCard.utilidad_pct = get("fc-util");
+}
+
 function bindFichaEvents() {
   const el = document.getElementById("ficha-editor");
 
   el.querySelectorAll(".add-row-btn").forEach(btn => {
     btn.addEventListener("click", () => {
+      syncTopFieldsToCard();
       const cat = btn.dataset.add;
       const key = FICHA_SECTION_KEY[cat];
       editingCard[key].push(blankItem(cat));
@@ -641,6 +653,7 @@ function bindFichaEvents() {
 
     table.querySelectorAll(".remove-row").forEach(btn => {
       btn.addEventListener("click", () => {
+        syncTopFieldsToCard();
         const rowKey = btn.closest("tr").dataset.row;
         editingCard[key] = editingCard[key].filter(i => i._key !== rowKey);
         renderFichaEditor();
@@ -649,6 +662,7 @@ function bindFichaEvents() {
 
     table.querySelectorAll(".picker").forEach(sel => {
       sel.addEventListener("change", () => {
+        syncTopFieldsToCard();
         const rowKey = sel.closest("tr").dataset.row;
         const item = editingCard[key].find(i => i._key === rowKey);
         const catItem = (catalogCache[cat] || []).find(x => x.id == sel.value);
@@ -820,7 +834,17 @@ function openQuoteEditor(quote) {
   renderQuoteEditor();
 }
 
+function syncTopFieldsToQuote() {
+  const get = (id) => { const el = document.getElementById(id); return el ? el.value : undefined; };
+  const getChecked = (id) => { const el = document.getElementById(id); return el ? el.checked : undefined; };
+  if (document.getElementById("q-name")) editingQuote.name = get("q-name");
+  if (document.getElementById("q-client")) editingQuote.client = get("q-client");
+  if (document.getElementById("q-date")) editingQuote.date = get("q-date");
+  if (document.getElementById("q-exento")) editingQuote.exento = getChecked("q-exento");
+}
+
 async function refreshQuoteFromCatalog() {
+  syncTopFieldsToQuote();
   costCardsCache = await api.get("/api/costcards");
   renderQuoteEditor();
 }
@@ -898,6 +922,7 @@ function bindQuoteEvents() {
   document.getElementById("q-add-card-btn").addEventListener("click", () => {
     const sel = document.getElementById("q-add-card");
     if (!sel.value) return;
+    syncTopFieldsToQuote();
     const qty = parseFloat(document.getElementById("q-add-qty").value) || 1;
     q.lines.push({ _key: uid(), cost_card_id: parseInt(sel.value), quantity: qty });
     renderQuoteEditor();
@@ -913,6 +938,7 @@ function bindQuoteEvents() {
       updateQuoteTotals();
     });
     tr.querySelector(".remove-line").addEventListener("click", () => {
+      syncTopFieldsToQuote();
       q.lines = q.lines.filter(l => l._key !== key);
       renderQuoteEditor();
     });
