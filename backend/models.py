@@ -23,6 +23,7 @@ class Material(db.Model):
     unit_price = db.Column(db.Float, nullable=False, default=0)
     created_at = db.Column(db.String(16))  # set once, when the material is first added
     updated_at = db.Column(db.String(16))  # refreshed on every edit
+    deleted_at = db.Column(db.String(16))  # set when moved to trash; None = active
 
     suppliers = db.relationship("SupplierPrice", backref="material", cascade="all, delete-orphan")
 
@@ -51,6 +52,7 @@ class Labor(db.Model):
     unit = db.Column(db.String(32), nullable=False)
     unit_price = db.Column(db.Float, nullable=False, default=0)
     updated_at = db.Column(db.String(16))
+    deleted_at = db.Column(db.String(16))
 
 
 class Tool(db.Model):
@@ -62,6 +64,7 @@ class Tool(db.Model):
     unit = db.Column(db.String(32), nullable=False)
     unit_price = db.Column(db.Float, nullable=False, default=0)
     updated_at = db.Column(db.String(16))
+    deleted_at = db.Column(db.String(16))
 
 
 class Transport(db.Model):
@@ -73,6 +76,7 @@ class Transport(db.Model):
     unit = db.Column(db.String(32), nullable=False)
     unit_price = db.Column(db.Float, nullable=False, default=0)
     updated_at = db.Column(db.String(16))
+    deleted_at = db.Column(db.String(16))
 
 
 class Gasto(db.Model):
@@ -84,6 +88,7 @@ class Gasto(db.Model):
     unit = db.Column(db.String(32), nullable=False)
     unit_price = db.Column(db.Float, nullable=False, default=0)
     updated_at = db.Column(db.String(16))
+    deleted_at = db.Column(db.String(16))
 
 
 class CostCard(db.Model):
@@ -98,6 +103,7 @@ class CostCard(db.Model):
     utilidad_pct = db.Column(db.Float, nullable=False, default=15)
     created_at = db.Column(db.String(16))  # set once, when the ficha is first created
     updated_at = db.Column(db.String(16))  # refreshed on every edit
+    deleted_at = db.Column(db.String(16))  # set when moved to trash; None = active
 
     items = db.relationship("CostCardItem", backref="cost_card", cascade="all, delete-orphan")
 
@@ -123,6 +129,7 @@ class Quote(db.Model):
     client = db.Column(db.String(255))
     date = db.Column(db.String(16))
     exento = db.Column(db.Boolean, nullable=False, default=False)
+    deleted_at = db.Column(db.String(16))  # set when moved to trash; None = active
 
     lines = db.relationship("QuoteLine", backref="quote", cascade="all, delete-orphan")
     fees = db.relationship("QuoteFee", backref="quote", cascade="all, delete-orphan")

@@ -158,9 +158,16 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
     @login_required
     def list_items():
         q = request.args.get("q", "").strip().lower()
-        items = Model.query.filter_by(account_id=current_account_id()).order_by(Model.code).all()
+        items = Model.query.filter_by(account_id=current_account_id(), deleted_at=None).order_by(Model.code).all()
         if q:
             items = [i for i in items if q in i.code.lower() or q in i.description.lower()]
+        return jsonify([to_dict(i) for i in items])
+
+    @app.route(f"/api/catalog/{category}/trash", methods=["GET"], endpoint=f"{endpoint}_trash_list")
+    @login_required
+    def list_trash():
+        items = (Model.query.filter(Model.account_id == current_account_id(), Model.deleted_at.isnot(None))
+                 .order_by(Model.deleted_at.desc()).all())
         return jsonify([to_dict(i) for i in items])
 
     @app.route(f"/api/catalog/{category}", methods=["POST"], endpoint=f"{endpoint}_create")
@@ -168,7 +175,7 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
     def create_item():
         data = request.json or {}
         code = data.get("code", "").strip()
-        if Model.query.filter_by(account_id=current_account_id(), code=code).first():
+        if Model.query.filter_by(account_id=current_account_id(), code=code, deleted_at=None).first():
             return jsonify({"error": f"El código '{code}' ya está en uso."}), 400
         kwargs = dict(
             account_id=current_account_id(),
@@ -191,7 +198,7 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
         item = Model.query.filter_by(id=item_id, account_id=current_account_id()).first_or_404()
         data = request.json or {}
         new_code = data.get("code", item.code).strip()
-        if new_code != item.code and Model.query.filter_by(account_id=current_account_id(), code=new_code).first():
+        if new_code != item.code and Model.query.filter_by(account_id=current_account_id(), code=new_code, deleted_at=None).first():
             return jsonify({"error": f"El código '{new_code}' ya está en uso."}), 400
         item.code = new_code
         item.description = data.get("description", item.description).strip()
@@ -204,7 +211,27 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
     @app.route(f"/api/catalog/{category}/<int:item_id>", methods=["DELETE"], endpoint=f"{endpoint}_delete")
     @login_required
     def delete_item(item_id):
-        item = Model.query.filter_by(id=item_id, account_id=current_account_id()).first_or_404()
+        item = Model.query.filter_by(id=item_id, account_id=current_account_id(), deleted_at=None).first_or_404()
+        item.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+        db.session.commit()
+        return "", 204
+
+    @app.route(f"/api/catalog/{category}/<int:item_id>/restore", methods=["POST"], endpoint=f"{endpoint}_restore")
+    @login_required
+    def restore_item(item_id):
+        item = Model.query.filter(Model.id == item_id, Model.account_id == current_account_id(),
+                                   Model.deleted_at.isnot(None)).first_or_404()
+        if Model.query.filter_by(account_id=current_account_id(), code=item.code, deleted_at=None).first():
+            return jsonify({"error": f"No se puede restaurar: el código '{item.code}' ya está en uso por otro artículo activo."}), 400
+        item.deleted_at = None
+        db.session.commit()
+        return jsonify(to_dict(item))
+
+    @app.route(f"/api/catalog/{category}/<int:item_id>/permanent", methods=["DELETE"], endpoint=f"{endpoint}_permanent")
+    @login_required
+    def permanent_delete_item(item_id):
+        item = Model.query.filter(Model.id == item_id, Model.account_id == current_account_id(),
+                                   Model.deleted_at.isnot(None)).first_or_404()
         db.session.delete(item)
         db.session.commit()
         return "", 204
@@ -376,9 +403,17 @@ def compute_card_totals(card):
 @login_required
 def list_costcards():
     q = request.args.get("q", "").strip().lower()
-    cards = CostCard.query.filter_by(account_id=current_account_id()).order_by(CostCard.code).all()
+    cards = CostCard.query.filter_by(account_id=current_account_id(), deleted_at=None).order_by(CostCard.code).all()
     if q:
         cards = [c for c in cards if q in c.code.lower() or q in c.name.lower()]
+    return jsonify([compute_card_totals(c) for c in cards])
+
+
+@app.route("/api/costcards/trash", methods=["GET"])
+@login_required
+def list_costcards_trash():
+    cards = (CostCard.query.filter(CostCard.account_id == current_account_id(), CostCard.deleted_at.isnot(None))
+             .order_by(CostCard.deleted_at.desc()).all())
     return jsonify([compute_card_totals(c) for c in cards])
 
 
@@ -394,7 +429,7 @@ def get_costcard(card_id):
 def create_costcard():
     data = request.json or {}
     code = data.get("code", "").strip()
-    if CostCard.query.filter_by(account_id=current_account_id(), code=code).first():
+    if CostCard.query.filter_by(account_id=current_account_id(), code=code, deleted_at=None).first():
         return jsonify({"error": f"El código de ficha '{code}' ya está en uso."}), 400
     card = CostCard(
         account_id=current_account_id(),
@@ -419,7 +454,7 @@ def update_costcard(card_id):
     card = CostCard.query.filter_by(id=card_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
     new_code = data.get("code", card.code).strip()
-    if new_code != card.code and CostCard.query.filter_by(account_id=current_account_id(), code=new_code).first():
+    if new_code != card.code and CostCard.query.filter_by(account_id=current_account_id(), code=new_code, deleted_at=None).first():
         return jsonify({"error": f"El código de ficha '{new_code}' ya está en uso."}), 400
     card.code = new_code
     card.name = data.get("name", card.name).strip()
@@ -458,10 +493,33 @@ def _sync_items(card, items_data):
 @app.route("/api/costcards/<int:card_id>", methods=["DELETE"])
 @login_required
 def delete_costcard(card_id):
-    card = CostCard.query.filter_by(id=card_id, account_id=current_account_id()).first_or_404()
+    card = CostCard.query.filter_by(id=card_id, account_id=current_account_id(), deleted_at=None).first_or_404()
+    card.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    db.session.commit()
+    return "", 204
+
+
+@app.route("/api/costcards/<int:card_id>/restore", methods=["POST"])
+@login_required
+def restore_costcard(card_id):
+    card = CostCard.query.filter(CostCard.id == card_id, CostCard.account_id == current_account_id(),
+                                  CostCard.deleted_at.isnot(None)).first_or_404()
+    if CostCard.query.filter_by(account_id=current_account_id(), code=card.code, deleted_at=None).first():
+        return jsonify({"error": f"No se puede restaurar: el código '{card.code}' ya está en uso por otra ficha activa."}), 400
+    card.deleted_at = None
+    db.session.commit()
+    return jsonify(compute_card_totals(card))
+
+
+@app.route("/api/costcards/<int:card_id>/permanent", methods=["DELETE"])
+@login_required
+def permanent_delete_costcard(card_id):
+    card = CostCard.query.filter(CostCard.id == card_id, CostCard.account_id == current_account_id(),
+                                  CostCard.deleted_at.isnot(None)).first_or_404()
     db.session.delete(card)
     db.session.commit()
     return "", 204
+
 
 
 # ---------------------------------------------------------------------------
@@ -519,7 +577,15 @@ def compute_quote_totals(quote):
 @app.route("/api/quotes", methods=["GET"])
 @login_required
 def list_quotes():
-    quotes = Quote.query.filter_by(account_id=current_account_id()).order_by(Quote.id.desc()).all()
+    quotes = Quote.query.filter_by(account_id=current_account_id(), deleted_at=None).order_by(Quote.id.desc()).all()
+    return jsonify([compute_quote_totals(q) for q in quotes])
+
+
+@app.route("/api/quotes/trash", methods=["GET"])
+@login_required
+def list_quotes_trash():
+    quotes = (Quote.query.filter(Quote.account_id == current_account_id(), Quote.deleted_at.isnot(None))
+              .order_by(Quote.deleted_at.desc()).all())
     return jsonify([compute_quote_totals(q) for q in quotes])
 
 
@@ -602,7 +668,27 @@ def _sync_quote_children(quote, data):
 @app.route("/api/quotes/<int:quote_id>", methods=["DELETE"])
 @login_required
 def delete_quote(quote_id):
-    quote = Quote.query.filter_by(id=quote_id, account_id=current_account_id()).first_or_404()
+    quote = Quote.query.filter_by(id=quote_id, account_id=current_account_id(), deleted_at=None).first_or_404()
+    quote.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    db.session.commit()
+    return "", 204
+
+
+@app.route("/api/quotes/<int:quote_id>/restore", methods=["POST"])
+@login_required
+def restore_quote(quote_id):
+    quote = Quote.query.filter(Quote.id == quote_id, Quote.account_id == current_account_id(),
+                                Quote.deleted_at.isnot(None)).first_or_404()
+    quote.deleted_at = None
+    db.session.commit()
+    return jsonify(compute_quote_totals(quote))
+
+
+@app.route("/api/quotes/<int:quote_id>/permanent", methods=["DELETE"])
+@login_required
+def permanent_delete_quote(quote_id):
+    quote = Quote.query.filter(Quote.id == quote_id, Quote.account_id == current_account_id(),
+                                Quote.deleted_at.isnot(None)).first_or_404()
     db.session.delete(quote)
     db.session.commit()
     return "", 204

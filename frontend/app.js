@@ -100,6 +100,72 @@ document.getElementById("catalog-search").addEventListener("input", (e) => {
   else renderCatalogTable(val);
 });
 
+// ----- Papelera (trash / soft-delete recovery) -----
+
+async function openTrashModal(kind) {
+  let items, title, label, apiBase;
+  if (kind === "catalog") {
+    apiBase = `/api/catalog/${currentCatalogCat}`;
+    items = await api.get(`${apiBase}/trash`);
+    title = `Papelera — ${CAT_LABELS[currentCatalogCat]}`;
+    label = (item) => `${item.code} — ${item.description}`;
+  } else if (kind === "costcard") {
+    apiBase = "/api/costcards";
+    items = await api.get(`${apiBase}/trash`);
+    title = "Papelera — Fichas de Costo";
+    label = (item) => `${item.code} — ${item.name}`;
+  } else {
+    apiBase = "/api/quotes";
+    items = await api.get(`${apiBase}/trash`);
+    title = "Papelera — Cotizaciones";
+    label = (item) => item.name;
+  }
+
+  const rows = items.map(item => `
+    <tr data-id="${item.id}">
+      <td>${esc(label(item))}</td>
+      <td class="stamp-meta">Eliminado: ${esc(item.deleted_at || "—")}</td>
+      <td class="col-actions">
+        <button class="btn btn-sm btn-primary trash-restore">Restaurar</button>
+        <button class="btn btn-sm btn-danger trash-permanent">Eliminar permanentemente</button>
+      </td>
+    </tr>`).join("");
+
+  showModal(`
+    <h2>${title}</h2>
+    ${items.length === 0
+      ? '<p class="stamp-meta">La papelera está vacía.</p>'
+      : `<table class="line-table"><tbody>${rows}</tbody></table>`}
+    <div class="modal-actions"><button class="btn btn-ghost" id="trash-close">Cerrar</button></div>
+  `, true);
+
+  document.getElementById("trash-close").addEventListener("click", () => {
+    hideModal();
+    if (kind === "catalog") loadCatalog();
+    else if (kind === "costcard") loadCostCardList();
+    else loadQuoteList();
+  });
+
+  document.querySelectorAll(".trash-restore").forEach(btn => btn.addEventListener("click", async () => {
+    const id = btn.closest("tr").dataset.id;
+    try {
+      await api.post(`${apiBase}/${id}/restore`, {});
+    } catch (err) {
+      alert(err.message);
+      return;
+    }
+    openTrashModal(kind);
+  }));
+
+  document.querySelectorAll(".trash-permanent").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("¿Eliminar PERMANENTEMENTE? Esta acción no se puede deshacer y no se podrá recuperar después.")) return;
+    const id = btn.closest("tr").dataset.id;
+    await api.del(`${apiBase}/${id}/permanent`);
+    openTrashModal(kind);
+  }));
+}
+
+document.getElementById("btn-catalog-trash").addEventListener("click", () => openTrashModal("catalog"));
 document.getElementById("btn-new-catalog-item").addEventListener("click", () => {
   if (currentCatalogCat === "supplier") openSupplierQuoteForm(null);
   else openCatalogForm(null);
@@ -186,7 +252,9 @@ function renderCatalogTable(filter) {
     openCatalogForm(item);
   }));
   tbody.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
-    if (!confirm("¿Eliminar este artículo del catálogo?")) return;
+    const item = catalogCache[currentCatalogCat].find(x => x.id == b.dataset.del);
+    const label = item ? `${item.code} — ${item.description}` : "este artículo";
+    if (!confirm(`¿Mover "${label}" a la papelera? Podrás restaurarlo después desde 🗑 Papelera.`)) return;
     await api.del(`/api/catalog/${currentCatalogCat}/${b.dataset.del}`);
     loadCatalog();
   }));
@@ -438,6 +506,7 @@ document.getElementById("costcard-search").addEventListener("input", (e) => {
   renderCostCardGrid(e.target.value.trim().toLowerCase());
 });
 document.getElementById("btn-new-costcard").addEventListener("click", () => openFichaEditor(null));
+document.getElementById("btn-costcard-trash").addEventListener("click", () => openTrashModal("costcard"));
 
 async function loadCostCardList() {
   costCardsCache = await api.get("/api/costcards");
@@ -473,7 +542,9 @@ function renderCostCardGrid(filter) {
   }));
   tbody.querySelectorAll("[data-del-card]").forEach(btn => btn.addEventListener("click", async (e) => {
     e.stopPropagation();
-    if (!confirm("¿Eliminar esta ficha de costo?")) return;
+    const card = costCardsCache.find(x => x.id == btn.dataset.delCard);
+    const label = card ? `${card.code} — ${card.name}` : "esta ficha";
+    if (!confirm(`¿Mover la ficha "${label}" a la papelera? Podrás restaurarla después desde 🗑 Papelera.`)) return;
     await api.del(`/api/costcards/${btn.dataset.delCard}`);
     loadCostCardList();
   }));
@@ -702,7 +773,7 @@ function bindFichaEvents() {
   document.getElementById("fc-refresh").addEventListener("click", refreshFichaPricesFromCatalog);
   const delBtn = document.getElementById("fc-delete");
   if (delBtn) delBtn.addEventListener("click", async () => {
-    if (!confirm("¿Eliminar esta ficha de costo? También se quitará de cotizaciones que la usen.")) return;
+    if (!confirm(`¿Mover la ficha "${editingCard.code} — ${editingCard.name}" a la papelera? Dejará de aparecer para agregarla a nuevas cotizaciones, pero las cotizaciones que ya la usan no se ven afectadas. Podrás restaurarla después desde 🗑 Papelera.`)) return;
     await api.del(`/api/costcards/${editingCard.id}`);
     loadCostCardList();
   });
@@ -791,6 +862,7 @@ let quotesCache = [];
 let editingQuote = null;
 
 document.getElementById("btn-new-quote").addEventListener("click", () => openQuoteEditor(null));
+document.getElementById("btn-quote-trash").addEventListener("click", () => openTrashModal("quote"));
 
 async function loadQuoteList() {
   quotesCache = await api.get("/api/quotes");
@@ -816,7 +888,9 @@ async function loadQuoteList() {
   }));
   tbody.querySelectorAll("[data-del-quote]").forEach(btn => btn.addEventListener("click", async (e) => {
     e.stopPropagation();
-    if (!confirm("¿Eliminar esta cotización?")) return;
+    const quote = quotesCache.find(x => x.id == btn.dataset.delQuote);
+    const label = quote ? quote.name : "esta cotización";
+    if (!confirm(`¿Mover la cotización "${label}" a la papelera? Podrás restaurarla después desde 🗑 Papelera.`)) return;
     await api.del(`/api/quotes/${btn.dataset.delQuote}`);
     loadQuoteList();
   }));
@@ -951,7 +1025,7 @@ function bindQuoteEvents() {
   document.getElementById("q-exento").addEventListener("change", updateQuoteTotals);
   const delBtn = document.getElementById("q-delete");
   if (delBtn) delBtn.addEventListener("click", async () => {
-    if (!confirm("¿Eliminar esta cotización?")) return;
+    if (!confirm(`¿Mover la cotización "${editingQuote.name}" a la papelera? Podrás restaurarla después desde 🗑 Papelera.`)) return;
     await api.del(`/api/quotes/${editingQuote.id}`);
     loadQuoteList();
   });
