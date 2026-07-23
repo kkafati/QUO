@@ -596,6 +596,91 @@ def get_quote(quote_id):
     return jsonify(compute_quote_totals(quote))
 
 
+CATEGORY_LABELS = {"material": "Materiales", "labor": "Mano de Obra", "tool": "Herramientas",
+                   "transport": "Transporte", "gasto": "Otros Gastos"}
+
+
+@app.route("/api/quotes/<int:quote_id>/summary", methods=["GET"])
+@login_required
+def get_quote_summary(quote_id):
+    """Consolidated bill-of-materials style rollup: for every material/labor/tool/
+    transport/gasto item across every ficha in this quote, sum the total quantity
+    and cost needed for the whole project (item.total-per-ficha-unit x the quote
+    line's quantity), merging by category+code so the same item used in multiple
+    fichas shows up once with a combined total."""
+    quote = Quote.query.filter_by(id=quote_id, account_id=current_account_id()).first_or_404()
+
+    groups = {cat: {} for cat in CATEGORY_LABELS}
+    for ln in quote.lines:
+        card = ln.cost_card
+        line_qty = ln.quantity or 0
+        for item in card.items:
+            cat = item.category
+            if cat not in groups:
+                continue
+            rendimiento = item.rendimiento or 0
+            desperdicio = (item.desperdicio_pct or 0) / 100.0
+            per_unit_qty = rendimiento * (1 + desperdicio)
+            total_qty = per_unit_qty * line_qty
+            total_cost = per_unit_qty * (item.unit_price or 0) * line_qty
+
+            key = item.code or item.description
+            bucket = groups[cat].setdefault(key, {
+                "code": item.code, "description": item.description, "unit": item.unit,
+                "total_quantity": 0.0, "total_cost": 0.0,
+            })
+            bucket["total_quantity"] += total_qty
+            bucket["total_cost"] += total_cost
+
+    result = {}
+    grand_total = 0.0
+    for cat, label in CATEGORY_LABELS.items():
+        items = sorted(groups[cat].values(), key=lambda x: (x["code"] or ""))
+        for it in items:
+            it["total_quantity"] = round(it["total_quantity"], 4)
+            it["total_cost"] = round(it["total_cost"], 2)
+        cat_total = round(sum(it["total_cost"] for it in items), 2)
+        grand_total += cat_total
+        result[cat] = {"label": label, "items": items, "total": cat_total}
+
+    result["grand_total"] = round(grand_total, 2)
+    result["quote_name"] = quote.name
+    return jsonify(result)
+
+
+@app.route("/api/quotes/<int:quote_id>/refresh-prices", methods=["POST"])
+@login_required
+def refresh_quote_prices(quote_id):
+    """Pushes each ficha's material item prices to match the current catalog
+    auto-price (highest quote at the most recent date), and PERSISTS it —
+    unlike the client-side 'refresh' which only affects what's on screen until
+    you separately open, refresh, and save each ficha. This lets one click on
+    the quote update every ficha it actually uses."""
+    quote = Quote.query.filter_by(id=quote_id, account_id=current_account_id(), deleted_at=None).first_or_404()
+
+    materials_by_code = {m.code: m for m in Material.query.filter_by(account_id=current_account_id()).all()}
+    cards = {ln.cost_card_id: ln.cost_card for ln in quote.lines}
+
+    updated_items = 0
+    for card in cards.values():
+        for item in card.items:
+            if item.category != "material":
+                continue
+            material = materials_by_code.get(item.code)
+            if material is None:
+                continue
+            new_price = compute_material_auto_price(material.suppliers)
+            if new_price is None:
+                new_price = material.unit_price or 0
+            if item.unit_price != new_price:
+                item.unit_price = new_price
+                updated_items += 1
+        card.updated_at = datetime.utcnow().strftime("%Y-%m-%d")
+
+    db.session.commit()
+    return jsonify({"fichas_updated": len(cards), "items_updated": updated_items, **compute_quote_totals(quote)})
+
+
 @app.route("/api/quotes", methods=["POST"])
 @login_required
 def create_quote():

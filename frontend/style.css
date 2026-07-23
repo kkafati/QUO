@@ -30,6 +30,10 @@ html, body {
   font-family: var(--font-body);
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 button, input { font-family: inherit; }
 
 .topbar {
@@ -566,6 +570,8 @@ button, input { font-family: inherit; }
   padding: 24px;
   width: 420px;
   max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
   box-shadow: 6px 6px 0 var(--blueprint-navy);
 }
 
@@ -641,4 +647,17 @@ button, input { font-family: inherit; }
 
   .totals-box { border: 1px solid var(--ink); }
   .stamp-card:hover { box-shadow: none; transform: none; }
+
+  /* When a modal is open (e.g. Resumen de Insumos), print just the modal content */
+  body:has(.modal-backdrop:not([hidden])) .app-shell { display: none !important; }
+  .modal-backdrop { position: static !important; background: none !important; padding: 0 !important; }
+  .modal {
+    box-shadow: none !important;
+    border: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
 }

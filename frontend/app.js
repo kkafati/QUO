@@ -59,9 +59,11 @@ function showModal(html, wide) {
   box.classList.toggle("modal-wide", !!wide);
   box.innerHTML = html;
   backdrop.hidden = false;
+  document.body.classList.add("modal-open");
 }
 function hideModal() {
   document.getElementById("modal-backdrop").hidden = true;
+  document.body.classList.remove("modal-open");
 }
 let backdropMouseDownWasSelf = false;
 document.getElementById("modal-backdrop").addEventListener("mousedown", (e) => {
@@ -99,6 +101,55 @@ document.getElementById("catalog-search").addEventListener("input", (e) => {
   if (currentCatalogCat === "supplier") renderSupplierQuotesTable(val);
   else renderCatalogTable(val);
 });
+
+// ----- Resumen de Insumos (consolidated BOM rollup for a saved cotización) -----
+
+async function openQuoteSummaryModal(quoteId) {
+  const data = await api.get(`/api/quotes/${quoteId}/summary`);
+  const catOrder = ["material", "labor", "tool", "transport", "gasto"];
+
+  const sectionsHtml = catOrder.map(cat => {
+    const c = data[cat];
+    if (!c.items.length) return "";
+    const rows = c.items.map(it => `
+      <tr>
+        <td class="mono">${esc(it.code || "—")}</td>
+        <td>${esc(it.description)}</td>
+        <td>${esc(it.unit || "—")}</td>
+        <td class="num">${it.total_quantity}</td>
+        <td class="num">${fmt(it.total_cost)}</td>
+      </tr>`).join("");
+    return `
+      <div class="section-title">${esc(c.label)}</div>
+      <table class="line-table">
+        <thead><tr>
+          <th>Código</th><th>Descripción</th><th style="width:80px">Unidad</th>
+          <th style="width:120px">Cantidad Total</th><th style="width:130px">Costo Total</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="totals-row"><strong>Subtotal ${esc(c.label)}</strong><strong>${fmt(c.total)}</strong></div>`;
+  }).join("");
+
+  showModal(`
+    <div class="print-head">
+      <div class="print-title">Resumen de Insumos — ${esc(data.quote_name)}</div>
+      <div class="print-meta">Generado el ${new Date().toLocaleDateString("es-HN")}</div>
+    </div>
+    <h2 class="no-print">Resumen de Insumos — ${esc(data.quote_name)}</h2>
+    ${sectionsHtml || '<p class="stamp-meta">Esta cotización no tiene partidas con insumos todavía.</p>'}
+    <div class="totals-box">
+      <div class="totals-row grand"><span>Total General (costo directo, sin admin/utilidad/ISV)</span><span>${fmt(data.grand_total)}</span></div>
+    </div>
+    <div class="modal-actions no-print">
+      <button class="btn btn-print" id="summary-print">🖨 Imprimir</button>
+      <button class="btn btn-ghost" id="summary-close">Cerrar</button>
+    </div>
+  `, true);
+
+  document.getElementById("summary-close").addEventListener("click", hideModal);
+  document.getElementById("summary-print").addEventListener("click", () => window.print());
+}
 
 // ----- Papelera (trash / soft-delete recovery) -----
 
@@ -919,8 +970,21 @@ function syncTopFieldsToQuote() {
 
 async function refreshQuoteFromCatalog() {
   syncTopFieldsToQuote();
-  costCardsCache = await api.get("/api/costcards");
-  renderQuoteEditor();
+  if (editingQuote.id) {
+    let result;
+    try {
+      result = await api.post(`/api/quotes/${editingQuote.id}/refresh-prices`, {});
+    } catch (err) {
+      alert(err.message);
+      return;
+    }
+    costCardsCache = await api.get("/api/costcards");
+    renderQuoteEditor();
+    alert(`Precios actualizados: ${result.items_updated} artículo(s) en ${result.fichas_updated} ficha(s) usadas en esta cotización.`);
+  } else {
+    costCardsCache = await api.get("/api/costcards");
+    renderQuoteEditor();
+  }
 }
 
 async function renderQuoteEditor() {
@@ -980,6 +1044,7 @@ async function renderQuoteEditor() {
     <div class="editor-actions">
       <button class="btn btn-primary" id="q-save">Guardar Cotización</button>
       <button class="btn btn-amber" id="q-refresh">🔄 Actualizar precios</button>
+      ${q.id ? '<button class="btn btn-amber" id="q-summary">📊 Resumen de Insumos</button>' : ""}
       <button class="btn btn-print" id="q-print">🖨 Imprimir / Guardar PDF</button>
       <button class="btn btn-ghost" id="q-cancel">Volver a la lista</button>
       ${q.id ? '<button class="btn btn-danger" id="q-delete">Eliminar Cotización</button>' : ""}
@@ -1022,6 +1087,8 @@ function bindQuoteEvents() {
   document.getElementById("q-save").addEventListener("click", saveQuote);
   document.getElementById("q-print").addEventListener("click", () => window.print());
   document.getElementById("q-refresh").addEventListener("click", refreshQuoteFromCatalog);
+  const summaryBtn = document.getElementById("q-summary");
+  if (summaryBtn) summaryBtn.addEventListener("click", () => openQuoteSummaryModal(editingQuote.id));
   document.getElementById("q-exento").addEventListener("change", updateQuoteTotals);
   const delBtn = document.getElementById("q-delete");
   if (delBtn) delBtn.addEventListener("click", async () => {
