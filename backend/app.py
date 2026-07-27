@@ -1,16 +1,26 @@
 import os
 import json
+import mimetypes
 from functools import wraps
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
 from werkzeug.security import check_password_hash
 from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy
 
+# On some Windows machines, a corrupted registry entry makes Python think
+# .html/.js/.css are text/plain, causing browsers to show raw source instead
+# of rendering the page. Force the correct types explicitly so it never
+# depends on that registry state.
+mimetypes.add_type("text/html", ".html")
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("application/javascript", ".js")
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
 LANDING_DIR = os.path.join(os.path.dirname(BASE_DIR), "landing")
 REGULACION_DIR = os.path.join(os.path.dirname(BASE_DIR), "regulacion")
 AUTH_DIR = os.path.join(os.path.dirname(BASE_DIR), "auth")
+PANEL_DIR = os.path.join(os.path.dirname(BASE_DIR), "panel")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/cotizaciones")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(BASE_DIR, "quoting.db")
@@ -90,6 +100,12 @@ def logout():
 @app.route("/")
 def landing():
     return send_from_directory(LANDING_DIR, "index.html")
+
+
+@app.route("/panel/")
+@login_required
+def panel():
+    return send_from_directory(PANEL_DIR, "index.html")
 
 
 @app.route("/cotizaciones/")

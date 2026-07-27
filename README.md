@@ -102,10 +102,14 @@ Two things in `app.py` are set to safe-but-temporary defaults for local testing 
 
 ## URL structure
 
-The app now serves three things from one Flask process:
-- **`/`** — a simple placeholder homepage (`landing/index.html`). Replace this file with your real homepage whenever it's ready — it's a completely independent file, not wired into the app in any other way.
-- **`/cotizaciones/`** — the quoting app itself (what used to be at `/`).
-- **`/regulación/`** (also reachable at `/regulacion/`, no accent) — the demand-planning / transformer-sizing tool. This page's own logic is self-contained, but it now saves/loads full studies (project info + node graph + cable data) through the same backend database as the rest of the app, so studies persist and can be reopened and modified later — see "Estudios guardados" at the top of the tool.
+The app now serves four things from one Flask process:
+- **`/`** — the public Grupo Liquidámbar landing page (`landing/index.html`) — an "under construction" page with the logo and an "Iniciar sesión" button. Public, no login needed.
+- **`/login`** — the login form, styled to match the brand (`auth/login.html`).
+- **`/panel/`** — the post-login options screen (`panel/index.html`): "Sistema de Cotizaciones" and "Planificador de Demanda" as two cards. This is where a fresh login lands by default; direct links to a specific tool (e.g. someone bookmarked `/cotizaciones/`) still go straight there instead, login only redirects to `/panel/` when there's no more specific destination.
+- **`/cotizaciones/`** — the quoting app.
+- **`/regulación/`** (also `/regulacion/`) — the demand planner.
+
+The logo is embedded directly in each of these pages' HTML (as a data URI), so there's no separate image file to keep track of or a route to break.
 
 This means once deployed, `tudominio.com` shows your homepage, `tudominio.com/cotizaciones` shows the quoting tool, and `tudominio.com/regulacion` shows the demand planner — all from the same server, no extra setup needed.
 
