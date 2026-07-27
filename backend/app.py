@@ -18,6 +18,12 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 # IMPORTANT: change this to a long random value before deploying for real.
 # Anyone who has this value can forge login sessions.
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-change-me-before-deploying")
+# Only send the session cookie over HTTPS. Set FORCE_HTTPS=1 once you're
+# actually serving over HTTPS (e.g. behind Cloudflare Tunnel) — leave unset
+# for local http://localhost testing, or login won't work.
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("FORCE_HTTPS", "0") == "1"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 db.init_app(app)
 
 with app.app_context():
@@ -842,4 +848,5 @@ def delete_regulacion_study(study_id):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"
+    app.run(host="0.0.0.0", port=port, debug=debug_mode)

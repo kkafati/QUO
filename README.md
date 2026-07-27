@@ -13,6 +13,30 @@ Web app for engineering/construction cost cards ("Fichas de Costo") and project 
 
 All calculations happen in real Python code on the backend (see `backend/app.py`), so the logic is easy to audit or extend as your pricing rules change.
 
+## Actualizar precios (en una Cotización)
+
+Clicking **🔄 Actualizar precios** inside a saved Cotización now does more than just refresh what's on screen — it pushes the current catalog auto-price into every material item of every ficha actually used by that quote, and **saves it immediately**, no separate "Guardar Cotización" step needed. This means Resumen de Insumos, and the ficha itself if you open it separately, reflect the update right away.
+
+This only touches material-category items (matching how material prices are auto-computed elsewhere in the app); it doesn't touch labor/tool/transport/gasto items, since those aren't tied to the same "auto-price from supplier quotes" mechanism.
+
+## Resumen de Insumos (per cotización)
+
+Open any saved Cotización and click **📊 Resumen de Insumos** to see a consolidated breakdown across all its fichas: every unique material, labor type, tool, transport, and gasto used anywhere in the project, with the total quantity and total cost needed for the whole job — not per ficha. If the same material shows up in five different fichas within the quote, it appears once here with the combined total, which is exactly what you'd want for actually going out and purchasing materials for the project. It's printable on its own, separate from printing the full quote.
+
+Note: the totals shown are direct cost only (materials/labor/tools/transport/gastos at raw cost) — they don't include each ficha's admin %/utilidad % markup or the quote's ISV, since this view is meant for procurement, not the client-facing price.
+
+## Papelera (trash / restore)
+
+Deleting a Material, Labor, Herramienta, Transporte, Gasto, Ficha de Costo, or Cotización no longer erases it immediately — it moves to a **Papelera** (trash), where you can restore it or permanently delete it later.
+
+- Every "×" delete button now shows a confirmation that names the specific item and explains it's recoverable, instead of a generic "cannot be undone" warning.
+- A **🗑 Papelera** button sits next to "+ Nuevo"/"+ Nueva Ficha"/"+ Nueva Cotización" in each area, showing everything currently in the trash with **Restaurar** and **Eliminar permanentemente** options.
+- Restoring an item is blocked if its código is now in use by something else active (you'd need to rename one of them first) — this prevents silently creating a duplicate.
+- Deleting a Ficha does **not** affect any Cotización that already uses it — the ficha just stops being available to add to *new* cotizaciones until restored.
+- This is a manual trash, not a timed one — items stay in the Papelera until you explicitly restore or permanently delete them.
+
+**Scope note:** this covers the items people most often worry about losing by accident. Individual supplier price quotes (Cotización de Proveedores entries) are still deleted immediately when removed — those are quick to re-enter and lower-stakes than losing a whole ficha or cotización, so they weren't included in this system. Ask if you'd like that extended to cover them too.
+
 ## Login and client accounts
 
 `/cotizaciones/` and `/regulación/` now require logging in. The homepage (`/`) stays public.
