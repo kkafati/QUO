@@ -100,6 +100,16 @@ Two things in `app.py` are set to safe-but-temporary defaults for local testing 
 
 2. **Cookies over HTTPS** — once you're running on a real domain with SSL (which you should be, for a login system), it's worth adding `app.config["SESSION_COOKIE_SECURE"] = True` in `app.py` so session cookies are never sent over plain HTTP.
 
+## Dashboard and platform structure
+
+`/panel/` is now a real module dashboard, not just two links. It shows all the planned modules — **Facturación**, **Contabilidad**, and **Inventario** are visible but marked "Próximamente" (coming soon, disabled) until built. **Cotizaciones** and **Planificador de Demanda** work exactly as before, just reframed as reference/calculator add-ins rather than the main app. **Configuración de la Cuenta** is live now (see below).
+
+Every future module (Invoicing, Accounting, Inventory) will follow the same pattern already proven out for Cotizaciones: its own tables scoped by `account_id` in the same shared database — no separate database per business, ever. This is a deliberate architectural decision: real multi-tenant isolation (already tested — one account genuinely cannot see or write another's data) doesn't require separate files, and a shared database is dramatically simpler to back up, migrate, and maintain as more businesses sign up.
+
+## Configuración de la Cuenta (`/cuenta/`)
+
+A business-profile page: nombre comercial, razón social, RTN, dirección, teléfono, correo, sitio web, moneda, logo (uploaded and stored directly on the account, shown wherever the account's identity appears), and invoice numbering (prefix + next number) — ready for when Facturación is built. This is the single source of truth other modules will pull from instead of asking for the same business info repeatedly.
+
 ## URL structure
 
 The app now serves four things from one Flask process:

@@ -21,6 +21,7 @@ LANDING_DIR = os.path.join(os.path.dirname(BASE_DIR), "landing")
 REGULACION_DIR = os.path.join(os.path.dirname(BASE_DIR), "regulacion")
 AUTH_DIR = os.path.join(os.path.dirname(BASE_DIR), "auth")
 PANEL_DIR = os.path.join(os.path.dirname(BASE_DIR), "panel")
+CUENTA_DIR = os.path.join(os.path.dirname(BASE_DIR), "cuenta")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/cotizaciones")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(BASE_DIR, "quoting.db")
@@ -87,6 +88,59 @@ def api_me():
     return jsonify({"authenticated": True, "company_name": session.get("company_name")})
 
 
+def account_profile_dict(account):
+    return {
+        "company_name": account.company_name,
+        "legal_name": account.legal_name,
+        "tax_id": account.tax_id,
+        "address": account.address,
+        "phone": account.phone,
+        "email": account.email,
+        "website": account.website,
+        "currency": account.currency,
+        "logo_data_url": account.logo_data_url,
+        "invoice_prefix": account.invoice_prefix,
+        "next_invoice_number": account.next_invoice_number,
+    }
+
+
+@app.route("/api/account", methods=["GET"])
+@login_required
+def get_account_profile():
+    account = Account.query.get_or_404(current_account_id())
+    return jsonify(account_profile_dict(account))
+
+
+@app.route("/api/account", methods=["PUT"])
+@login_required
+def update_account_profile():
+    account = Account.query.get_or_404(current_account_id())
+    data = request.json or {}
+
+    company_name = data.get("company_name", account.company_name).strip()
+    if not company_name:
+        return jsonify({"error": "El nombre comercial es requerido."}), 400
+    account.company_name = company_name
+    account.legal_name = (data.get("legal_name") or "").strip()
+    account.tax_id = (data.get("tax_id") or "").strip()
+    account.address = (data.get("address") or "").strip()
+    account.phone = (data.get("phone") or "").strip()
+    account.email = (data.get("email") or "").strip()
+    account.website = (data.get("website") or "").strip()
+    account.currency = (data.get("currency") or "HNL").strip()
+    account.invoice_prefix = (data.get("invoice_prefix") or "FAC-").strip()
+    try:
+        account.next_invoice_number = int(data.get("next_invoice_number", account.next_invoice_number) or 1)
+    except (TypeError, ValueError):
+        pass
+    if "logo_data_url" in data:
+        account.logo_data_url = data.get("logo_data_url") or None
+
+    db.session.commit()
+    session["company_name"] = account.company_name  # keep topbar/session in sync
+    return jsonify(account_profile_dict(account))
+
+
 @app.route("/logout", methods=["GET", "POST"])
 def logout():
     session.clear()
@@ -106,6 +160,12 @@ def landing():
 @login_required
 def panel():
     return send_from_directory(PANEL_DIR, "index.html")
+
+
+@app.route("/cuenta/")
+@login_required
+def cuenta():
+    return send_from_directory(CUENTA_DIR, "index.html")
 
 
 @app.route("/cotizaciones/")

@@ -7,10 +7,22 @@ class Account(db.Model):
     """A client/company tenant. One login per account (not per individual user)."""
     __tablename__ = "accounts"
     id = db.Column(db.Integer, primary_key=True)
-    company_name = db.Column(db.String(255), nullable=False)
+    company_name = db.Column(db.String(255), nullable=False)  # trade name, shown in the UI
     username = db.Column(db.String(80), nullable=False, unique=True)
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.String(16))
+
+    # Business profile (Account Settings) - feeds Invoicing/Accounting later
+    legal_name = db.Column(db.String(255))       # Razón Social
+    tax_id = db.Column(db.String(64))            # RTN
+    address = db.Column(db.String(255))
+    phone = db.Column(db.String(64))
+    email = db.Column(db.String(255))
+    website = db.Column(db.String(255))
+    currency = db.Column(db.String(8), default="HNL")
+    logo_data_url = db.Column(db.Text)           # base64 data: URL, optional custom logo
+    invoice_prefix = db.Column(db.String(16), default="FAC-")
+    next_invoice_number = db.Column(db.Integer, default=1)
 
 
 class Material(db.Model):
