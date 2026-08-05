@@ -2,10 +2,10 @@ import os
 import json
 import mimetypes
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
-from werkzeug.security import check_password_hash
-from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy
+from werkzeug.security import check_password_hash, generate_password_hash
+from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView
 
 # On some Windows machines, a corrupted registry entry makes Python think
 # .html/.js/.css are text/plain, causing browsers to show raw source instead
@@ -22,6 +22,7 @@ REGULACION_DIR = os.path.join(os.path.dirname(BASE_DIR), "regulacion")
 AUTH_DIR = os.path.join(os.path.dirname(BASE_DIR), "auth")
 PANEL_DIR = os.path.join(os.path.dirname(BASE_DIR), "panel")
 CUENTA_DIR = os.path.join(os.path.dirname(BASE_DIR), "cuenta")
+ADMIN_DIR = os.path.join(os.path.dirname(BASE_DIR), "admin")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/cotizaciones")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(BASE_DIR, "quoting.db")
@@ -51,6 +52,57 @@ def current_account_id():
     return session.get("account_id")
 
 
+def current_admin_id():
+    return session.get("admin_id")
+
+
+def admin_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not current_admin_id():
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "not_authenticated"}), 401
+            return redirect(url_for("admin_login", next=request.path))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def log_page_view(path):
+    """Best-effort page view log; never let a logging failure break the page."""
+    try:
+        db.session.add(PageView(
+            account_id=current_account_id(),
+            path=path,
+            timestamp=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            ip_address=request.headers.get("CF-Connecting-IP", request.remote_addr),
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+@app.before_request
+def touch_last_seen():
+    """Keep Account.last_seen fresh for the admin's 'online now' indicator.
+    Throttled to avoid a write on every single request."""
+    account_id = session.get("account_id")
+    if not account_id:
+        return
+    account = Account.query.get(account_id)
+    if not account:
+        return
+    now = datetime.utcnow()
+    if account.last_seen:
+        try:
+            last = datetime.strptime(account.last_seen, "%Y-%m-%d %H:%M:%S")
+            if (now - last).total_seconds() < 30:
+                return  # updated recently enough, skip the write
+        except ValueError:
+            pass
+    account.last_seen = now.strftime("%Y-%m-%d %H:%M:%S")
+    db.session.commit()
+
+
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -64,6 +116,7 @@ def login_required(view):
 
 @app.route("/login", methods=["GET"])
 def login():
+    log_page_view("/login")
     return send_from_directory(AUTH_DIR, "login.html")
 
 
@@ -78,6 +131,14 @@ def api_login():
     session["account_id"] = account.id
     session["company_name"] = account.company_name
     session.permanent = True
+    account.last_seen = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    db.session.add(LoginEvent(
+        account_id=account.id, event_type="login",
+        timestamp=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        ip_address=request.headers.get("CF-Connecting-IP", request.remote_addr),
+        user_agent=(request.headers.get("User-Agent") or "")[:255],
+    ))
+    db.session.commit()
     return jsonify({"ok": True, "company_name": account.company_name})
 
 
@@ -143,8 +204,136 @@ def update_account_profile():
 
 @app.route("/logout", methods=["GET", "POST"])
 def logout():
+    account_id = current_account_id()
+    if account_id:
+        db.session.add(LoginEvent(
+            account_id=account_id, event_type="logout",
+            timestamp=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            ip_address=request.headers.get("CF-Connecting-IP", request.remote_addr),
+            user_agent=(request.headers.get("User-Agent") or "")[:255],
+        ))
+        db.session.commit()
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/api/account/activity", methods=["GET"])
+@login_required
+def get_own_activity():
+    """A business account's own login/logout history - not other accounts'."""
+    events = (LoginEvent.query.filter_by(account_id=current_account_id())
+              .order_by(LoginEvent.timestamp.desc()).limit(100).all())
+    return jsonify([{
+        "event_type": e.event_type, "timestamp": e.timestamp, "ip_address": e.ip_address,
+    } for e in events])
+
+
+# ---------------------------------------------------------------------------
+# Admin - platform-wide view across every business account. Separate login,
+# separate session key (admin_id), not tied to any Account.
+# ---------------------------------------------------------------------------
+
+ONLINE_THRESHOLD_SECONDS = 5 * 60  # "online now" = active within the last 5 minutes
+
+
+@app.route("/admin/login", methods=["GET"])
+def admin_login():
+    return send_from_directory(ADMIN_DIR, "login.html")
+
+
+@app.route("/api/admin/login", methods=["POST"])
+def api_admin_login():
+    data = request.json or {}
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    admin = Admin.query.filter_by(username=username).first()
+    if not admin or not check_password_hash(admin.password_hash, password):
+        return jsonify({"error": "Usuario o contraseña incorrectos."}), 401
+    session["admin_id"] = admin.id
+    session.permanent = True
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/logout", methods=["GET", "POST"])
+def admin_logout():
+    session.pop("admin_id", None)
+    return redirect(url_for("admin_login"))
+
+
+@app.route("/admin/")
+@admin_required
+def admin_dashboard():
+    return send_from_directory(ADMIN_DIR, "index.html")
+
+
+def _is_online(account):
+    if not account.last_seen:
+        return False
+    try:
+        last = datetime.strptime(account.last_seen, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return False
+    return (datetime.utcnow() - last).total_seconds() < ONLINE_THRESHOLD_SECONDS
+
+
+@app.route("/api/admin/accounts", methods=["GET"])
+@admin_required
+def admin_list_accounts():
+    accounts = Account.query.order_by(Account.id).all()
+    result = []
+    for a in accounts:
+        last_login = (LoginEvent.query.filter_by(account_id=a.id, event_type="login")
+                      .order_by(LoginEvent.timestamp.desc()).first())
+        result.append({
+            "id": a.id,
+            "username": a.username,
+            "company_name": a.company_name,
+            "created_at": a.created_at,
+            "last_seen": a.last_seen,
+            "online": _is_online(a),
+            "last_login": last_login.timestamp if last_login else None,
+        })
+    return jsonify(result)
+
+
+@app.route("/api/admin/events", methods=["GET"])
+@admin_required
+def admin_list_events():
+    account_id = request.args.get("account_id", type=int)
+    q = LoginEvent.query
+    if account_id:
+        q = q.filter_by(account_id=account_id)
+    events = q.order_by(LoginEvent.timestamp.desc()).limit(200).all()
+    return jsonify([{
+        "id": e.id, "account_id": e.account_id,
+        "company_name": e.account.company_name if e.account else None,
+        "event_type": e.event_type, "timestamp": e.timestamp,
+        "ip_address": e.ip_address, "user_agent": e.user_agent,
+    } for e in events])
+
+
+@app.route("/api/admin/pageviews", methods=["GET"])
+@admin_required
+def admin_pageview_stats():
+    total = PageView.query.count()
+
+    by_path = (db.session.query(PageView.path, db.func.count(PageView.id))
+               .group_by(PageView.path).order_by(db.func.count(PageView.id).desc()).all())
+
+    since = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    last_7_days = PageView.query.filter(PageView.timestamp >= since).count()
+
+    by_day = (db.session.query(db.func.substr(PageView.timestamp, 1, 10), db.func.count(PageView.id))
+              .filter(PageView.timestamp >= since)
+              .group_by(db.func.substr(PageView.timestamp, 1, 10))
+              .order_by(db.func.substr(PageView.timestamp, 1, 10)).all())
+
+    return jsonify({
+        "total": total,
+        "last_7_days": last_7_days,
+        "by_path": [{"path": p, "count": c} for p, c in by_path],
+        "by_day": [{"day": d, "count": c} for d, c in by_day],
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -153,24 +342,28 @@ def logout():
 
 @app.route("/")
 def landing():
+    log_page_view("/")
     return send_from_directory(LANDING_DIR, "index.html")
 
 
 @app.route("/panel/")
 @login_required
 def panel():
+    log_page_view("/panel/")
     return send_from_directory(PANEL_DIR, "index.html")
 
 
 @app.route("/cuenta/")
 @login_required
 def cuenta():
+    log_page_view("/cuenta/")
     return send_from_directory(CUENTA_DIR, "index.html")
 
 
 @app.route("/cotizaciones/")
 @login_required
 def index():
+    log_page_view("/cotizaciones/")
     return send_from_directory(FRONTEND_DIR, "index.html")
 
 
@@ -178,6 +371,7 @@ def index():
 @app.route("/regulacion/")
 @login_required
 def regulacion():
+    log_page_view("/regulacion/")
     return send_from_directory(REGULACION_DIR, "index.html")
 
 

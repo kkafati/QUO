@@ -158,7 +158,31 @@
         <span class="status" id="statusMsg"></span>
       </div>
     </form>
+
+    <div class="card" style="margin-top:8px">
+      <h2>Actividad Reciente</h2>
+      <table style="width:100%; border-collapse:collapse; font-size:13px">
+        <thead><tr>
+          <th style="text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-soft); padding:6px 8px; border-bottom:1px solid #e7e9ec">Evento</th>
+          <th style="text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-soft); padding:6px 8px; border-bottom:1px solid #e7e9ec">Fecha/Hora</th>
+        </tr></thead>
+        <tbody id="activityBody"></tbody>
+      </table>
+    </div>
   </div>
+
+<script>
+async function loadActivity() {
+  const events = await fetch("/api/account/activity").then(r => r.json());
+  document.getElementById("activityBody").innerHTML = events.map(e => `
+    <tr>
+      <td style="padding:8px; border-bottom:1px solid #f0f1f3">${e.event_type === 'login' ? 'Inicio de sesión' : 'Cierre de sesión'}</td>
+      <td style="padding:8px; border-bottom:1px solid #f0f1f3; color:var(--ink-soft)">${e.timestamp}</td>
+    </tr>
+  `).join("") || '<tr><td colspan="2" style="padding:8px; color:var(--ink-soft)">Sin actividad registrada todavía.</td></tr>';
+}
+loadActivity();
+</script>
 
 <script>
 let logoDataUrl = null;

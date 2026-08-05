@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel de Administración — Grupo Liquidámbar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #16232f; --ink-soft: #8b98a6; --dark: #0f1720; --panel: #182430;
+    --line: #2a3644; --accent: #cddc28; --blue: #5fa8e0; --green: #6bbf8a; --red: #e08a80;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; min-height: 100vh;
+    font-family: 'Poppins', sans-serif;
+    background: var(--dark); color: #fff;
+  }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  .topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 18px 32px; border-bottom: 1px solid var(--line);
+  }
+  .topbar-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; }
+  .badge {
+    display: inline-block; background: var(--accent); color: var(--dark);
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 3px 10px; border-radius: 999px;
+  }
+  .topbar a { color: var(--ink-soft); text-decoration: none; font-size: 13px; font-weight: 600; }
+  .topbar a:hover { color: #fff; }
+
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
+
+  .stats-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 32px; }
+  .stat-card {
+    flex: 1; min-width: 160px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 18px 20px;
+  }
+  .stat-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); margin-bottom: 8px; }
+  .stat-card .value { font-size: 26px; font-weight: 700; }
+
+  h2 { font-size: 15px; font-weight: 700; margin: 0 0 14px; }
+  .section { margin-bottom: 36px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--ink-soft); padding: 8px 10px; border-bottom: 1px solid var(--line);
+  }
+  td { padding: 10px; border-bottom: 1px solid #202b38; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: #1d2a38; }
+
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.offline { background: #3a4654; }
+
+  .pill { font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: 600; }
+  .pill.login { background: rgba(107,191,138,0.15); color: var(--green); }
+  .pill.logout { background: rgba(139,152,166,0.15); color: var(--ink-soft); }
+
+  .path-bars { display: flex; flex-direction: column; gap: 8px; }
+  .path-bar-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+  .path-bar-label { width: 160px; flex-shrink: 0; color: var(--ink-soft); }
+  .path-bar-track { flex: 1; background: #202b38; border-radius: 4px; height: 8px; overflow: hidden; }
+  .path-bar-fill { height: 100%; background: var(--blue); }
+  .path-bar-count { width: 40px; text-align: right; }
+
+  .filter-tag {
+    display: inline-flex; align-items: center; gap: 8px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 12px;
+    margin-bottom: 14px;
+  }
+  .filter-tag button { background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: 14px; }
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-brand"><span class="badge">Admin</span> Panel de Administración</div>
+    <a href="/admin/logout">Cerrar sesión</a>
+  </div>
+
+  <div class="wrap">
+
+    <div class="stats-row" id="statsRow"></div>
+
+    <div class="section">
+      <h2>Cuentas de Negocio</h2>
+      <table>
+        <thead><tr>
+          <th></th><th>Usuario</th><th>Negocio</th><th>Último inicio de sesión</th><th>Creada</th>
+        </tr></thead>
+        <tbody id="accountsBody"></tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Vistas por Página (últimos 7 días)</h2>
+      <div class="path-bars" id="pathBars"></div>
+    </div>
+
+    <div class="section">
+      <h2>Actividad Reciente (inicios y cierres de sesión)</h2>
+      <div id="eventsFilterTag"></div>
+      <table>
+        <thead><tr>
+          <th>Cuenta</th><th>Evento</th><th>Fecha/Hora</th><th>IP</th>
+        </tr></thead>
+        <tbody id="eventsBody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+<script>
+let currentEventsFilter = null; // account_id or null
+
+async function loadStats() {
+  const [accounts, pv] = await Promise.all([
+    fetch("/api/admin/accounts").then(r => r.json()),
+    fetch("/api/admin/pageviews").then(r => r.json()),
+  ]);
+  const onlineCount = accounts.filter(a => a.online).length;
+
+  document.getElementById("statsRow").innerHTML = `
+    <div class="stat-card"><div class="label">Cuentas Totales</div><div class="value">${accounts.length}</div></div>
+    <div class="stat-card"><div class="label">En Línea Ahora</div><div class="value" style="color:var(--green)">${onlineCount}</div></div>
+    <div class="stat-card"><div class="label">Vistas de Página (total)</div><div class="value">${pv.total}</div></div>
+    <div class="stat-card"><div class="label">Vistas (últimos 7 días)</div><div class="value">${pv.last_7_days}</div></div>
+  `;
+
+  document.getElementById("accountsBody").innerHTML = accounts.map(a => `
+    <tr class="clickable" onclick="filterEvents(${a.id}, '${esc(a.company_name)}')">
+      <td><span class="dot ${a.online ? 'online' : 'offline'}"></span></td>
+      <td class="mono">${esc(a.username)}</td>
+      <td>${esc(a.company_name)}</td>
+      <td>${esc(a.last_login || '—')}</td>
+      <td>${esc(a.created_at || '—')}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="5" style="color:var(--ink-soft)">Sin cuentas todavía.</td></tr>`;
+
+  const maxCount = Math.max(1, ...pv.by_path.map(p => p.count));
+  document.getElementById("pathBars").innerHTML = pv.by_path.map(p => `
+    <div class="path-bar-row">
+      <div class="path-bar-label mono">${esc(p.path)}</div>
+      <div class="path-bar-track"><div class="path-bar-fill" style="width:${(p.count / maxCount * 100)}%"></div></div>
+      <div class="path-bar-count">${p.count}</div>
+    </div>
+  `).join("") || `<div style="color:var(--ink-soft);font-size:13px">Sin datos todavía.</div>`;
+}
+
+async function loadEvents() {
+  const url = currentEventsFilter ? `/api/admin/events?account_id=${currentEventsFilter.id}` : "/api/admin/events";
+  const events = await fetch(url).then(r => r.json());
+  document.getElementById("eventsBody").innerHTML = events.map(e => `
+    <tr>
+      <td>${esc(e.company_name || '—')}</td>
+      <td><span class="pill ${e.event_type}">${e.event_type === 'login' ? 'Inicio de sesión' : 'Cierre de sesión'}</span></td>
+      <td class="mono">${esc(e.timestamp)}</td>
+      <td class="mono">${esc(e.ip_address || '—')}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="4" style="color:var(--ink-soft)">Sin actividad todavía.</td></tr>`;
+
+  const tagHost = document.getElementById("eventsFilterTag");
+  tagHost.innerHTML = currentEventsFilter
+    ? `<div class="filter-tag">Filtrando: ${esc(currentEventsFilter.name)} <button onclick="filterEvents(null, null)">×</button></div>`
+    : "";
+}
+
+function filterEvents(accountId, name) {
+  currentEventsFilter = accountId ? { id: accountId, name } : null;
+  loadEvents();
+}
+
+function esc(s) {
+  return (s ?? "").toString().replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+loadStats();
+loadEvents();
+setInterval(loadStats, 15000); // refresh online status periodically
+</script>
+</body>
+</html>

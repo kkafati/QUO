@@ -23,6 +23,7 @@ class Account(db.Model):
     logo_data_url = db.Column(db.Text)           # base64 data: URL, optional custom logo
     invoice_prefix = db.Column(db.String(16), default="FAC-")
     next_invoice_number = db.Column(db.Integer, default=1)
+    last_seen = db.Column(db.String(32))  # updated on each authenticated request, for "online now"
 
 
 class Material(db.Model):
@@ -179,3 +180,39 @@ class RegulacionStudy(db.Model):
     name = db.Column(db.String(255), nullable=False)
     data = db.Column(db.Text, nullable=False)
     updated_at = db.Column(db.String(32))
+
+
+class Admin(db.Model):
+    """Platform operator login - separate from business Accounts entirely.
+    Can see analytics/activity across every account. Not tied to any one business."""
+    __tablename__ = "admins"
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), nullable=False, unique=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.String(16))
+
+
+class LoginEvent(db.Model):
+    """One row per login or logout, for activity history (both the business's own
+    'Actividad' view and the admin's platform-wide view)."""
+    __tablename__ = "login_events"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    event_type = db.Column(db.String(16), nullable=False)  # login | logout
+    timestamp = db.Column(db.String(32), nullable=False)
+    ip_address = db.Column(db.String(64))
+    user_agent = db.Column(db.String(255))
+
+    account = db.relationship("Account")
+
+
+class PageView(db.Model):
+    """One row per page load (not API calls) - for basic traffic counts.
+    account_id is null for anonymous views (e.g. the public landing page)."""
+    __tablename__ = "page_views"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"))
+    path = db.Column(db.String(255), nullable=False)
+    timestamp = db.Column(db.String(32), nullable=False)
+    ip_address = db.Column(db.String(64))
+

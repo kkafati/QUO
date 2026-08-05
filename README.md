@@ -37,6 +37,22 @@ Deleting a Material, Labor, Herramienta, Transporte, Gasto, Ficha de Costo, or C
 
 **Scope note:** this covers the items people most often worry about losing by accident. Individual supplier price quotes (Cotización de Proveedores entries) are still deleted immediately when removed — those are quick to re-enter and lower-stakes than losing a whole ficha or cotización, so they weren't included in this system. Ask if you'd like that extended to cover them too.
 
+## Analytics: online status, login history, page views
+
+**For you (platform admin)** — a completely separate login at `/admin/login`, not tied to any business account. Set it up once:
+```bash
+cd backend
+python3 create_admin.py
+```
+Then log in at `/admin/login` (not `/login` — that's for business accounts). The dashboard shows:
+- Every business account, whether they're online right now (active within the last 5 minutes), their last login, and when their account was created
+- Page view counts — total, last 7 days, and a breakdown by page — across the whole platform
+- A live feed of every login/logout across every account; click any account in the table to filter the feed to just them
+
+**For each business** — their own "Actividad" section, now at the bottom of `/cuenta/` (Account Settings): just their own login/logout history, not anyone else's.
+
+Page views are only logged for actual page loads (landing, login, panel, cotizaciones, regulación, cuenta) — not every API call, so the numbers reflect real visits, not internal chatter.
+
 ## Login and client accounts
 
 `/cotizaciones/` and `/regulación/` now require logging in. The homepage (`/`) stays public.
