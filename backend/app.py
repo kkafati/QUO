@@ -220,9 +220,12 @@ def logout():
 @app.route("/api/account/activity", methods=["GET"])
 @login_required
 def get_own_activity():
-    """A business account's own login/logout history - not other accounts'."""
-    events = (LoginEvent.query.filter_by(account_id=current_account_id())
-              .order_by(LoginEvent.timestamp.desc()).limit(100).all())
+    """A business account's own login/logout history - not other accounts'.
+    Last 3 months, not just a flat recent-N-events limit."""
+    since = (datetime.utcnow() - timedelta(days=90)).strftime("%Y-%m-%d %H:%M:%S")
+    events = (LoginEvent.query.filter(LoginEvent.account_id == current_account_id(),
+                                       LoginEvent.timestamp >= since)
+              .order_by(LoginEvent.timestamp.desc()).all())
     return jsonify([{
         "event_type": e.event_type, "timestamp": e.timestamp, "ip_address": e.ip_address,
     } for e in events])
@@ -315,23 +318,38 @@ def admin_list_events():
 @app.route("/api/admin/pageviews", methods=["GET"])
 @admin_required
 def admin_pageview_stats():
-    total = PageView.query.count()
+    """All-time by default (not just a recent window), grouped by month and by day.
+    ?account_id=<id>   -> scope everything to that one business account
+    ?account_id=none   -> scope to anonymous views only (not logged in - e.g. the public landing page)
+    (omit account_id)  -> platform-wide, every view"""
+    account_filter = request.args.get("account_id")
 
-    by_path = (db.session.query(PageView.path, db.func.count(PageView.id))
+    q = PageView.query
+    if account_filter == "none":
+        q = q.filter(PageView.account_id.is_(None))
+    elif account_filter:
+        try:
+            q = q.filter(PageView.account_id == int(account_filter))
+        except ValueError:
+            pass
+
+    total = q.count()
+
+    by_path = (q.with_entities(PageView.path, db.func.count(PageView.id))
                .group_by(PageView.path).order_by(db.func.count(PageView.id).desc()).all())
 
-    since = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
-    last_7_days = PageView.query.filter(PageView.timestamp >= since).count()
+    by_month = (q.with_entities(db.func.substr(PageView.timestamp, 1, 7), db.func.count(PageView.id))
+                .group_by(db.func.substr(PageView.timestamp, 1, 7))
+                .order_by(db.func.substr(PageView.timestamp, 1, 7)).all())
 
-    by_day = (db.session.query(db.func.substr(PageView.timestamp, 1, 10), db.func.count(PageView.id))
-              .filter(PageView.timestamp >= since)
+    by_day = (q.with_entities(db.func.substr(PageView.timestamp, 1, 10), db.func.count(PageView.id))
               .group_by(db.func.substr(PageView.timestamp, 1, 10))
               .order_by(db.func.substr(PageView.timestamp, 1, 10)).all())
 
     return jsonify({
         "total": total,
-        "last_7_days": last_7_days,
         "by_path": [{"path": p, "count": c} for p, c in by_path],
+        "by_month": [{"month": m, "count": c} for m, c in by_month],
         "by_day": [{"day": d, "count": c} for d, c in by_day],
     })
 

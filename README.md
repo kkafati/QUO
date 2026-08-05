@@ -46,10 +46,10 @@ python3 create_admin.py
 ```
 Then log in at `/admin/login` (not `/login` — that's for business accounts). The dashboard shows:
 - Every business account, whether they're online right now (active within the last 5 minutes), their last login, and when their account was created
-- Page view counts — total, last 7 days, and a breakdown by page — across the whole platform
-- A live feed of every login/logout across every account; click any account in the table to filter the feed to just them
+- **Page views, all-time**, broken down by month and by day, plus by page — with a filter to view platform-wide, one specific account, or just anonymous views (visits to `/` and `/login` before anyone's authenticated)
+- A live feed of every login/logout across every account, click any account in the table to filter the feed to just them
 
-**For each business** — their own "Actividad" section, now at the bottom of `/cuenta/` (Account Settings): just their own login/logout history, not anyone else's.
+**For each business** — their own "Actividad" section, now at the bottom of `/cuenta/` (Account Settings): their own login/logout history for the last 3 months.
 
 Page views are only logged for actual page loads (landing, login, panel, cotizaciones, regulación, cuenta) — not every API call, so the numbers reflect real visits, not internal chatter.
 

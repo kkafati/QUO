@@ -75,6 +75,16 @@
     margin-bottom: 14px;
   }
   .filter-tag button { background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: 14px; }
+
+  .pv-filter-row { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .pv-filter-row select {
+    background: var(--panel); color: #fff; border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 12px; font-size: 13px; font-family: inherit;
+  }
+  .pv-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  .pv-subhead { font-size: 12px; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 12px; }
+  .scroll-y { max-height: 260px; overflow-y: auto; padding-right: 6px; }
+  @media (max-width: 720px) { .pv-columns { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -99,7 +109,25 @@
     </div>
 
     <div class="section">
-      <h2>Vistas por Página (últimos 7 días)</h2>
+      <h2>Vistas de Página</h2>
+      <div class="pv-filter-row">
+        <label class="mono" style="font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.05em">Ver:</label>
+        <select id="pvFilter" onchange="loadPageviews()"></select>
+      </div>
+      <div class="stats-row" id="pvStatsRow" style="margin-bottom:22px"></div>
+
+      <div class="pv-columns">
+        <div>
+          <h3 class="pv-subhead">Por Mes</h3>
+          <div class="path-bars" id="monthBars"></div>
+        </div>
+        <div>
+          <h3 class="pv-subhead">Por Día</h3>
+          <div class="path-bars scroll-y" id="dayBars"></div>
+        </div>
+      </div>
+
+      <h3 class="pv-subhead" style="margin-top:22px">Por Página</h3>
       <div class="path-bars" id="pathBars"></div>
     </div>
 
@@ -118,19 +146,16 @@
 
 <script>
 let currentEventsFilter = null; // account_id or null
+let accountsCache = [];
 
 async function loadStats() {
-  const [accounts, pv] = await Promise.all([
-    fetch("/api/admin/accounts").then(r => r.json()),
-    fetch("/api/admin/pageviews").then(r => r.json()),
-  ]);
+  const accounts = await fetch("/api/admin/accounts").then(r => r.json());
+  accountsCache = accounts;
   const onlineCount = accounts.filter(a => a.online).length;
 
   document.getElementById("statsRow").innerHTML = `
     <div class="stat-card"><div class="label">Cuentas Totales</div><div class="value">${accounts.length}</div></div>
     <div class="stat-card"><div class="label">En Línea Ahora</div><div class="value" style="color:var(--green)">${onlineCount}</div></div>
-    <div class="stat-card"><div class="label">Vistas de Página (total)</div><div class="value">${pv.total}</div></div>
-    <div class="stat-card"><div class="label">Vistas (últimos 7 días)</div><div class="value">${pv.last_7_days}</div></div>
   `;
 
   document.getElementById("accountsBody").innerHTML = accounts.map(a => `
@@ -143,14 +168,43 @@ async function loadStats() {
     </tr>
   `).join("") || `<tr><td colspan="5" style="color:var(--ink-soft)">Sin cuentas todavía.</td></tr>`;
 
-  const maxCount = Math.max(1, ...pv.by_path.map(p => p.count));
-  document.getElementById("pathBars").innerHTML = pv.by_path.map(p => `
+  populatePvFilter(accounts);
+}
+
+function populatePvFilter(accounts) {
+  const sel = document.getElementById("pvFilter");
+  if (sel.dataset.populated) return; // only build the option list once
+  sel.innerHTML = `
+    <option value="">Todas las vistas (toda la plataforma)</option>
+    <option value="none">Vistas anónimas (sin cuenta, ej. página pública)</option>
+    ${accounts.map(a => `<option value="${a.id}">${esc(a.company_name)} (${esc(a.username)})</option>`).join("")}
+  `;
+  sel.dataset.populated = "1";
+}
+
+function barRows(items, labelKey, hostId, emptyMsg) {
+  const maxCount = Math.max(1, ...items.map(p => p.count));
+  document.getElementById(hostId).innerHTML = items.map(p => `
     <div class="path-bar-row">
-      <div class="path-bar-label mono">${esc(p.path)}</div>
+      <div class="path-bar-label mono">${esc(p[labelKey])}</div>
       <div class="path-bar-track"><div class="path-bar-fill" style="width:${(p.count / maxCount * 100)}%"></div></div>
       <div class="path-bar-count">${p.count}</div>
     </div>
-  `).join("") || `<div style="color:var(--ink-soft);font-size:13px">Sin datos todavía.</div>`;
+  `).join("") || `<div style="color:var(--ink-soft);font-size:13px">${emptyMsg}</div>`;
+}
+
+async function loadPageviews() {
+  const filterValue = document.getElementById("pvFilter").value;
+  const url = filterValue ? `/api/admin/pageviews?account_id=${filterValue}` : "/api/admin/pageviews";
+  const pv = await fetch(url).then(r => r.json());
+
+  document.getElementById("pvStatsRow").innerHTML = `
+    <div class="stat-card"><div class="label">Vistas Totales (todo el tiempo)</div><div class="value">${pv.total}</div></div>
+  `;
+
+  barRows(pv.by_month, "month", "monthBars", "Sin datos todavía.");
+  barRows(pv.by_day, "day", "dayBars", "Sin datos todavía.");
+  barRows(pv.by_path, "path", "pathBars", "Sin datos todavía.");
 }
 
 async function loadEvents() {
@@ -181,6 +235,7 @@ function esc(s) {
 }
 
 loadStats();
+loadPageviews();
 loadEvents();
 setInterval(loadStats, 15000); // refresh online status periodically
 </script>
