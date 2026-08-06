@@ -1155,11 +1155,33 @@ def facturacion():
     return send_from_directory(FACTURACION_DIR, "index.html")
 
 
+@app.route("/facturacion/factura-common.js")
+@login_required
+def facturacion_common_js():
+    return send_from_directory(FACTURACION_DIR, "factura-common.js", mimetype="application/javascript")
+
+
+TEMPLATE_FILES = {
+    "clasica": "ver.html",
+    "moderna": "ver-moderna.html",
+    "elegante": "ver-elegante.html",
+    "compacta": "ver-compacta.html",
+    "colorblock": "ver-colorblock.html",
+}
+
+
 @app.route("/facturacion/ver/")
 @login_required
 def factura_ver():
     log_page_view("/facturacion/ver/")
-    return send_from_directory(FACTURACION_DIR, "ver.html")
+    invoice_id = request.args.get("id", type=int)
+    template = request.args.get("template")
+    if invoice_id:
+        invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id()).first()
+        if invoice:
+            template = invoice.template
+    filename = TEMPLATE_FILES.get(template, "ver.html")
+    return send_from_directory(FACTURACION_DIR, filename)
 
 
 def compute_invoice_totals(invoice):

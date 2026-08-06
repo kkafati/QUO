@@ -5,21 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Factura — Grupo Liquidámbar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root { --blue: #065dac; --lime: #cddc28; --ink: #16232f; --ink-soft: #5a6570; --dark-head: #3a3f45; }
+  :root { --navy: #1f2d3d; --blue: #065dac; --lime: #cddc28; --ink: #16232f; --ink-soft: #6b7480; --rule: #c9ced3; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: #eef0f2; color: var(--ink); font-family: 'Poppins', sans-serif; }
+  html, body { margin: 0; padding: 0; background: #eceff2; color: var(--ink); font-family: 'Source Sans 3', sans-serif; }
 
-  .toolbar {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 14px 24px; background: #fff; border-bottom: 1px solid #e7e9ec; position: sticky; top: 0; z-index: 5;
-  }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; padding: 14px 24px; background: #fff; border-bottom: 1px solid #e7e9ec; position: sticky; top: 0; z-index: 5; }
   .toolbar-left { display: flex; gap: 10px; align-items: center; }
   .toolbar a { color: var(--blue); text-decoration: none; font-weight: 600; font-size: 13px; }
-  .btn { border: 1.5px solid var(--ink); background: #fff; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 8px; }
-  .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
-  .btn-primary:hover { background: #054a87; }
+  .btn { border: 1.5px solid var(--ink); background: #fff; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 4px; }
+  .btn-primary { background: var(--navy); color: #fff; border-color: var(--navy); }
   .btn-ghost { border-color: #dde1e5; color: var(--ink-soft); }
   .btn-danger { border-color: #b5453b; color: #b5453b; }
   .btn-danger:hover { background: #b5453b; color: #fff; }
@@ -27,93 +23,73 @@
   .status.ok { color: #3f8f6a; }
   .status.error { color: #b5453b; }
 
-  .sheet-wrap { max-width: 900px; margin: 28px auto 80px; }
-  .sheet {
-    background: #fff; padding: 40px 44px; box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-  }
+  .sheet-wrap { max-width: 880px; margin: 28px auto 80px; }
+  .sheet { background: #fff; padding: 48px 56px; border: 1px solid #dfe2e5; box-shadow: 0 4px 24px rgba(0,0,0,0.05); }
 
-  /* ---- header ---- */
-  .fhead { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; }
-  .fhead-left { display: flex; gap: 18px; align-items: flex-start; }
-  .fhead-logo { width: 110px; height: auto; }
-  .contact-list { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
-  .contact-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #333; }
-  .contact-icon {
-    width: 20px; height: 20px; border-radius: 50%; border: 1.4px solid var(--blue); color: var(--blue);
-    display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0;
-  }
-  .contact-row input { border: none; background: transparent; font-size: 12px; color: #333; font-family: inherit; padding: 0; }
-  .fhead-right { text-align: right; }
-  .fhead-right .factura-title { font-size: 34px; font-weight: 800; letter-spacing: 0.03em; color: var(--dark-head); margin: 0; }
-  .fhead-right .factura-numero { font-size: 17px; font-weight: 700; color: var(--ink); margin-top: 6px; }
+  .fhead-center { text-align: center; margin-bottom: 20px; }
+  .fhead-logo { width: 90px; height: auto; margin: 0 auto 10px; display: block; }
+  .factura-title { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; letter-spacing: 0.08em; color: var(--navy); margin: 4px 0 0; }
+  .factura-numero { font-size: 14px; letter-spacing: 0.05em; color: var(--ink-soft); margin-top: 4px; font-family: monospace; }
 
-  /* ---- cliente / fecha ---- */
-  .info-row { display: flex; justify-content: space-between; border-bottom: 1.5px solid #c9ced3; padding-bottom: 10px; margin-bottom: 14px; }
-  .info-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); font-weight: 600; margin-bottom: 4px; }
-  .cliente-nombre-input { font-size: 16px; font-weight: 700; border: none; background: transparent; font-family: inherit; padding: 0; width: 260px; }
-  .cliente-rtn-row { font-size: 13px; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
-  .cliente-rtn-row input { border: none; background: transparent; font-family: inherit; font-size: 13px; padding: 0; width: 160px; }
-  .fecha-value { font-size: 20px; font-weight: 700; text-align: right; }
-  .fecha-value input { border: none; background: transparent; font-family: inherit; font-size: 20px; font-weight: 700; text-align: right; width: 130px; }
+  .contact-list { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; margin: 14px 0 22px; }
+  .contact-row { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #555; }
+  .contact-icon { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--navy); color: var(--navy); display: flex; align-items: center; justify-content: center; font-size: 8px; }
 
-  .term-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px; }
+  .rule { border: none; border-top: 1px solid var(--rule); margin: 0 0 20px; }
+
+  .info-row { display: flex; justify-content: space-between; margin-bottom: 18px; }
+  .info-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); font-weight: 600; margin-bottom: 5px; }
+  .cliente-nombre-input { font-size: 15px; font-weight: 700; border: none; background: transparent; font-family: inherit; padding: 0; width: 260px; }
+  .cliente-rtn-row { font-size: 12.5px; margin-top: 3px; display: flex; align-items: center; gap: 6px; color: #555; }
+  .cliente-rtn-row input { border: none; background: transparent; font-family: inherit; font-size: 12.5px; padding: 0; width: 150px; }
+  .fecha-value { text-align: right; }
+  .fecha-value input { border: none; background: transparent; font-family: inherit; font-size: 15px; font-weight: 700; text-align: right; width: 130px; }
+
+  .term-row { display: flex; justify-content: center; gap: 20px; margin-bottom: 8px; font-size: 12.5px; }
   .term-row label { display: flex; align-items: center; gap: 5px; font-weight: 600; cursor: pointer; }
-  .term-title { color: var(--blue); font-weight: 700; }
 
-  .cai-row { text-align: right; font-size: 12px; color: #333; border-bottom: 2px solid var(--blue); padding-bottom: 10px; margin-bottom: 4px; }
-  .cai-row .cai-value { font-family: monospace; letter-spacing: 0.02em; }
+  .cai-row { text-align: center; font-size: 11px; color: #777; padding-bottom: 16px; margin-bottom: 4px; border-bottom: 1px solid var(--rule); }
+  .cai-row .cai-value { font-family: monospace; letter-spacing: 0.02em; color: #444; }
 
-  /* ---- line items ---- */
-  .items-table { width: 100%; border-collapse: collapse; margin-top: 18px; }
-  .items-table thead th {
-    background: var(--dark-head); color: #fff; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
-    padding: 10px 12px; text-align: left; font-weight: 600;
-  }
+  .items-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+  .items-table thead th { border-bottom: 1.5px solid var(--navy); border-top: 1.5px solid var(--navy); color: var(--navy); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; padding: 9px 10px; text-align: left; font-weight: 700; }
   .items-table thead th.num { text-align: right; }
-  .items-table td { padding: 8px 12px; border-bottom: 1px solid #eceeef; vertical-align: top; font-size: 13px; }
+  .items-table td { padding: 9px 10px; border-bottom: 1px solid #eee; vertical-align: top; font-size: 13px; }
   .items-table td.num { text-align: right; }
   .items-table input { border: none; background: transparent; font-family: inherit; font-size: 13px; width: 100%; padding: 4px 0; }
   .items-table input.cantidad { text-align: center; }
   .items-table input.precio, .items-table .total-cell { text-align: right; }
-  .items-table tbody tr:hover { background: #fafbfc; }
-  .min-rows-spacer td { border-bottom: none; height: 180px; vertical-align: top; }
-  .remove-line-btn { background: none; border: none; color: #b5453b; cursor: pointer; font-size: 14px; padding: 0 4px; }
+  .min-rows-spacer td { border-bottom: none; height: 150px; }
+  .remove-line-btn { background: none; border: none; color: #b5453b; cursor: pointer; font-size: 14px; }
   .add-line-row { margin: 10px 0 0; }
-  .add-line-row button { background: none; border: 1px dashed #c9ced3; color: var(--ink-soft); font-size: 12px; padding: 6px 14px; cursor: pointer; border-radius: 6px; }
+  .add-line-row button { background: none; border: 1px dashed #c9ced3; color: var(--ink-soft); font-size: 12px; padding: 6px 14px; cursor: pointer; border-radius: 4px; }
 
-  /* ---- totals section ---- */
-  .totals-section { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 20px; gap: 24px; }
-  .letras-box { display: flex; flex: 1; border: 1px solid #dde1e5; border-radius: 4px; overflow: hidden; }
-  .letras-label { background: var(--blue); color: #fff; font-weight: 700; font-size: 13px; text-align: center; padding: 14px 10px; width: 90px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-  .letras-value { padding: 10px 14px; font-size: 11.5px; color: #333; line-height: 1.5; }
+  .totals-section { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 22px; gap: 24px; }
+  .letras-box { flex: 1; }
+  .letras-label { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 13px; color: var(--navy); margin-bottom: 8px; }
+  .letras-value { font-size: 11.5px; color: #555; line-height: 1.6; font-style: italic; }
 
-  .totals-table { width: 300px; flex-shrink: 0; font-size: 13px; }
-  .totals-table .trow { display: flex; justify-content: space-between; padding: 3px 0; }
+  .totals-table { width: 290px; flex-shrink: 0; font-size: 13px; }
+  .totals-table .trow { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd; }
   .totals-table .trow.editable input { border: none; background: transparent; font-family: inherit; font-size: 13px; text-align: right; width: 90px; }
   .totals-table .trow .tlabel { color: var(--ink-soft); }
-  .totals-table .trow.grand { border-top: 2px solid var(--blue); margin-top: 6px; padding-top: 8px; font-weight: 700; font-size: 14px; }
-  .totals-table .trow .lcode { font-weight: 600; margin-right: 4px; }
+  .totals-table .trow.grand { border-top: 2px solid var(--navy); border-bottom: none; margin-top: 6px; padding-top: 10px; font-weight: 700; font-size: 15px; color: var(--navy); }
 
-  /* ---- exemption references ---- */
-  .exempt-refs { margin-top: 22px; font-size: 11px; width: 60%; }
-  .exempt-refs .erow { display: flex; border: 1px solid #dde1e5; border-top: none; }
-  .exempt-refs .erow:first-child { border-top: 1px solid #dde1e5; }
-  .exempt-refs .elabel { padding: 5px 8px; width: 62%; color: #333; }
-  .exempt-refs .evalue { padding: 5px 8px; width: 38%; border-left: 1px solid #dde1e5; }
+  .exempt-refs { margin-top: 24px; font-size: 11px; }
+  .exempt-refs .erow { display: flex; padding: 5px 0; border-bottom: 1px dotted #ddd; }
+  .exempt-refs .elabel { width: 62%; color: #888; }
   .exempt-refs .evalue input { border: none; background: transparent; font-family: inherit; font-size: 11px; width: 100%; }
 
-  /* ---- footer ---- */
-  .foot-lines { margin-top: 18px; font-size: 12px; line-height: 1.9; }
-  .foot-lines .flabel { font-weight: 700; }
-  .foot-tagline { text-align: center; font-size: 12px; font-style: italic; margin-top: 22px; color: #333; }
-  .toggle-gravado { margin-top: 6px; font-size: 11px; }
-  .toggle-gravado label { cursor: pointer; }
+  .foot-lines { margin-top: 22px; font-size: 11.5px; line-height: 1.9; color: #555; text-align: center; }
+  .foot-lines .flabel { font-weight: 700; color: var(--navy); }
+  .foot-tagline { text-align: center; font-family: 'Playfair Display', serif; font-style: italic; font-size: 13px; margin-top: 20px; color: var(--ink-soft); }
+  .toggle-gravado { margin-top: 8px; font-size: 11px; }
 
   @media print {
     body { background: #fff; }
     .toolbar { display: none !important; }
     .sheet-wrap { margin: 0; max-width: 100%; }
-    .sheet { box-shadow: none; padding: 20px 30px; }
+    .sheet { box-shadow: none; border: none; }
     input { pointer-events: none; }
     .remove-line-btn, .add-line-row, .toggle-gravado { display: none !important; }
     .min-rows-spacer { height: auto !important; }
@@ -144,16 +120,13 @@
   <div class="sheet-wrap">
     <div class="sheet" id="sheet">
 
-      <div class="fhead">
-        <div class="fhead-left">
-          <img class="fhead-logo" id="fheadLogo" src="" alt="" style="display:none">
-          <div class="contact-list" id="contactList"></div>
-        </div>
-        <div class="fhead-right">
-          <div class="factura-title">FACTURA</div>
-          <div class="factura-numero" id="facturaNumero">— sin guardar —</div>
-        </div>
+      <div class="fhead-center">
+        <img class="fhead-logo" id="fheadLogo" src="" alt="" style="display:none">
+        <div class="factura-title">FACTURA</div>
+        <div class="factura-numero" id="facturaNumero">— sin guardar —</div>
       </div>
+      <div class="contact-list" id="contactList"></div>
+      <hr class="rule">
 
       <div class="info-row">
         <div>
@@ -168,7 +141,6 @@
       </div>
 
       <div class="term-row">
-        <span class="term-title">Término de Pago</span>
         <label><input type="radio" name="termino_pago" value="credito" id="term-credito"> Crédito</label>
         <label><input type="radio" name="termino_pago" value="contado" id="term-contado"> Contado</label>
       </div>
@@ -188,7 +160,7 @@
 
       <div class="totals-section">
         <div class="letras-box">
-          <div class="letras-label">Total<br>(en letras)</div>
+          <div class="letras-label">Total en letras</div>
           <div class="letras-value" id="totalEnLetras">—</div>
         </div>
         <div class="totals-table">
@@ -220,7 +192,7 @@
         <div><span class="flabel">Original Blanca:</span> Cliente&nbsp;&nbsp;&nbsp;<span class="flabel">Copia Amarilla:</span> Administración&nbsp;&nbsp;&nbsp;<span class="flabel">Copia Azul:</span> Contabilidad</div>
       </div>
 
-      <div class="foot-tagline">La factura es beneficio de todos "Exíjala"</div>
+      <div class="foot-tagline">"La factura es beneficio de todos — Exíjala"</div>
 
     </div>
   </div>

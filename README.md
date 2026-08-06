@@ -39,6 +39,11 @@ Deleting a Material, Labor, Herramienta, Transporte, Gasto, Ficha de Costo, or C
 
 ## Facturación (billing/invoicing)
 
+**5 templates now available**: Clásica (your real format), Moderna (light, minimalist, colored accent bar), Elegante (formal/corporate, centered, muted palette), Compacta (dense, print-economical), and Color Block (bold branded header band). Pick one when creating a new invoice via "+ Nueva Factura," or switch an existing invoice's template anytime from the "Plantilla" dropdown in its toolbar — your data carries over, only the visual layout changes.
+
+All 5 share one JS file (`facturacion/factura-common.js`) for data loading, line-item editing, totals math, and saving — so a fix or improvement to that logic applies to every template at once, rather than needing to be repeated 5 times.
+
+
 **Live now** at `/facturacion/`, replacing the old "Próximamente" placeholder. This is Template 1 of the planned set — built to match your exact real invoice format (logo/contact header, C.A.I., línea items, Total en Letras, exemption references, Rango Autorizado footer, all of it).
 
 **Before creating your first invoice**, fill in the Facturación section of `/cuenta/` — Prefijo de Factura, C.A.I., Fecha Límite de Emisión, and Rango Autorizado. The system won't let you create an invoice until Prefijo de Factura is set (it needs that to generate the invoice number), and every invoice pulls your CAI/RTN/contact info live from that same page — set it once there, not per-invoice.

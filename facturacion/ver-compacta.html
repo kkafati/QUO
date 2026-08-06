@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factura — Grupo Liquidámbar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #111; --ink-soft: #666; --line: #333; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #e9eaeb; color: var(--ink); font-family: 'IBM Plex Sans', sans-serif; }
+
+  .toolbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 5; }
+  .toolbar-left { display: flex; gap: 10px; align-items: center; }
+  .toolbar a { color: #111; text-decoration: none; font-weight: 600; font-size: 12px; }
+  .btn { border: 1.2px solid var(--ink); background: #fff; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .btn-primary { background: var(--ink); color: #fff; }
+  .btn-ghost { border-color: #ccc; color: var(--ink-soft); }
+  .btn-danger { border-color: #a33; color: #a33; }
+  .btn-danger:hover { background: #a33; color: #fff; }
+  .status { font-size: 11px; color: var(--ink-soft); margin-left: 8px; }
+  .status.ok { color: #3f8f6a; }
+  .status.error { color: #a33; }
+
+  .sheet-wrap { max-width: 780px; margin: 16px auto 60px; }
+  .sheet { background: #fff; padding: 24px 28px; font-size: 12px; border: 1px solid #ccc; }
+
+  .fhead { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid var(--line); }
+  .fhead-logo { width: 64px; height: auto; }
+  .contact-list { font-size: 10px; color: #555; margin-top: 4px; line-height: 1.5; }
+  .factura-title { font-size: 16px; font-weight: 700; letter-spacing: 0.05em; margin: 0; }
+  .factura-numero { font-family: 'IBM Plex Mono', monospace; font-size: 12px; margin-top: 2px; }
+
+  .info-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; }
+  .info-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); font-weight: 700; }
+  .cliente-nombre-input { font-size: 12.5px; font-weight: 700; border: none; background: transparent; font-family: inherit; padding: 0; width: 220px; }
+  .cliente-rtn-row { font-size: 11px; margin-top: 1px; display: flex; align-items: center; gap: 4px; }
+  .cliente-rtn-row input { border: none; background: transparent; font-family: inherit; font-size: 11px; padding: 0; width: 130px; }
+  .fecha-value input { border: none; background: transparent; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; font-weight: 700; text-align: right; width: 90px; }
+
+  .term-cai-row { display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; border-top: 1px solid #ddd; border-bottom: 1px solid #ddd; padding: 5px 0; margin-bottom: 8px; }
+  .term-row label { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; margin-left: 10px; }
+  .cai-value { font-family: 'IBM Plex Mono', monospace; }
+
+  .items-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  .items-table thead th { border-bottom: 1.5px solid var(--line); font-size: 9.5px; text-transform: uppercase; padding: 4px 6px; text-align: left; font-weight: 700; }
+  .items-table thead th.num { text-align: right; }
+  .items-table td { padding: 3px 6px; border-bottom: 1px solid #eee; vertical-align: top; font-size: 11.5px; }
+  .items-table td.num { text-align: right; }
+  .items-table input { border: none; background: transparent; font-family: inherit; font-size: 11.5px; width: 100%; padding: 2px 0; }
+  .items-table input.cantidad { text-align: center; }
+  .items-table input.precio, .items-table .total-cell { text-align: right; }
+  .min-rows-spacer td { border-bottom: none; height: 60px; }
+  .remove-line-btn { background: none; border: none; color: #a33; cursor: pointer; font-size: 12px; }
+  .add-line-row { margin: 6px 0 0; }
+  .add-line-row button { background: none; border: 1px dashed #bbb; color: var(--ink-soft); font-size: 10.5px; padding: 3px 10px; cursor: pointer; }
+
+  .totals-section { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px; gap: 16px; }
+  .letras-box { flex: 1; border: 1px solid #ccc; padding: 6px 8px; }
+  .letras-label { font-weight: 700; font-size: 9.5px; text-transform: uppercase; margin-bottom: 3px; }
+  .letras-value { font-size: 10px; color: #444; line-height: 1.4; }
+
+  .totals-table { width: 240px; flex-shrink: 0; font-size: 11.5px; }
+  .totals-table .trow { display: flex; justify-content: space-between; padding: 1px 0; }
+  .totals-table .trow.editable input { border: none; background: transparent; font-family: inherit; font-size: 11.5px; text-align: right; width: 80px; }
+  .totals-table .trow .tlabel { color: var(--ink-soft); }
+  .totals-table .trow.grand { border-top: 1.5px solid var(--line); margin-top: 3px; padding-top: 4px; font-weight: 700; font-size: 12.5px; }
+
+  .exempt-refs { margin-top: 10px; font-size: 9.5px; }
+  .exempt-refs .erow { display: flex; border-top: 1px solid #eee; padding: 2px 0; }
+  .exempt-refs .elabel { width: 65%; color: #777; }
+  .exempt-refs .evalue input { border: none; background: transparent; font-family: inherit; font-size: 9.5px; width: 100%; }
+
+  .foot-lines { margin-top: 10px; font-size: 10px; line-height: 1.6; color: #555; }
+  .foot-lines .flabel { font-weight: 700; color: var(--ink); }
+  .foot-tagline { text-align: center; font-size: 10px; margin-top: 10px; color: var(--ink-soft); }
+  .toggle-gravado { margin-top: 4px; font-size: 10px; }
+
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none !important; }
+    .sheet-wrap { margin: 0; max-width: 100%; }
+    .sheet { border: none; padding: 10px 16px; }
+    input { pointer-events: none; }
+    .remove-line-btn, .add-line-row, .toggle-gravado { display: none !important; }
+    .min-rows-spacer { height: auto !important; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <a href="/facturacion/">← Facturación</a>
+      <span class="status" id="statusMsg"></span>
+    </div>
+    <div class="toolbar-left">
+      <button class="btn btn-primary" id="btnGuardar">Guardar</button>
+      <select class="btn btn-ghost" id="templateSwitcher" style="cursor:pointer">
+        <option value="clasica">Plantilla: Clásica</option>
+        <option value="moderna">Plantilla: Moderna</option>
+        <option value="elegante">Plantilla: Elegante</option>
+        <option value="compacta">Plantilla: Compacta</option>
+        <option value="colorblock">Plantilla: Color Block</option>
+      </select>
+      <button class="btn btn-ghost" id="btnImprimir">🖨 Imprimir</button>
+      <button class="btn btn-danger" id="btnEliminar" style="display:none">Eliminar</button>
+    </div>
+  </div>
+
+  <div class="sheet-wrap">
+    <div class="sheet" id="sheet">
+
+      <div class="fhead">
+        <div>
+          <img class="fhead-logo" id="fheadLogo" src="" alt="" style="display:none">
+          <div class="contact-list" id="contactList"></div>
+        </div>
+        <div style="text-align:right">
+          <div class="factura-title">FACTURA</div>
+          <div class="factura-numero" id="facturaNumero">—</div>
+        </div>
+      </div>
+
+      <div class="info-row">
+        <div>
+          <div class="info-label">Cliente</div>
+          <input class="cliente-nombre-input" id="cliente_nombre" placeholder="Nombre del cliente">
+          <div class="cliente-rtn-row">RTN: <input id="cliente_rtn" placeholder="00000000000000"></div>
+        </div>
+        <div>
+          <div class="info-label" style="text-align:right">Fecha</div>
+          <div class="fecha-value"><input id="fecha" type="date"></div>
+        </div>
+      </div>
+
+      <div class="term-cai-row">
+        <div>C.A.I. <span class="cai-value" id="caiValue">—</span></div>
+        <div class="term-row">
+          <label><input type="radio" name="termino_pago" value="credito" id="term-credito"> Crédito</label>
+          <label><input type="radio" name="termino_pago" value="contado" id="term-contado"> Contado</label>
+        </div>
+      </div>
+
+      <table class="items-table">
+        <thead><tr>
+          <th style="width:60px">Cant.</th><th>Descripción</th>
+          <th class="num" style="width:100px">P. Unitario</th><th class="num" style="width:100px">Total</th>
+          <th class="no-print" style="width:18px"></th>
+        </tr></thead>
+        <tbody id="linesBody"></tbody>
+        <tbody><tr class="min-rows-spacer"><td colspan="5"></td></tr></tbody>
+      </table>
+      <div class="add-line-row"><button type="button" id="btnAddLine">+ línea</button></div>
+
+      <div class="totals-section">
+        <div class="letras-box">
+          <div class="letras-label">Total en letras</div>
+          <div class="letras-value" id="totalEnLetras">—</div>
+        </div>
+        <div class="totals-table">
+          <div class="trow"><span class="tlabel">Sub-Total</span><span id="t_subtotal">L. 0.00</span></div>
+          <div class="trow editable"><span class="tlabel">Descuentos</span><input id="descuentos" type="number" step="0.01" value="0"></div>
+          <div class="trow editable"><span class="tlabel">Exonerado</span><input id="importe_exonerado" type="number" step="0.01" value="0"></div>
+          <div class="trow editable"><span class="tlabel">Exento</span><input id="importe_exento" type="number" step="0.01" value="0"></div>
+          <div class="trow"><span class="tlabel">Gravado 15%</span><span id="t_gravado15">L. 0.00</span></div>
+          <div class="trow"><span class="tlabel">Gravado 18%</span><span id="t_gravado18">L. 0.00</span></div>
+          <div class="trow"><span class="tlabel">I.S.V. 15%</span><span id="t_isv15">L. 0.00</span></div>
+          <div class="trow"><span class="tlabel">I.S.V. 18%</span><span id="t_isv18">L. 0.00</span></div>
+          <div class="trow grand"><span>Total a Pagar</span><span id="t_total">L. 0.00</span></div>
+          <div class="toggle-gravado no-print">
+            <label><input type="checkbox" id="gravado_18_pct"> Gravar 18% en vez de 15%</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="exempt-refs">
+        <div class="erow"><div class="elabel">Orden de Compra Exenta</div><div class="evalue"><input id="orden_compra_exenta"></div></div>
+        <div class="erow"><div class="elabel">Constancia de Registro Exonerado</div><div class="evalue"><input id="constancia_registro_exonerado"></div></div>
+        <div class="erow"><div class="elabel">Registro de la SAG</div><div class="evalue"><input id="registro_sag"></div></div>
+      </div>
+
+      <div class="foot-lines">
+        <div><span class="flabel">RTN</span> <span id="footRtn">—</span> &nbsp;|&nbsp; <span class="flabel">Fecha Límite:</span> <span id="footFechaLimite">—</span></div>
+        <div><span class="flabel">Rango Autorizado:</span> <span id="footRango">—</span></div>
+        <div><span class="flabel">Original:</span> Cliente &nbsp;<span class="flabel">Amarilla:</span> Admin. &nbsp;<span class="flabel">Azul:</span> Contabilidad</div>
+      </div>
+
+      <div class="foot-tagline">La factura es beneficio de todos "Exíjala"</div>
+
+    </div>
+  </div>
+
+<script src="/facturacion/factura-common.js"></script>
+</body>
+</html>
