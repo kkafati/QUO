@@ -1167,6 +1167,8 @@ TEMPLATE_FILES = {
     "elegante": "ver-elegante.html",
     "compacta": "ver-compacta.html",
     "colorblock": "ver-colorblock.html",
+    "termica58": "ver-termica58.html",
+    "termica80": "ver-termica80.html",
 }
 
 

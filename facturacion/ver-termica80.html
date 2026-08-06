@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factura — Grupo Liquidámbar</title>
+<style>
+  @page { size: 80mm auto; margin: 3mm; }
+  :root { --ink: #000; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #ddd; color: var(--ink); font-family: 'Courier New', monospace; }
+
+  .toolbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 5; font-family: sans-serif; flex-wrap: wrap; gap: 6px; }
+  .toolbar-left { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar a { color: #065dac; text-decoration: none; font-weight: 600; font-size: 12px; }
+  .btn { border: 1.2px solid #111; background: #fff; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: sans-serif; }
+  .btn-primary { background: #065dac; color: #fff; border-color: #065dac; }
+  .btn-ghost { border-color: #ccc; color: #666; }
+  .btn-danger { border-color: #a33; color: #a33; }
+  .btn-danger:hover { background: #a33; color: #fff; }
+  .status { font-size: 11px; color: #888; font-family: sans-serif; }
+  .status.ok { color: #3f8f6a; }
+  .status.error { color: #a33; }
+
+  .sheet-wrap { width: 80mm; margin: 16px auto 60px; }
+  .sheet { background: #fff; padding: 4mm; font-size: 11px; line-height: 1.45; box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
+
+  .center { text-align: center; }
+  .fhead-logo { max-width: 42mm; height: auto; display: block; margin: 0 auto 2mm; }
+  .factura-title { font-size: 14px; font-weight: 700; letter-spacing: 0.1em; margin: 0; }
+  .factura-numero { font-size: 10.5px; margin-top: 1mm; }
+  .contact-list { margin: 2mm 0; font-size: 9.5px; }
+  .contact-row { margin-bottom: 0.5mm; }
+  .contact-icon { display: none; }
+
+  .dashed { border: none; border-top: 1px dashed #000; margin: 2mm 0; }
+
+  .info-block { margin-bottom: 2mm; }
+  .info-label { font-size: 9px; text-transform: uppercase; font-weight: 700; }
+  .cliente-nombre-input { font-size: 11.5px; font-weight: 700; border: none; background: transparent; font-family: inherit; padding: 0; width: 100%; }
+  .cliente-rtn-row { font-size: 10px; margin-top: 0.5mm; }
+  .cliente-rtn-row input { border: none; background: transparent; font-family: inherit; font-size: 10px; padding: 0; width: 100%; }
+  .fecha-value input { border: none; background: transparent; font-family: inherit; font-size: 11px; width: 100%; padding: 0; }
+
+  .term-row { display: flex; justify-content: center; gap: 5mm; margin: 3mm 0; font-size: 10.5px; }
+  .term-row label { display: flex; align-items: center; gap: 1mm; }
+
+  .cai-row { font-size: 8.5px; word-break: break-all; margin-bottom: 2mm; }
+
+  .lines-head { display: flex; justify-content: space-between; font-size: 9px; font-weight: 700; border-bottom: 1px solid #000; padding-bottom: 1mm; margin-bottom: 1mm; text-transform: uppercase; }
+  #linesBody { margin-bottom: 1mm; }
+  .line-row { padding: 1mm 0; border-bottom: 1px dotted #999; }
+  .line-desc-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 2mm; }
+  .line-desc-row input.descripcion { border: none; background: transparent; font-family: inherit; font-size: 11px; width: 100%; padding: 0; }
+  .line-meta-row { display: flex; align-items: center; gap: 2mm; font-size: 10px; margin-top: 0.5mm; color: #333; }
+  .line-meta-row input.cantidad { border: none; background: transparent; font-family: inherit; font-size: 10px; width: 22px; padding: 0; }
+  .line-meta-row input.precio { border: none; background: transparent; font-family: inherit; font-size: 10px; width: 50px; padding: 0; }
+  .line-meta-row .total-cell { margin-left: auto; font-weight: 700; }
+  .remove-line-btn { background: none; border: none; color: #a33; font-size: 11px; cursor: pointer; padding: 0; }
+  .add-line-row { margin: 1mm 0 2mm; text-align: center; }
+  .add-line-row button { background: none; border: 1px dashed #999; color: #666; font-size: 9px; padding: 2px 8px; cursor: pointer; font-family: sans-serif; }
+
+  .totals-block { font-size: 11px; margin-top: 2mm; }
+  .trow { display: flex; justify-content: space-between; padding: 0.5mm 0; }
+  .trow.editable input { border: none; background: transparent; font-family: inherit; font-size: 11px; text-align: right; width: 26mm; }
+  .trow.grand { border-top: 1px solid #000; margin-top: 1mm; padding-top: 1mm; font-weight: 700; font-size: 13px; }
+
+  .letras-box { margin-top: 2mm; font-size: 9.5px; }
+  .letras-label { font-weight: 700; text-transform: uppercase; font-size: 8px; }
+  .letras-value { line-height: 1.4; }
+
+  .exempt-refs { margin-top: 2mm; font-size: 8.5px; }
+  .exempt-refs .erow { margin-bottom: 1mm; }
+  .exempt-refs .elabel { display: block; }
+  .exempt-refs .evalue input { border: none; border-bottom: 1px dotted #999; background: transparent; font-family: inherit; font-size: 8.5px; width: 100%; padding: 0.5mm 0; }
+
+  .foot-lines { margin-top: 2mm; font-size: 8.5px; line-height: 1.6; word-break: break-all; }
+  .foot-lines .flabel { font-weight: 700; }
+  .foot-tagline { text-align: center; font-size: 9px; margin-top: 2mm; }
+  .toggle-gravado { margin-top: 1mm; font-size: 8px; text-align: center; }
+
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none !important; }
+    .sheet-wrap { margin: 0; width: 100%; }
+    .sheet { box-shadow: none; padding: 0; }
+    input { pointer-events: none; }
+    .remove-line-btn, .add-line-row, .toggle-gravado { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <a href="/facturacion/">← Facturación</a>
+      <span class="status" id="statusMsg"></span>
+    </div>
+    <div class="toolbar-left">
+      <select class="btn btn-ghost" id="templateSwitcher" style="cursor:pointer">
+        <option value="clasica">Plantilla: Clásica</option>
+        <option value="moderna">Plantilla: Moderna</option>
+        <option value="elegante">Plantilla: Elegante</option>
+        <option value="compacta">Plantilla: Compacta</option>
+        <option value="colorblock">Plantilla: Color Block</option>
+        <option value="termica58">Plantilla: Térmica 58mm</option>
+        <option value="termica80" selected>Plantilla: Térmica 80mm</option>
+      </select>
+      <button class="btn btn-primary" id="btnGuardar">Guardar</button>
+      <button class="btn btn-ghost" id="btnImprimir">🖨 Imprimir</button>
+      <button class="btn btn-danger" id="btnEliminar" style="display:none">Eliminar</button>
+    </div>
+  </div>
+
+  <div class="sheet-wrap">
+    <div class="sheet" id="sheet">
+
+      <div class="center">
+        <img class="fhead-logo" id="fheadLogo" src="" alt="" style="display:none">
+        <div class="factura-title">FACTURA</div>
+        <div class="factura-numero" id="facturaNumero">— sin guardar —</div>
+      </div>
+      <div class="contact-list center" id="contactList"></div>
+
+      <hr class="dashed">
+
+      <div class="info-block">
+        <div class="info-label">Cliente</div>
+        <input class="cliente-nombre-input" id="cliente_nombre" placeholder="Nombre del cliente">
+        <div class="cliente-rtn-row">RTN: <input id="cliente_rtn" placeholder="00000000000000"></div>
+      </div>
+      <div class="info-block">
+        <div class="info-label">Fecha</div>
+        <div class="fecha-value"><input id="fecha" type="date"></div>
+      </div>
+
+      <div class="term-row">
+        <label><input type="radio" name="termino_pago" value="credito" id="term-credito"> Crédito</label>
+        <label><input type="radio" name="termino_pago" value="contado" id="term-contado"> Contado</label>
+      </div>
+
+      <div class="cai-row"><strong>C.A.I.</strong> <span class="cai-value" id="caiValue">—</span></div>
+
+      <hr class="dashed">
+
+      <div class="lines-head"><span>Descripción</span><span>Total</span></div>
+      <div id="linesBody"></div>
+      <div class="add-line-row"><button type="button" id="btnAddLine">+ línea</button></div>
+
+      <hr class="dashed">
+
+      <div class="totals-block">
+        <div class="trow"><span>Sub-Total</span><span id="t_subtotal">L. 0.00</span></div>
+        <div class="trow editable"><span>Descuentos</span><input id="descuentos" type="number" step="0.01" value="0"></div>
+        <div class="trow editable"><span>Exonerado</span><input id="importe_exonerado" type="number" step="0.01" value="0"></div>
+        <div class="trow editable"><span>Exento</span><input id="importe_exento" type="number" step="0.01" value="0"></div>
+        <div class="trow"><span>Gravado 15%</span><span id="t_gravado15">L. 0.00</span></div>
+        <div class="trow"><span>Gravado 18%</span><span id="t_gravado18">L. 0.00</span></div>
+        <div class="trow"><span>I.S.V. 15%</span><span id="t_isv15">L. 0.00</span></div>
+        <div class="trow"><span>I.S.V. 18%</span><span id="t_isv18">L. 0.00</span></div>
+        <div class="trow grand"><span>TOTAL</span><span id="t_total">L. 0.00</span></div>
+        <div class="toggle-gravado no-print">
+          <label><input type="checkbox" id="gravado_18_pct"> Gravar 18%</label>
+        </div>
+      </div>
+
+      <div class="letras-box">
+        <div class="letras-label">Total en letras</div>
+        <div class="letras-value" id="totalEnLetras">—</div>
+      </div>
+
+      <hr class="dashed">
+
+      <div class="exempt-refs">
+        <div class="erow"><span class="elabel">Orden Compra Exenta:</span><input id="orden_compra_exenta"></div>
+        <div class="erow"><span class="elabel">Const. Registro Exonerado:</span><input id="constancia_registro_exonerado"></div>
+        <div class="erow"><span class="elabel">Registro SAG:</span><input id="registro_sag"></div>
+      </div>
+
+      <div class="foot-lines">
+        <div><span class="flabel">RTN</span> <span id="footRtn">—</span></div>
+        <div><span class="flabel">Fecha Límite Emisión:</span> <span id="footFechaLimite">—</span></div>
+        <div><span class="flabel">Rango Autorizado:</span> <span id="footRango">—</span></div>
+        <div style="margin-top:1mm">Original: Cliente / Amarilla: Admin / Azul: Contab.</div>
+      </div>
+
+      <div class="foot-tagline">"La factura es beneficio de todos, Exíjala"</div>
+
+    </div>
+  </div>
+
+<script>window.LINE_ROW_TEMPLATE = "compact";</script>
+<script src="/facturacion/factura-common.js"></script>
+</body>
+</html>

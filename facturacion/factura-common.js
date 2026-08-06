@@ -31,7 +31,21 @@ async function loadAccount() {
 }
 
 function renderLines() {
-  document.getElementById("linesBody").innerHTML = lines.map(ln => `
+  const compact = window.LINE_ROW_TEMPLATE === "compact";
+
+  document.getElementById("linesBody").innerHTML = lines.map(ln => compact ? `
+    <div class="line-row" data-row="${ln._key}">
+      <div class="line-desc-row">
+        <input class="descripcion" value="${esc(ln.descripcion)}" placeholder="Descripción">
+        <button type="button" class="remove-line-btn no-print">×</button>
+      </div>
+      <div class="line-meta-row">
+        <input class="cantidad" type="number" step="1" value="${ln.cantidad}"> x
+        <input class="precio" type="number" step="0.01" value="${ln.precio_unitario}">
+        <span class="total-cell">${fmt((ln.cantidad || 0) * (ln.precio_unitario || 0))}</span>
+      </div>
+    </div>
+  ` : `
     <tr data-row="${ln._key}">
       <td><input class="cantidad" type="number" step="1" value="${ln.cantidad}"></td>
       <td><input class="descripcion" value="${esc(ln.descripcion)}" placeholder="Descripción del artículo/servicio"></td>
@@ -41,13 +55,13 @@ function renderLines() {
     </tr>
   `).join("");
 
-  document.querySelectorAll("#linesBody tr").forEach(tr => {
-    const key = tr.dataset.row;
+  document.querySelectorAll("#linesBody [data-row]").forEach(row => {
+    const key = row.dataset.row;
     const line = lines.find(l => l._key === key);
-    tr.querySelector(".cantidad").addEventListener("input", (e) => { line.cantidad = parseFloat(e.target.value) || 0; renderLines(); updateTotals(); });
-    tr.querySelector(".descripcion").addEventListener("input", (e) => { line.descripcion = e.target.value; });
-    tr.querySelector(".precio").addEventListener("input", (e) => { line.precio_unitario = parseFloat(e.target.value) || 0; renderLines(); updateTotals(); });
-    tr.querySelector(".remove-line-btn").addEventListener("click", () => {
+    row.querySelector(".cantidad").addEventListener("input", (e) => { line.cantidad = parseFloat(e.target.value) || 0; renderLines(); updateTotals(); });
+    row.querySelector(".descripcion").addEventListener("input", (e) => { line.descripcion = e.target.value; });
+    row.querySelector(".precio").addEventListener("input", (e) => { line.precio_unitario = parseFloat(e.target.value) || 0; renderLines(); updateTotals(); });
+    row.querySelector(".remove-line-btn").addEventListener("click", () => {
       lines = lines.filter(l => l._key !== key);
       renderLines(); updateTotals();
     });
@@ -218,6 +232,7 @@ document.getElementById("btnEliminar").addEventListener("click", async () => {
 const TEMPLATE_BY_FILE = {
   "ver.html": "clasica", "ver-moderna.html": "moderna", "ver-elegante.html": "elegante",
   "ver-compacta.html": "compacta", "ver-colorblock.html": "colorblock",
+  "ver-termica58.html": "termica58", "ver-termica80.html": "termica80",
 };
 const currentFile = window.location.pathname.split("/").filter(Boolean).pop() || "ver.html";
 const templateSwitcher = document.getElementById("templateSwitcher");

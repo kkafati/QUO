@@ -43,6 +43,9 @@ Deleting a Material, Labor, Herramienta, Transporte, Gasto, Ficha de Costo, or C
 
 All 5 share one JS file (`facturacion/factura-common.js`) for data loading, line-item editing, totals math, and saving — so a fix or improvement to that logic applies to every template at once, rather than needing to be repeated 5 times.
 
+**Now 7 templates total** — the 5 above, plus **Térmica 58mm** and **Térmica 80mm** for Epson-style thermal receipt printers. These use `@page { size: 58mm/80mm auto }` so the print dialog outputs a continuous receipt-width strip instead of a full page, monospace typography for that classic receipt look, and a stacked (not tabular) line-item layout — description on its own line, then quantity/price/total below it — since a 4-column table simply doesn't fit on a 58mm roll. All the same legally-required fields (CAI, RTN, Rango Autorizado, Fecha Límite, Total en Letras, exemption references) are still there, just condensed to fit.
+
+
 
 **Live now** at `/facturacion/`, replacing the old "Próximamente" placeholder. This is Template 1 of the planned set — built to match your exact real invoice format (logo/contact header, C.A.I., línea items, Total en Letras, exemption references, Rango Autorizado footer, all of it).
 
