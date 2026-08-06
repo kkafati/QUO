@@ -21,8 +21,12 @@ class Account(db.Model):
     website = db.Column(db.String(255))
     currency = db.Column(db.String(8), default="HNL")
     logo_data_url = db.Column(db.Text)           # base64 data: URL, optional custom logo
-    invoice_prefix = db.Column(db.String(16), default="FAC-")
+    invoice_prefix = db.Column(db.String(24), default="")   # e.g. 000-001-01-00000000
     next_invoice_number = db.Column(db.Integer, default=1)
+    cai = db.Column(db.String(40))                          # Código de Autorización de Impresión
+    cai_fecha_limite = db.Column(db.String(10))              # DD/MM/AAAA
+    rango_autorizado_desde = db.Column(db.String(24))
+    rango_autorizado_hasta = db.Column(db.String(24))
     last_seen = db.Column(db.String(32))  # updated on each authenticated request, for "online now"
 
 

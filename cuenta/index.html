@@ -59,6 +59,15 @@
   }
   .field input:focus, .field select:focus { outline: none; border-color: var(--blue); }
 
+  .seg-group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .seg-input {
+    padding: 10px 8px; border: 1.5px solid #dde1e5; border-radius: 8px;
+    font-size: 14px; font-family: 'IBM Plex Mono', monospace; text-align: center;
+    background: #fff; text-transform: uppercase;
+  }
+  .seg-input:focus { outline: none; border-color: var(--blue); }
+  .seg-sep { color: var(--ink-soft); font-weight: 700; font-size: 14px; }
+
   .logo-row { display: flex; align-items: center; gap: 20px; margin-bottom: 4px; }
   .logo-preview {
     width: 84px; height: 84px; border-radius: 12px; border: 1.5px solid #e7e9ec;
@@ -147,9 +156,79 @@
 
       <div class="card">
         <h2>Facturación</h2>
-        <div class="row">
-          <div class="field"><label>Prefijo de Factura</label><input id="invoice_prefix" placeholder="FAC-"></div>
-          <div class="field"><label>Próximo Número</label><input id="next_invoice_number" type="number" min="1"></div>
+
+        <div class="field" style="margin-bottom:18px">
+          <label>Prefijo de Factura</label>
+          <div class="seg-group" id="seg-invoice_prefix" data-sep="-">
+            <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:3.4em">
+            <span class="seg-sep">-</span>
+            <input class="seg-input" data-numeric maxlength="3" placeholder="001" style="width:3.4em">
+            <span class="seg-sep">-</span>
+            <input class="seg-input" data-numeric maxlength="2" placeholder="01" style="width:2.6em">
+            <span class="seg-sep">-</span>
+            <input class="seg-input" data-numeric maxlength="8" placeholder="00000000" style="width:7em">
+          </div>
+        </div>
+
+        <div class="field" style="margin-bottom:18px; max-width:200px">
+          <label>Próximo Número</label>
+          <input id="next_invoice_number" type="number" min="1">
+        </div>
+
+        <div class="field" style="margin-bottom:18px">
+          <label>Código de Autorización de Impresión (C.A.I.)</label>
+          <div class="seg-group" id="seg-cai" data-sep="-">
+            <input class="seg-input" data-alnum maxlength="6" placeholder="X0X0XX" style="width:5.2em">
+            <span class="seg-sep">-</span>
+            <input class="seg-input" data-alnum maxlength="6" placeholder="X0X0XX" style="width:5.2em">
+            <span class="seg-sep">-</span>
+            <input class="seg-input" data-alnum maxlength="6" placeholder="0X0X0X" style="width:5.2em">
+            <span class="seg-sep">-</span>
+            <input class="seg-input" data-alnum maxlength="6" placeholder="X0X0X0" style="width:5.2em">
+            <span class="seg-sep">-</span>
+            <input class="seg-input" data-alnum maxlength="6" placeholder="0X0X0X" style="width:5.2em">
+            <span class="seg-sep">-</span>
+            <input class="seg-input" data-alnum maxlength="2" placeholder="X0" style="width:2.6em">
+          </div>
+        </div>
+
+        <div class="field" style="margin-bottom:18px">
+          <label>Fecha Límite de Emisión</label>
+          <div class="seg-group" id="seg-cai_fecha_limite" data-sep="/">
+            <input class="seg-input" data-numeric maxlength="2" placeholder="07" style="width:2.6em">
+            <span class="seg-sep">/</span>
+            <input class="seg-input" data-numeric maxlength="2" placeholder="03" style="width:2.6em">
+            <span class="seg-sep">/</span>
+            <input class="seg-input" data-numeric maxlength="4" placeholder="2026" style="width:4em">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Rango Autorizado</label>
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px">
+            <span style="font-size:12px; color:var(--ink-soft); width:52px">Desde</span>
+            <div class="seg-group" id="seg-rango_autorizado_desde" data-sep="-">
+              <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:3.4em">
+              <span class="seg-sep">-</span>
+              <input class="seg-input" data-numeric maxlength="3" placeholder="001" style="width:3.4em">
+              <span class="seg-sep">-</span>
+              <input class="seg-input" data-numeric maxlength="2" placeholder="01" style="width:2.6em">
+              <span class="seg-sep">-</span>
+              <input class="seg-input" data-numeric maxlength="8" placeholder="00000001" style="width:7em">
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+            <span style="font-size:12px; color:var(--ink-soft); width:52px">Hasta</span>
+            <div class="seg-group" id="seg-rango_autorizado_hasta" data-sep="-">
+              <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:3.4em">
+              <span class="seg-sep">-</span>
+              <input class="seg-input" data-numeric maxlength="3" placeholder="001" style="width:3.4em">
+              <span class="seg-sep">-</span>
+              <input class="seg-input" data-numeric maxlength="2" placeholder="01" style="width:2.6em">
+              <span class="seg-sep">-</span>
+              <input class="seg-input" data-numeric maxlength="8" placeholder="00000100" style="width:7em">
+            </div>
+          </div>
         </div>
       </div>
 
@@ -187,6 +266,45 @@ loadActivity();
 <script>
 let logoDataUrl = null;
 
+// ---- Segmented input groups (Prefijo, CAI, Fecha Límite, Rango Autorizado) ----
+function setupSegmentedGroup(groupEl) {
+  const inputs = Array.from(groupEl.querySelectorAll(".seg-input"));
+  inputs.forEach((input, idx) => {
+    input.addEventListener("input", () => {
+      let val = input.value;
+      if (input.hasAttribute("data-numeric")) val = val.replace(/[^0-9]/g, "");
+      else if (input.hasAttribute("data-alnum")) val = val.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      input.value = val;
+      if (val.length >= parseInt(input.maxLength) && idx < inputs.length - 1) {
+        inputs[idx + 1].focus();
+      }
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Backspace" && input.value === "" && idx > 0) {
+        inputs[idx - 1].focus();
+      }
+    });
+  });
+}
+
+function getSegmentedValue(groupId) {
+  const group = document.getElementById(groupId);
+  const sep = group.dataset.sep;
+  const values = Array.from(group.querySelectorAll(".seg-input")).map(i => i.value);
+  if (values.every(v => v === "")) return "";
+  return values.join(sep);
+}
+
+function setSegmentedValue(groupId, value) {
+  const group = document.getElementById(groupId);
+  const sep = group.dataset.sep;
+  const inputs = Array.from(group.querySelectorAll(".seg-input"));
+  const parts = (value || "").split(sep);
+  inputs.forEach((input, idx) => { input.value = parts[idx] || ""; });
+}
+
+document.querySelectorAll(".seg-group").forEach(setupSegmentedGroup);
+
 async function loadProfile() {
   const res = await fetch("/api/account");
   const p = await res.json();
@@ -198,8 +316,12 @@ async function loadProfile() {
   document.getElementById("phone").value = p.phone || "";
   document.getElementById("email").value = p.email || "";
   document.getElementById("website").value = p.website || "";
-  document.getElementById("invoice_prefix").value = p.invoice_prefix || "FAC-";
+  setSegmentedValue("seg-invoice_prefix", p.invoice_prefix);
   document.getElementById("next_invoice_number").value = p.next_invoice_number || 1;
+  setSegmentedValue("seg-cai", p.cai);
+  setSegmentedValue("seg-cai_fecha_limite", p.cai_fecha_limite);
+  setSegmentedValue("seg-rango_autorizado_desde", p.rango_autorizado_desde);
+  setSegmentedValue("seg-rango_autorizado_hasta", p.rango_autorizado_hasta);
   logoDataUrl = p.logo_data_url || null;
   renderLogoPreview();
 }
@@ -248,8 +370,12 @@ document.getElementById("settingsForm").addEventListener("submit", async (e) => 
     phone: document.getElementById("phone").value,
     email: document.getElementById("email").value,
     website: document.getElementById("website").value,
-    invoice_prefix: document.getElementById("invoice_prefix").value,
+    invoice_prefix: getSegmentedValue("seg-invoice_prefix"),
     next_invoice_number: document.getElementById("next_invoice_number").value,
+    cai: getSegmentedValue("seg-cai"),
+    cai_fecha_limite: getSegmentedValue("seg-cai_fecha_limite"),
+    rango_autorizado_desde: getSegmentedValue("seg-rango_autorizado_desde"),
+    rango_autorizado_hasta: getSegmentedValue("seg-rango_autorizado_hasta"),
     logo_data_url: logoDataUrl,
   };
 

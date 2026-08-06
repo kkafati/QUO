@@ -162,6 +162,10 @@ def account_profile_dict(account):
         "logo_data_url": account.logo_data_url,
         "invoice_prefix": account.invoice_prefix,
         "next_invoice_number": account.next_invoice_number,
+        "cai": account.cai,
+        "cai_fecha_limite": account.cai_fecha_limite,
+        "rango_autorizado_desde": account.rango_autorizado_desde,
+        "rango_autorizado_hasta": account.rango_autorizado_hasta,
     }
 
 
@@ -189,11 +193,15 @@ def update_account_profile():
     account.email = (data.get("email") or "").strip()
     account.website = (data.get("website") or "").strip()
     account.currency = (data.get("currency") or "HNL").strip()
-    account.invoice_prefix = (data.get("invoice_prefix") or "FAC-").strip()
+    account.invoice_prefix = (data.get("invoice_prefix") or "").strip()
     try:
         account.next_invoice_number = int(data.get("next_invoice_number", account.next_invoice_number) or 1)
     except (TypeError, ValueError):
         pass
+    account.cai = (data.get("cai") or "").strip().upper()
+    account.cai_fecha_limite = (data.get("cai_fecha_limite") or "").strip()
+    account.rango_autorizado_desde = (data.get("rango_autorizado_desde") or "").strip()
+    account.rango_autorizado_hasta = (data.get("rango_autorizado_hasta") or "").strip()
     if "logo_data_url" in data:
         account.logo_data_url = data.get("logo_data_url") or None
 
