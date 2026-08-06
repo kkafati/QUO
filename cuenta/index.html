@@ -34,7 +34,7 @@
   .topbar-links a { color: var(--blue); text-decoration: none; font-weight: 600; font-size: 13px; }
   .topbar-links a:hover { text-decoration: underline; }
 
-  .wrap { max-width: 720px; margin: 0 auto; padding: 40px 24px 80px; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 40px 24px 80px; }
   h1 { font-size: 22px; font-weight: 700; margin: 0 0 6px; }
   p.sub { color: var(--ink-soft); font-size: 14px; margin: 0 0 32px; }
 
@@ -59,7 +59,7 @@
   }
   .field input:focus, .field select:focus { outline: none; border-color: var(--blue); }
 
-  .seg-group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .seg-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .seg-input {
     box-sizing: border-box;
     flex-shrink: 0;
@@ -313,12 +313,20 @@ function getSegmentedValue(groupId) {
   return values.join(sep);
 }
 
+function sanitizeSegmentValue(input, raw) {
+  if (input.hasAttribute("data-numeric")) return (raw || "").replace(/[^0-9]/g, "").slice(0, input.maxLength);
+  if (input.hasAttribute("data-alnum")) return (raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, input.maxLength);
+  return (raw || "").slice(0, input.maxLength);
+}
+
 function setSegmentedValue(groupId, value) {
   const group = document.getElementById(groupId);
   const sep = group.dataset.sep;
   const inputs = Array.from(group.querySelectorAll(".seg-input"));
   const parts = (value || "").split(sep);
-  inputs.forEach((input, idx) => { input.value = parts[idx] || ""; });
+  inputs.forEach((input, idx) => {
+    input.value = sanitizeSegmentValue(input, parts[idx]);
+  });
 }
 
 document.querySelectorAll(".seg-group").forEach(setupSegmentedGroup);
