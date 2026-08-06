@@ -37,6 +37,22 @@ Deleting a Material, Labor, Herramienta, Transporte, Gasto, Ficha de Costo, or C
 
 **Scope note:** this covers the items people most often worry about losing by accident. Individual supplier price quotes (Cotización de Proveedores entries) are still deleted immediately when removed — those are quick to re-enter and lower-stakes than losing a whole ficha or cotización, so they weren't included in this system. Ask if you'd like that extended to cover them too.
 
+## Facturación (billing/invoicing)
+
+**Live now** at `/facturacion/`, replacing the old "Próximamente" placeholder. This is Template 1 of the planned set — built to match your exact real invoice format (logo/contact header, C.A.I., línea items, Total en Letras, exemption references, Rango Autorizado footer, all of it).
+
+**Before creating your first invoice**, fill in the Facturación section of `/cuenta/` — Prefijo de Factura, C.A.I., Fecha Límite de Emisión, and Rango Autorizado. The system won't let you create an invoice until Prefijo de Factura is set (it needs that to generate the invoice number), and every invoice pulls your CAI/RTN/contact info live from that same page — set it once there, not per-invoice.
+
+**Invoice numbering is now real, not just a display field**: each new invoice takes the current "Próximo Número," assembles it into the full `000-001-01-00000001` format using your Prefijo, and automatically advances the counter for the next one. No manual bookkeeping needed.
+
+**"Total en Letras"** (the amount spelled out in words, e.g. "TRES MIL TRESCIENTOS NOVENTA Y SEIS LEMPIRAS CON 24/100") is generated automatically by `backend/numero_a_letras.py` — a from-scratch Spanish number-to-words converter, tested against 13 cases including the tricky ones (teens, "veintiuno" contraction, "cien" vs "ciento", singular "un millón" vs plural "millones").
+
+**Tax handling in this first version**: every invoice is either fully 15%-gravado or fully 18%-gravado (a toggle on the invoice) — not per-line-item tax classification. Importe Exonerado/Exento are entered as manual override amounts subtracted from the taxable base. This covers the common case cleanly; true per-line tax categorization would be a meaningful follow-up if you need it.
+
+**Soft-delete/trash** works the same as everywhere else in the app — deleting an invoice moves it to Papelera, recoverable, never an instant permanent loss.
+
+**What's next**: templates 2-5 (different visual styles, same underlying data/math) are a much smaller lift now that this foundation is solid — say the word when you want them.
+
 ## Analytics: online status, login history, page views
 
 **For you (platform admin)** — a completely separate login at `/admin/login`, not tied to any business account. Set it up once:

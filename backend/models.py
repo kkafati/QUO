@@ -220,3 +220,43 @@ class PageView(db.Model):
     timestamp = db.Column(db.String(32), nullable=False)
     ip_address = db.Column(db.String(64))
 
+
+class Invoice(db.Model):
+    """A Factura. CAI, Rango Autorizado, Fecha Límite, and the business's own
+    RTN/contact info all come live from the Account profile at render time -
+    not duplicated here - so updating them in Cuenta updates every invoice."""
+    __tablename__ = "invoices"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    numero = db.Column(db.String(32), nullable=False)   # e.g. 000-001-01-00000001
+    template = db.Column(db.String(32), nullable=False, default="clasica")
+
+    cliente_nombre = db.Column(db.String(255), nullable=False)
+    cliente_rtn = db.Column(db.String(32))
+    fecha = db.Column(db.String(16), nullable=False)
+    termino_pago = db.Column(db.String(16), nullable=False, default="contado")  # contado | credito
+
+    descuentos = db.Column(db.Float, default=0)
+    importe_exonerado = db.Column(db.Float, default=0)
+    importe_exento = db.Column(db.Float, default=0)
+    gravado_18_pct = db.Column(db.Boolean, default=False)  # if true, items are taxed at 18% instead of 15%
+
+    orden_compra_exenta = db.Column(db.String(64))
+    constancia_registro_exonerado = db.Column(db.String(64))
+    registro_sag = db.Column(db.String(64))
+
+    created_at = db.Column(db.String(16))
+    updated_at = db.Column(db.String(16))
+    deleted_at = db.Column(db.String(16))
+
+    lines = db.relationship("InvoiceLine", backref="invoice", cascade="all, delete-orphan")
+
+
+class InvoiceLine(db.Model):
+    __tablename__ = "invoice_lines"
+    id = db.Column(db.Integer, primary_key=True)
+    invoice_id = db.Column(db.Integer, db.ForeignKey("invoices.id"), nullable=False)
+    cantidad = db.Column(db.Float, nullable=False, default=1)
+    descripcion = db.Column(db.String(500), nullable=False)
+    precio_unitario = db.Column(db.Float, nullable=False, default=0)
+

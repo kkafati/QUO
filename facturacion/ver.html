@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factura — Grupo Liquidámbar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --blue: #065dac; --lime: #cddc28; --ink: #16232f; --ink-soft: #5a6570; --dark-head: #3a3f45; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #eef0f2; color: var(--ink); font-family: 'Poppins', sans-serif; }
+
+  .toolbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 24px; background: #fff; border-bottom: 1px solid #e7e9ec; position: sticky; top: 0; z-index: 5;
+  }
+  .toolbar-left { display: flex; gap: 10px; align-items: center; }
+  .toolbar a { color: var(--blue); text-decoration: none; font-weight: 600; font-size: 13px; }
+  .btn { border: 1.5px solid var(--ink); background: #fff; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 8px; }
+  .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn-primary:hover { background: #054a87; }
+  .btn-ghost { border-color: #dde1e5; color: var(--ink-soft); }
+  .btn-danger { border-color: #b5453b; color: #b5453b; }
+  .btn-danger:hover { background: #b5453b; color: #fff; }
+  .status { font-size: 12px; color: var(--ink-soft); margin-left: 10px; }
+  .status.ok { color: #3f8f6a; }
+  .status.error { color: #b5453b; }
+
+  .sheet-wrap { max-width: 900px; margin: 28px auto 80px; }
+  .sheet {
+    background: #fff; padding: 40px 44px; box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  }
+
+  /* ---- header ---- */
+  .fhead { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; }
+  .fhead-left { display: flex; gap: 18px; align-items: flex-start; }
+  .fhead-logo { width: 110px; height: auto; }
+  .contact-list { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+  .contact-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #333; }
+  .contact-icon {
+    width: 20px; height: 20px; border-radius: 50%; border: 1.4px solid var(--blue); color: var(--blue);
+    display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0;
+  }
+  .contact-row input { border: none; background: transparent; font-size: 12px; color: #333; font-family: inherit; padding: 0; }
+  .fhead-right { text-align: right; }
+  .fhead-right .factura-title { font-size: 34px; font-weight: 800; letter-spacing: 0.03em; color: var(--dark-head); margin: 0; }
+  .fhead-right .factura-numero { font-size: 17px; font-weight: 700; color: var(--ink); margin-top: 6px; }
+
+  /* ---- cliente / fecha ---- */
+  .info-row { display: flex; justify-content: space-between; border-bottom: 1.5px solid #c9ced3; padding-bottom: 10px; margin-bottom: 14px; }
+  .info-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); font-weight: 600; margin-bottom: 4px; }
+  .cliente-nombre-input { font-size: 16px; font-weight: 700; border: none; background: transparent; font-family: inherit; padding: 0; width: 260px; }
+  .cliente-rtn-row { font-size: 13px; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
+  .cliente-rtn-row input { border: none; background: transparent; font-family: inherit; font-size: 13px; padding: 0; width: 160px; }
+  .fecha-value { font-size: 20px; font-weight: 700; text-align: right; }
+  .fecha-value input { border: none; background: transparent; font-family: inherit; font-size: 20px; font-weight: 700; text-align: right; width: 130px; }
+
+  .term-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px; }
+  .term-row label { display: flex; align-items: center; gap: 5px; font-weight: 600; cursor: pointer; }
+  .term-title { color: var(--blue); font-weight: 700; }
+
+  .cai-row { text-align: right; font-size: 12px; color: #333; border-bottom: 2px solid var(--blue); padding-bottom: 10px; margin-bottom: 4px; }
+  .cai-row .cai-value { font-family: monospace; letter-spacing: 0.02em; }
+
+  /* ---- line items ---- */
+  .items-table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+  .items-table thead th {
+    background: var(--dark-head); color: #fff; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 10px 12px; text-align: left; font-weight: 600;
+  }
+  .items-table thead th.num { text-align: right; }
+  .items-table td { padding: 8px 12px; border-bottom: 1px solid #eceeef; vertical-align: top; font-size: 13px; }
+  .items-table td.num { text-align: right; }
+  .items-table input { border: none; background: transparent; font-family: inherit; font-size: 13px; width: 100%; padding: 4px 0; }
+  .items-table input.cantidad { text-align: center; }
+  .items-table input.precio, .items-table .total-cell { text-align: right; }
+  .items-table tbody tr:hover { background: #fafbfc; }
+  .min-rows-spacer td { border-bottom: none; height: 180px; vertical-align: top; }
+  .remove-line-btn { background: none; border: none; color: #b5453b; cursor: pointer; font-size: 14px; padding: 0 4px; }
+  .add-line-row { margin: 10px 0 0; }
+  .add-line-row button { background: none; border: 1px dashed #c9ced3; color: var(--ink-soft); font-size: 12px; padding: 6px 14px; cursor: pointer; border-radius: 6px; }
+
+  /* ---- totals section ---- */
+  .totals-section { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 20px; gap: 24px; }
+  .letras-box { display: flex; flex: 1; border: 1px solid #dde1e5; border-radius: 4px; overflow: hidden; }
+  .letras-label { background: var(--blue); color: #fff; font-weight: 700; font-size: 13px; text-align: center; padding: 14px 10px; width: 90px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .letras-value { padding: 10px 14px; font-size: 11.5px; color: #333; line-height: 1.5; }
+
+  .totals-table { width: 300px; flex-shrink: 0; font-size: 13px; }
+  .totals-table .trow { display: flex; justify-content: space-between; padding: 3px 0; }
+  .totals-table .trow.editable input { border: none; background: transparent; font-family: inherit; font-size: 13px; text-align: right; width: 90px; }
+  .totals-table .trow .tlabel { color: var(--ink-soft); }
+  .totals-table .trow.grand { border-top: 2px solid var(--blue); margin-top: 6px; padding-top: 8px; font-weight: 700; font-size: 14px; }
+  .totals-table .trow .lcode { font-weight: 600; margin-right: 4px; }
+
+  /* ---- exemption references ---- */
+  .exempt-refs { margin-top: 22px; font-size: 11px; width: 60%; }
+  .exempt-refs .erow { display: flex; border: 1px solid #dde1e5; border-top: none; }
+  .exempt-refs .erow:first-child { border-top: 1px solid #dde1e5; }
+  .exempt-refs .elabel { padding: 5px 8px; width: 62%; color: #333; }
+  .exempt-refs .evalue { padding: 5px 8px; width: 38%; border-left: 1px solid #dde1e5; }
+  .exempt-refs .evalue input { border: none; background: transparent; font-family: inherit; font-size: 11px; width: 100%; }
+
+  /* ---- footer ---- */
+  .foot-lines { margin-top: 18px; font-size: 12px; line-height: 1.9; }
+  .foot-lines .flabel { font-weight: 700; }
+  .foot-tagline { text-align: center; font-size: 12px; font-style: italic; margin-top: 22px; color: #333; }
+  .toggle-gravado { margin-top: 6px; font-size: 11px; }
+  .toggle-gravado label { cursor: pointer; }
+
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none !important; }
+    .sheet-wrap { margin: 0; max-width: 100%; }
+    .sheet { box-shadow: none; padding: 20px 30px; }
+    input { pointer-events: none; }
+    .remove-line-btn, .add-line-row, .toggle-gravado { display: none !important; }
+    .min-rows-spacer { height: auto !important; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <a href="/facturacion/">← Facturación</a>
+      <span class="status" id="statusMsg"></span>
+    </div>
+    <div class="toolbar-left">
+      <button class="btn btn-primary" id="btnGuardar">Guardar Factura</button>
+      <button class="btn btn-ghost" id="btnImprimir">🖨 Imprimir / PDF</button>
+      <button class="btn btn-danger" id="btnEliminar" style="display:none">Eliminar</button>
+    </div>
+  </div>
+
+  <div class="sheet-wrap">
+    <div class="sheet" id="sheet">
+
+      <div class="fhead">
+        <div class="fhead-left">
+          <img class="fhead-logo" id="fheadLogo" src="" alt="" style="display:none">
+          <div class="contact-list" id="contactList"></div>
+        </div>
+        <div class="fhead-right">
+          <div class="factura-title">FACTURA</div>
+          <div class="factura-numero" id="facturaNumero">— sin guardar —</div>
+        </div>
+      </div>
+
+      <div class="info-row">
+        <div>
+          <div class="info-label">Cliente</div>
+          <input class="cliente-nombre-input" id="cliente_nombre" placeholder="Nombre del cliente">
+          <div class="cliente-rtn-row">RTN: <input id="cliente_rtn" placeholder="00000000000000"></div>
+        </div>
+        <div>
+          <div class="info-label" style="text-align:right">Fecha</div>
+          <div class="fecha-value"><input id="fecha" type="date"></div>
+        </div>
+      </div>
+
+      <div class="term-row">
+        <span class="term-title">Término de Pago</span>
+        <label><input type="radio" name="termino_pago" value="credito" id="term-credito"> Crédito</label>
+        <label><input type="radio" name="termino_pago" value="contado" id="term-contado"> Contado</label>
+      </div>
+
+      <div class="cai-row">C.A.I. <span class="cai-value" id="caiValue">—</span></div>
+
+      <table class="items-table">
+        <thead><tr>
+          <th style="width:80px">Cantidad</th><th>Descripción</th>
+          <th class="num" style="width:130px">Precio Unitario</th><th class="num" style="width:120px">Total</th>
+          <th class="no-print" style="width:24px"></th>
+        </tr></thead>
+        <tbody id="linesBody"></tbody>
+        <tbody><tr class="min-rows-spacer"><td colspan="5"></td></tr></tbody>
+      </table>
+      <div class="add-line-row"><button type="button" id="btnAddLine">+ Agregar línea</button></div>
+
+      <div class="totals-section">
+        <div class="letras-box">
+          <div class="letras-label">Total<br>(en letras)</div>
+          <div class="letras-value" id="totalEnLetras">—</div>
+        </div>
+        <div class="totals-table">
+          <div class="trow"><span class="tlabel">Sub-Total</span><span id="t_subtotal">L. 0.00</span></div>
+          <div class="trow editable"><span class="tlabel">Descuentos y Rebajas</span><input id="descuentos" type="number" step="0.01" value="0"></div>
+          <div class="trow editable"><span class="tlabel">Importe Exonerado</span><input id="importe_exonerado" type="number" step="0.01" value="0"></div>
+          <div class="trow editable"><span class="tlabel">Importe Exento</span><input id="importe_exento" type="number" step="0.01" value="0"></div>
+          <div class="trow"><span class="tlabel">Importe Gravado 15%</span><span id="t_gravado15">L. 0.00</span></div>
+          <div class="trow"><span class="tlabel">Importe Gravado 18%</span><span id="t_gravado18">L. 0.00</span></div>
+          <div class="trow"><span class="tlabel">I.S.V. 15%</span><span id="t_isv15">L. 0.00</span></div>
+          <div class="trow"><span class="tlabel">I.S.V. 18%</span><span id="t_isv18">L. 0.00</span></div>
+          <div class="trow grand"><span>Total a Pagar</span><span id="t_total">L. 0.00</span></div>
+          <div class="toggle-gravado no-print">
+            <label><input type="checkbox" id="gravado_18_pct"> Gravar al 18% en vez de 15%</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="exempt-refs">
+        <div class="erow"><div class="elabel">No. Correlativo de Orden de Compra Exenta</div><div class="evalue"><input id="orden_compra_exenta"></div></div>
+        <div class="erow"><div class="elabel">No. Correlativo de Constancia de Registro Exonerado</div><div class="evalue"><input id="constancia_registro_exonerado"></div></div>
+        <div class="erow"><div class="elabel">No. de Registro de la SAG</div><div class="evalue"><input id="registro_sag"></div></div>
+      </div>
+
+      <div class="foot-lines">
+        <div><span class="flabel">RTN</span> <span id="footRtn">—</span></div>
+        <div><span class="flabel">Fecha Límite de Emisión:</span> <span id="footFechaLimite">—</span></div>
+        <div><span class="flabel">Rango Autorizado:</span> <span id="footRango">—</span></div>
+        <div><span class="flabel">Original Blanca:</span> Cliente&nbsp;&nbsp;&nbsp;<span class="flabel">Copia Amarilla:</span> Administración&nbsp;&nbsp;&nbsp;<span class="flabel">Copia Azul:</span> Contabilidad</div>
+      </div>
+
+      <div class="foot-tagline">La factura es beneficio de todos "Exíjala"</div>
+
+    </div>
+  </div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const invoiceId = params.get("id");
+let lines = [];
+let account = null;
+
+function esc(s) { return (s ?? "").toString().replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+function fmt(n) { return "L. " + (Number(n) || 0).toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function uid() { return Math.random().toString(36).slice(2, 9); }
+
+function blankLine() { return { _key: uid(), cantidad: 1, descripcion: "", precio_unitario: 0 }; }
+
+async function loadAccount() {
+  account = await fetch("/api/account").then(r => r.json());
+  if (account.logo_data_url) {
+    document.getElementById("fheadLogo").src = account.logo_data_url;
+    document.getElementById("fheadLogo").style.display = "block";
+  }
+  document.getElementById("contactList").innerHTML = `
+    <div class="contact-row"><span class="contact-icon">☎</span> ${esc(account.phone || "—")}</div>
+    <div class="contact-row"><span class="contact-icon">✉</span> ${esc(account.email || "—")}</div>
+    <div class="contact-row"><span class="contact-icon">⌂</span> ${esc(account.address || "—")}</div>
+    <div class="contact-row"><span class="contact-icon">🌐</span> ${esc(account.website || "—")}</div>
+  `;
+  document.getElementById("caiValue").textContent = account.cai || "— sin configurar —";
+  document.getElementById("footRtn").textContent = account.tax_id || "—";
+  document.getElementById("footFechaLimite").textContent = account.cai_fecha_limite || "—";
+  document.getElementById("footRango").textContent =
+    (account.rango_autorizado_desde && account.rango_autorizado_hasta)
+      ? `${account.rango_autorizado_desde} al ${account.rango_autorizado_hasta}`
+      : "—";
+}
+
+function renderLines() {
+  document.getElementById("linesBody").innerHTML = lines.map(ln => `
+    <tr data-row="${ln._key}">
+      <td><input class="cantidad" type="number" step="1" value="${ln.cantidad}"></td>
+      <td><input class="descripcion" value="${esc(ln.descripcion)}" placeholder="Descripción del artículo/servicio"></td>
+      <td class="num"><input class="precio" type="number" step="0.01" value="${ln.precio_unitario}"></td>
+      <td class="num total-cell">${fmt((ln.cantidad || 0) * (ln.precio_unitario || 0))}</td>
+      <td class="no-print"><button type="button" class="remove-line-btn">×</button></td>
+    </tr>
+  `).join("");
+
+  document.querySelectorAll("#linesBody tr").forEach(tr => {
+    const key = tr.dataset.row;
+    const line = lines.find(l => l._key === key);
+    tr.querySelector(".cantidad").addEventListener("input", (e) => { line.cantidad = parseFloat(e.target.value) || 0; renderLines(); updateTotals(); });
+    tr.querySelector(".descripcion").addEventListener("input", (e) => { line.descripcion = e.target.value; });
+    tr.querySelector(".precio").addEventListener("input", (e) => { line.precio_unitario = parseFloat(e.target.value) || 0; renderLines(); updateTotals(); });
+    tr.querySelector(".remove-line-btn").addEventListener("click", () => {
+      lines = lines.filter(l => l._key !== key);
+      renderLines(); updateTotals();
+    });
+  });
+}
+
+function updateTotals() {
+  const subtotal = lines.reduce((s, l) => s + (l.cantidad || 0) * (l.precio_unitario || 0), 0);
+  const descuentos = parseFloat(document.getElementById("descuentos").value) || 0;
+  const exonerado = parseFloat(document.getElementById("importe_exonerado").value) || 0;
+  const exento = parseFloat(document.getElementById("importe_exento").value) || 0;
+  const gravado18 = document.getElementById("gravado_18_pct").checked;
+
+  const base = Math.max(0, subtotal - descuentos - exonerado - exento);
+  const gravado15amt = gravado18 ? 0 : base;
+  const gravado18amt = gravado18 ? base : 0;
+  const isv15 = gravado18 ? 0 : round2(base * 0.15);
+  const isv18 = gravado18 ? round2(base * 0.18) : 0;
+  const total = round2(subtotal - descuentos + isv15 + isv18);
+
+  document.getElementById("t_subtotal").textContent = fmt(subtotal);
+  document.getElementById("t_gravado15").textContent = fmt(gravado15amt);
+  document.getElementById("t_gravado18").textContent = fmt(gravado18amt);
+  document.getElementById("t_isv15").textContent = fmt(isv15);
+  document.getElementById("t_isv18").textContent = fmt(isv18);
+  document.getElementById("t_total").textContent = fmt(total);
+  document.getElementById("totalEnLetras").textContent = numeroALetrasLocal(total);
+}
+
+function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
+
+// Lightweight client-side mirror just for live preview; the server computes the authoritative version on save.
+const UNI = ["", "UNO","DOS","TRES","CUATRO","CINCO","SEIS","SIETE","OCHO","NUEVE"];
+const DIEZ = ["DIEZ","ONCE","DOCE","TRECE","CATORCE","QUINCE","DIECISEIS","DIECISIETE","DIECIOCHO","DIECINUEVE"];
+const DEC = ["","","VEINTE","TREINTA","CUARENTA","CINCUENTA","SESENTA","SETENTA","OCHENTA","NOVENTA"];
+const CEN = ["","CIENTO","DOSCIENTOS","TRESCIENTOS","CUATROCIENTOS","QUINIENTOS","SEISCIENTOS","SETECIENTOS","OCHOCIENTOS","NOVECIENTOS"];
+function tresDigitos(n) {
+  if (n === 0) return "";
+  if (n === 100) return "CIEN";
+  const c = Math.floor(n / 100), resto = n % 100;
+  let partes = [];
+  if (c) partes.push(CEN[c]);
+  if (resto) {
+    if (resto < 10) partes.push(UNI[resto]);
+    else if (resto < 20) partes.push(DIEZ[resto - 10]);
+    else {
+      const d = Math.floor(resto / 10), u = resto % 10;
+      if (d === 2 && u > 0) partes.push("VEINTI" + UNI[u]);
+      else partes.push(u ? DEC[d] + " Y " + UNI[u] : DEC[d]);
+    }
+  }
+  return partes.join(" ");
+}
+function enteroALetras(n) {
+  if (n === 0) return "CERO";
+  const millones = Math.floor(n / 1000000), resto = n % 1000000;
+  const miles = Math.floor(resto / 1000), cientos = resto % 1000;
+  let partes = [];
+  if (millones) partes.push(millones === 1 ? "UN MILLON" : tresDigitos(millones) + " MILLONES");
+  if (miles) partes.push(miles === 1 ? "MIL" : tresDigitos(miles) + " MIL");
+  if (cientos) partes.push(tresDigitos(cientos));
+  return partes.join(" ");
+}
+function numeroALetrasLocal(monto) {
+  monto = round2(monto);
+  const entero = Math.floor(monto);
+  const centavos = Math.round((monto - entero) * 100);
+  return `${enteroALetras(entero)} LEMPIRAS CON ${String(centavos).padStart(2,"0")}/100`;
+}
+
+async function loadInvoice() {
+  if (!invoiceId) {
+    lines = [blankLine()];
+    document.getElementById("term-contado").checked = true;
+    document.getElementById("fecha").value = new Date().toISOString().slice(0, 10);
+    renderLines();
+    updateTotals();
+    return;
+  }
+  const inv = await fetch(`/api/invoices/${invoiceId}`).then(r => r.json());
+  document.getElementById("facturaNumero").textContent = inv.numero;
+  document.getElementById("cliente_nombre").value = inv.cliente_nombre || "";
+  document.getElementById("cliente_rtn").value = inv.cliente_rtn || "";
+  document.getElementById("fecha").value = inv.fecha || "";
+  document.getElementById(inv.termino_pago === "credito" ? "term-credito" : "term-contado").checked = true;
+  document.getElementById("descuentos").value = inv.descuentos || 0;
+  document.getElementById("importe_exonerado").value = inv.importe_exonerado || 0;
+  document.getElementById("importe_exento").value = inv.importe_exento || 0;
+  document.getElementById("gravado_18_pct").checked = (inv.importe_gravado_18 || 0) > 0;
+  document.getElementById("orden_compra_exenta").value = inv.orden_compra_exenta || "";
+  document.getElementById("constancia_registro_exonerado").value = inv.constancia_registro_exonerado || "";
+  document.getElementById("registro_sag").value = inv.registro_sag || "";
+  lines = inv.lines.map(l => ({ _key: uid(), cantidad: l.cantidad, descripcion: l.descripcion, precio_unitario: l.precio_unitario }));
+  if (lines.length === 0) lines = [blankLine()];
+  renderLines();
+  updateTotals();
+  document.getElementById("btnEliminar").style.display = "inline-block";
+}
+
+document.getElementById("btnAddLine").addEventListener("click", () => { lines.push(blankLine()); renderLines(); });
+["descuentos","importe_exonerado","importe_exento","gravado_18_pct"].forEach(id => {
+  document.getElementById(id).addEventListener("input", updateTotals);
+  document.getElementById(id).addEventListener("change", updateTotals);
+});
+
+document.getElementById("btnGuardar").addEventListener("click", async () => {
+  const statusMsg = document.getElementById("statusMsg");
+  statusMsg.textContent = "Guardando..."; statusMsg.className = "status";
+
+  const body = {
+    cliente_nombre: document.getElementById("cliente_nombre").value,
+    cliente_rtn: document.getElementById("cliente_rtn").value,
+    fecha: document.getElementById("fecha").value,
+    termino_pago: document.getElementById("term-credito").checked ? "credito" : "contado",
+    descuentos: document.getElementById("descuentos").value,
+    importe_exonerado: document.getElementById("importe_exonerado").value,
+    importe_exento: document.getElementById("importe_exento").value,
+    gravado_18_pct: document.getElementById("gravado_18_pct").checked,
+    orden_compra_exenta: document.getElementById("orden_compra_exenta").value,
+    constancia_registro_exonerado: document.getElementById("constancia_registro_exonerado").value,
+    registro_sag: document.getElementById("registro_sag").value,
+    lines: lines.map(l => ({ cantidad: l.cantidad, descripcion: l.descripcion, precio_unitario: l.precio_unitario })),
+  };
+
+  try {
+    const url = invoiceId ? `/api/invoices/${invoiceId}` : "/api/invoices";
+    const method = invoiceId ? "PUT" : "POST";
+    const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = data.error || "Error al guardar.";
+      statusMsg.className = "status error";
+      return;
+    }
+    statusMsg.textContent = "Guardado ✓"; statusMsg.className = "status ok";
+    if (!invoiceId) {
+      window.location.href = `/facturacion/ver/?id=${data.id}`;
+    } else {
+      document.getElementById("facturaNumero").textContent = data.numero;
+      document.getElementById("t_subtotal").textContent = fmt(data.subtotal);
+      document.getElementById("t_gravado15").textContent = fmt(data.importe_gravado_15);
+      document.getElementById("t_gravado18").textContent = fmt(data.importe_gravado_18);
+      document.getElementById("t_isv15").textContent = fmt(data.isv_15);
+      document.getElementById("t_isv18").textContent = fmt(data.isv_18);
+      document.getElementById("t_total").textContent = fmt(data.total_a_pagar);
+      document.getElementById("totalEnLetras").textContent = data.total_en_letras;
+    }
+  } catch (err) {
+    statusMsg.textContent = "Error de conexión."; statusMsg.className = "status error";
+  }
+});
+
+document.getElementById("btnImprimir").addEventListener("click", () => window.print());
+
+document.getElementById("btnEliminar").addEventListener("click", async () => {
+  const numero = document.getElementById("facturaNumero").textContent;
+  if (!confirm(`¿Mover la factura "${numero}" a la papelera?`)) return;
+  await fetch(`/api/invoices/${invoiceId}`, { method: "DELETE" });
+  window.location.href = "/facturacion/";
+});
+
+(async () => {
+  await loadAccount();
+  await loadInvoice();
+})();
+</script>
+</body>
+</html>

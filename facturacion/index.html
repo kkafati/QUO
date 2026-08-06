@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Facturación — Grupo Liquidámbar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --blue: #065dac; --lime: #cddc28; --ink: #16232f; --ink-soft: #5a6570; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; min-height: 100vh; font-family: 'Poppins', sans-serif; background: #fafbfc; color: var(--ink); }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  .topbar { display: flex; justify-content: space-between; align-items: center; padding: 18px 32px; background: #fff; border-bottom: 1px solid #e7e9ec; }
+  .topbar-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; }
+  .topbar-links { display: flex; gap: 20px; align-items: center; }
+  .topbar-links a { color: var(--blue); text-decoration: none; font-weight: 600; font-size: 13px; }
+  .topbar-links a:hover { text-decoration: underline; }
+
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 32px 24px 80px; }
+  .head-row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 22px; }
+  h1 { font-size: 22px; font-weight: 700; margin: 0; }
+
+  .btn { border: 1.5px solid var(--ink); background: #fff; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 8px; }
+  .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn-primary:hover { background: #054a87; }
+  .btn-ghost { border-color: #dde1e5; color: var(--ink-soft); }
+  .btn-ghost:hover { border-color: var(--ink); color: var(--ink); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-danger { border-color: #b5453b; color: #b5453b; }
+  .btn-danger:hover { background: #b5453b; color: #fff; }
+  .toolbar { display: flex; gap: 10px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border: 1px solid #e7e9ec; border-radius: 10px; overflow: hidden; }
+  th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); padding: 10px 14px; border-bottom: 1px solid #e7e9ec; background: #fafbfc; }
+  td { padding: 12px 14px; border-bottom: 1px solid #f0f1f3; }
+  tr:last-child td { border-bottom: none; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: #f7f9fb; }
+  .num { text-align: right; }
+  .pill { font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: 600; }
+  .pill.contado { background: rgba(107,191,138,0.15); color: #3f8f6a; }
+  .pill.credito { background: rgba(6,93,172,0.1); color: var(--blue); }
+  .empty-state { text-align: center; padding: 50px 20px; color: var(--ink-soft); font-size: 14px; }
+
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(15,41,66,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .modal-backdrop[hidden] { display: none; }
+  .modal { background: #fff; border-radius: 12px; padding: 24px; width: 480px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
+  .modal h2 { margin: 0 0 16px; font-size: 16px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-brand"><span id="topbarClient">Facturación</span></div>
+    <div class="topbar-links">
+      <a href="/panel/">← Panel</a>
+      <a href="/logout">Cerrar sesión</a>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="head-row">
+      <h1>Facturación</h1>
+      <div class="toolbar">
+        <button class="btn btn-ghost" id="btn-trash">🗑 Papelera</button>
+        <button class="btn btn-primary" onclick="window.location.href='/facturacion/ver/'">+ Nueva Factura</button>
+      </div>
+    </div>
+
+    <table>
+      <thead><tr><th>Número</th><th>Cliente</th><th>Fecha</th><th>Término</th><th class="num">Total</th><th></th></tr></thead>
+      <tbody id="invoicesBody"></tbody>
+    </table>
+    <div class="empty-state" id="emptyState" hidden>Aún no hay facturas. Crea la primera.</div>
+  </div>
+
+  <div class="modal-backdrop" id="trashModal" hidden>
+    <div class="modal">
+      <h2>Papelera — Facturas</h2>
+      <table id="trashTable"><thead><tr><th>Número</th><th>Cliente</th><th></th></tr></thead><tbody id="trashBody"></tbody></table>
+      <div class="modal-actions"><button class="btn btn-ghost" id="closeTrash">Cerrar</button></div>
+    </div>
+  </div>
+
+<script>
+function esc(s) { return (s ?? "").toString().replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+function fmt(n) { return "L " + (Number(n) || 0).toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+async function loadInvoices() {
+  const invoices = await fetch("/api/invoices").then(r => r.json());
+  document.getElementById("emptyState").hidden = invoices.length > 0;
+  document.getElementById("invoicesBody").innerHTML = invoices.map(inv => `
+    <tr class="clickable" onclick="window.location.href='/facturacion/ver/?id=${inv.id}'">
+      <td class="mono">${esc(inv.numero)}</td>
+      <td>${esc(inv.cliente_nombre)}</td>
+      <td>${esc(inv.fecha)}</td>
+      <td><span class="pill ${inv.termino_pago}">${inv.termino_pago === "contado" ? "Contado" : "Crédito"}</span></td>
+      <td class="num">${fmt(inv.total_a_pagar)}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteInvoice(${inv.id}, '${esc(inv.numero)}')">×</button></td>
+    </tr>
+  `).join("");
+}
+
+async function deleteInvoice(id, numero) {
+  if (!confirm(`¿Mover la factura "${numero}" a la papelera? Podrás restaurarla después desde 🗑 Papelera.`)) return;
+  await fetch(`/api/invoices/${id}`, { method: "DELETE" });
+  loadInvoices();
+}
+
+document.getElementById("btn-trash").addEventListener("click", async () => {
+  const items = await fetch("/api/invoices/trash").then(r => r.json());
+  document.getElementById("trashBody").innerHTML = items.map(inv => `
+    <tr>
+      <td class="mono">${esc(inv.numero)}</td>
+      <td>${esc(inv.cliente_nombre)}</td>
+      <td>
+        <button class="btn btn-sm btn-primary" onclick="restoreInvoice(${inv.id})">Restaurar</button>
+        <button class="btn btn-sm btn-danger" onclick="permanentDeleteInvoice(${inv.id})">Eliminar</button>
+      </td>
+    </tr>
+  `).join("") || '<tr><td colspan="3" style="color:var(--ink-soft)">La papelera está vacía.</td></tr>';
+  document.getElementById("trashModal").hidden = false;
+});
+document.getElementById("closeTrash").addEventListener("click", () => {
+  document.getElementById("trashModal").hidden = true;
+  loadInvoices();
+});
+async function restoreInvoice(id) {
+  await fetch(`/api/invoices/${id}/restore`, { method: "POST" });
+  document.getElementById("btn-trash").click();
+}
+async function permanentDeleteInvoice(id) {
+  if (!confirm("¿Eliminar PERMANENTEMENTE? No se puede deshacer.")) return;
+  await fetch(`/api/invoices/${id}/permanent`, { method: "DELETE" });
+  document.getElementById("btn-trash").click();
+}
+
+fetch("/api/me").then(r => r.json()).then(me => {
+  if (me.authenticated && me.company_name) document.getElementById("topbarClient").textContent = "Facturación — " + me.company_name;
+});
+
+loadInvoices();
+</script>
+</body>
+</html>

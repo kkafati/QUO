@@ -5,7 +5,8 @@ from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
 from werkzeug.security import check_password_hash, generate_password_hash
-from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView
+from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine
+from numero_a_letras import numero_a_letras
 
 # On some Windows machines, a corrupted registry entry makes Python think
 # .html/.js/.css are text/plain, causing browsers to show raw source instead
@@ -23,6 +24,7 @@ AUTH_DIR = os.path.join(os.path.dirname(BASE_DIR), "auth")
 PANEL_DIR = os.path.join(os.path.dirname(BASE_DIR), "panel")
 CUENTA_DIR = os.path.join(os.path.dirname(BASE_DIR), "cuenta")
 ADMIN_DIR = os.path.join(os.path.dirname(BASE_DIR), "admin")
+FACTURACION_DIR = os.path.join(os.path.dirname(BASE_DIR), "facturacion")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/cotizaciones")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(BASE_DIR, "quoting.db")
@@ -1138,6 +1140,226 @@ def update_regulacion_study(study_id):
 def delete_regulacion_study(study_id):
     r = RegulacionStudy.query.filter_by(id=study_id, account_id=current_account_id()).first_or_404()
     db.session.delete(r)
+    db.session.commit()
+    return "", 204
+
+
+# ---------------------------------------------------------------------------
+# Facturación (Invoicing)
+# ---------------------------------------------------------------------------
+
+@app.route("/facturacion/")
+@login_required
+def facturacion():
+    log_page_view("/facturacion/")
+    return send_from_directory(FACTURACION_DIR, "index.html")
+
+
+@app.route("/facturacion/ver/")
+@login_required
+def factura_ver():
+    log_page_view("/facturacion/ver/")
+    return send_from_directory(FACTURACION_DIR, "ver.html")
+
+
+def compute_invoice_totals(invoice):
+    lines = []
+    subtotal = 0.0
+    for ln in invoice.lines:
+        total = round((ln.cantidad or 0) * (ln.precio_unitario or 0), 2)
+        subtotal += total
+        lines.append({
+            "id": ln.id, "cantidad": ln.cantidad,
+            "descripcion": ln.descripcion, "precio_unitario": ln.precio_unitario,
+            "total": total,
+        })
+    subtotal = round(subtotal, 2)
+
+    descuentos = invoice.descuentos or 0
+    importe_exonerado = invoice.importe_exonerado or 0
+    importe_exento = invoice.importe_exento or 0
+    base_gravable = max(0.0, round(subtotal - descuentos - importe_exonerado - importe_exento, 2))
+
+    if invoice.gravado_18_pct:
+        importe_gravado_15, importe_gravado_18 = 0.0, base_gravable
+        isv_15, isv_18 = 0.0, round(base_gravable * 0.18, 2)
+    else:
+        importe_gravado_15, importe_gravado_18 = base_gravable, 0.0
+        isv_15, isv_18 = round(base_gravable * 0.15, 2), 0.0
+
+    total_a_pagar = round(subtotal - descuentos + isv_15 + isv_18, 2)
+
+    return {
+        "id": invoice.id,
+        "numero": invoice.numero,
+        "template": invoice.template,
+        "cliente_nombre": invoice.cliente_nombre,
+        "cliente_rtn": invoice.cliente_rtn,
+        "fecha": invoice.fecha,
+        "termino_pago": invoice.termino_pago,
+        "lines": lines,
+        "subtotal": subtotal,
+        "descuentos": descuentos,
+        "importe_exonerado": importe_exonerado,
+        "importe_exento": importe_exento,
+        "importe_gravado_15": importe_gravado_15,
+        "importe_gravado_18": importe_gravado_18,
+        "isv_15": isv_15,
+        "isv_18": isv_18,
+        "total_a_pagar": total_a_pagar,
+        "total_en_letras": numero_a_letras(total_a_pagar),
+        "orden_compra_exenta": invoice.orden_compra_exenta,
+        "constancia_registro_exonerado": invoice.constancia_registro_exonerado,
+        "registro_sag": invoice.registro_sag,
+        "created_at": invoice.created_at,
+        "updated_at": invoice.updated_at,
+    }
+
+
+@app.route("/api/invoices", methods=["GET"])
+@login_required
+def list_invoices():
+    invoices = (Invoice.query.filter_by(account_id=current_account_id(), deleted_at=None)
+                .order_by(Invoice.id.desc()).all())
+    return jsonify([compute_invoice_totals(i) for i in invoices])
+
+
+@app.route("/api/invoices/trash", methods=["GET"])
+@login_required
+def list_invoices_trash():
+    invoices = (Invoice.query.filter(Invoice.account_id == current_account_id(), Invoice.deleted_at.isnot(None))
+                .order_by(Invoice.deleted_at.desc()).all())
+    return jsonify([compute_invoice_totals(i) for i in invoices])
+
+
+@app.route("/api/invoices/<int:invoice_id>", methods=["GET"])
+@login_required
+def get_invoice(invoice_id):
+    invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id()).first_or_404()
+    return jsonify(compute_invoice_totals(invoice))
+
+
+def _next_invoice_numero(account):
+    parts = (account.invoice_prefix or "").split("-")
+    if len(parts) < 3 or not all(parts[:3]):
+        return None  # prefijo not configured yet
+    seq = str(account.next_invoice_number or 1).zfill(8)
+    return f"{parts[0]}-{parts[1]}-{parts[2]}-{seq}"
+
+
+def _sync_invoice_lines(invoice, lines_data):
+    for ln in list(invoice.lines):
+        db.session.delete(ln)
+    db.session.flush()
+    for ln in lines_data:
+        db.session.add(InvoiceLine(
+            invoice_id=invoice.id,
+            cantidad=float(ln.get("cantidad", 1) or 0),
+            descripcion=(ln.get("descripcion") or "").strip(),
+            precio_unitario=float(ln.get("precio_unitario", 0) or 0),
+        ))
+    db.session.commit()
+
+
+@app.route("/api/invoices", methods=["POST"])
+@login_required
+def create_invoice():
+    account = Account.query.get_or_404(current_account_id())
+    numero = _next_invoice_numero(account)
+    if not numero:
+        return jsonify({"error": "Configura el Prefijo de Factura en Configuración de la Cuenta antes de crear facturas."}), 400
+
+    data = request.json or {}
+    cliente_nombre = (data.get("cliente_nombre") or "").strip()
+    if not cliente_nombre:
+        return jsonify({"error": "El nombre del cliente es requerido."}), 400
+
+    invoice = Invoice(
+        account_id=account.id,
+        numero=numero,
+        template=(data.get("template") or "clasica").strip(),
+        cliente_nombre=cliente_nombre,
+        cliente_rtn=(data.get("cliente_rtn") or "").strip(),
+        fecha=data.get("fecha") or datetime.utcnow().strftime("%Y-%m-%d"),
+        termino_pago=data.get("termino_pago") or "contado",
+        descuentos=float(data.get("descuentos", 0) or 0),
+        importe_exonerado=float(data.get("importe_exonerado", 0) or 0),
+        importe_exento=float(data.get("importe_exento", 0) or 0),
+        gravado_18_pct=bool(data.get("gravado_18_pct", False)),
+        orden_compra_exenta=(data.get("orden_compra_exenta") or "").strip(),
+        constancia_registro_exonerado=(data.get("constancia_registro_exonerado") or "").strip(),
+        registro_sag=(data.get("registro_sag") or "").strip(),
+        created_at=datetime.utcnow().strftime("%Y-%m-%d"),
+        updated_at=datetime.utcnow().strftime("%Y-%m-%d"),
+    )
+    db.session.add(invoice)
+    db.session.commit()
+    _sync_invoice_lines(invoice, data.get("lines", []))
+
+    account.next_invoice_number = (account.next_invoice_number or 1) + 1
+    db.session.commit()
+
+    return jsonify(compute_invoice_totals(invoice)), 201
+
+
+@app.route("/api/invoices/<int:invoice_id>", methods=["PUT"])
+@login_required
+def update_invoice(invoice_id):
+    invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id()).first_or_404()
+    data = request.json or {}
+
+    cliente_nombre = (data.get("cliente_nombre") or invoice.cliente_nombre).strip()
+    if not cliente_nombre:
+        return jsonify({"error": "El nombre del cliente es requerido."}), 400
+    invoice.cliente_nombre = cliente_nombre
+    invoice.cliente_rtn = (data.get("cliente_rtn", invoice.cliente_rtn) or "").strip()
+    invoice.fecha = data.get("fecha", invoice.fecha)
+    invoice.termino_pago = data.get("termino_pago", invoice.termino_pago)
+    invoice.template = (data.get("template", invoice.template) or "clasica").strip()
+    if "descuentos" in data:
+        invoice.descuentos = float(data.get("descuentos") or 0)
+    if "importe_exonerado" in data:
+        invoice.importe_exonerado = float(data.get("importe_exonerado") or 0)
+    if "importe_exento" in data:
+        invoice.importe_exento = float(data.get("importe_exento") or 0)
+    if "gravado_18_pct" in data:
+        invoice.gravado_18_pct = bool(data.get("gravado_18_pct"))
+    invoice.orden_compra_exenta = (data.get("orden_compra_exenta", invoice.orden_compra_exenta) or "").strip()
+    invoice.constancia_registro_exonerado = (data.get("constancia_registro_exonerado", invoice.constancia_registro_exonerado) or "").strip()
+    invoice.registro_sag = (data.get("registro_sag", invoice.registro_sag) or "").strip()
+    invoice.updated_at = datetime.utcnow().strftime("%Y-%m-%d")
+
+    if "lines" in data:
+        _sync_invoice_lines(invoice, data["lines"])
+    db.session.commit()
+    return jsonify(compute_invoice_totals(invoice))
+
+
+@app.route("/api/invoices/<int:invoice_id>", methods=["DELETE"])
+@login_required
+def delete_invoice(invoice_id):
+    invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id(), deleted_at=None).first_or_404()
+    invoice.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    db.session.commit()
+    return "", 204
+
+
+@app.route("/api/invoices/<int:invoice_id>/restore", methods=["POST"])
+@login_required
+def restore_invoice(invoice_id):
+    invoice = Invoice.query.filter(Invoice.id == invoice_id, Invoice.account_id == current_account_id(),
+                                    Invoice.deleted_at.isnot(None)).first_or_404()
+    invoice.deleted_at = None
+    db.session.commit()
+    return jsonify(compute_invoice_totals(invoice))
+
+
+@app.route("/api/invoices/<int:invoice_id>/permanent", methods=["DELETE"])
+@login_required
+def permanent_delete_invoice(invoice_id):
+    invoice = Invoice.query.filter(Invoice.id == invoice_id, Invoice.account_id == current_account_id(),
+                                    Invoice.deleted_at.isnot(None)).first_or_404()
+    db.session.delete(invoice)
     db.session.commit()
     return "", 204
 
