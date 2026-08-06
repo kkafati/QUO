@@ -61,7 +61,9 @@
 
   .seg-group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
   .seg-input {
-    padding: 10px 8px; border: 1.5px solid #dde1e5; border-radius: 8px;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    padding: 10px 6px; border: 1.5px solid #dde1e5; border-radius: 8px;
     font-size: 14px; font-family: 'IBM Plex Mono', monospace; text-align: center;
     background: #fff; text-transform: uppercase;
   }
@@ -172,13 +174,13 @@
         <div class="field" style="margin-bottom:18px">
           <label>Prefijo de Factura</label>
           <div class="seg-group" id="seg-invoice_prefix" data-sep="-">
-            <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:calc(3ch + 22px)">
+            <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:65px">
             <span class="seg-sep">-</span>
-            <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:calc(3ch + 22px)">
+            <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:65px">
             <span class="seg-sep">-</span>
-            <input class="seg-input" data-numeric maxlength="2" placeholder="00" style="width:calc(2ch + 22px)">
+            <input class="seg-input" data-numeric maxlength="2" placeholder="00" style="width:52px">
             <span class="seg-sep">-</span>
-            <input class="seg-input" data-numeric maxlength="8" placeholder="00000000" style="width:calc(8ch + 22px)">
+            <input class="seg-input" data-numeric maxlength="8" placeholder="00000000" style="width:130px">
           </div>
         </div>
 
@@ -194,28 +196,28 @@
         <div class="field" style="margin-bottom:18px">
           <label>Código de Autorización de Impresión (C.A.I.)</label>
           <div class="seg-group" id="seg-cai" data-sep="-">
-            <input class="seg-input" data-alnum maxlength="6" style="width:calc(6ch + 22px)">
+            <input class="seg-input" data-alnum maxlength="6" style="width:104px">
             <span class="seg-sep">-</span>
-            <input class="seg-input" data-alnum maxlength="6" style="width:calc(6ch + 22px)">
+            <input class="seg-input" data-alnum maxlength="6" style="width:104px">
             <span class="seg-sep">-</span>
-            <input class="seg-input" data-alnum maxlength="6" style="width:calc(6ch + 22px)">
+            <input class="seg-input" data-alnum maxlength="6" style="width:104px">
             <span class="seg-sep">-</span>
-            <input class="seg-input" data-alnum maxlength="6" style="width:calc(6ch + 22px)">
+            <input class="seg-input" data-alnum maxlength="6" style="width:104px">
             <span class="seg-sep">-</span>
-            <input class="seg-input" data-alnum maxlength="6" style="width:calc(6ch + 22px)">
+            <input class="seg-input" data-alnum maxlength="6" style="width:104px">
             <span class="seg-sep">-</span>
-            <input class="seg-input" data-alnum maxlength="2" style="width:calc(2ch + 22px)">
+            <input class="seg-input" data-alnum maxlength="2" style="width:52px">
           </div>
         </div>
 
         <div class="field" style="margin-bottom:18px">
           <label>Fecha Límite de Emisión</label>
           <div class="seg-group" id="seg-cai_fecha_limite" data-sep="/">
-            <input class="seg-input" data-numeric maxlength="2" placeholder="DD" style="width:calc(2ch + 22px)">
+            <input class="seg-input" data-numeric maxlength="2" placeholder="DD" style="width:52px">
             <span class="seg-sep">/</span>
-            <input class="seg-input" data-numeric maxlength="2" placeholder="MM" style="width:calc(2ch + 22px)">
+            <input class="seg-input" data-numeric maxlength="2" placeholder="MM" style="width:52px">
             <span class="seg-sep">/</span>
-            <input class="seg-input" data-numeric maxlength="4" placeholder="AAAA" style="width:calc(4ch + 22px)">
+            <input class="seg-input" data-numeric maxlength="4" placeholder="AAAA" style="width:78px">
           </div>
         </div>
 
@@ -224,25 +226,25 @@
           <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px">
             <span style="font-size:12px; color:var(--ink-soft); width:52px">Desde</span>
             <div class="seg-group" id="seg-rango_autorizado_desde" data-sep="-">
-              <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:calc(3ch + 22px)">
+              <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:65px">
               <span class="seg-sep">-</span>
-              <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:calc(3ch + 22px)">
+              <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:65px">
               <span class="seg-sep">-</span>
-              <input class="seg-input" data-numeric maxlength="2" placeholder="00" style="width:calc(2ch + 22px)">
+              <input class="seg-input" data-numeric maxlength="2" placeholder="00" style="width:52px">
               <span class="seg-sep">-</span>
-              <input class="seg-input" data-numeric maxlength="8" placeholder="00000000" style="width:calc(8ch + 22px)">
+              <input class="seg-input" data-numeric maxlength="8" placeholder="00000000" style="width:130px">
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
             <span style="font-size:12px; color:var(--ink-soft); width:52px">Hasta</span>
             <div class="seg-group" id="seg-rango_autorizado_hasta" data-sep="-">
-              <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:calc(3ch + 22px)">
+              <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:65px">
               <span class="seg-sep">-</span>
-              <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:calc(3ch + 22px)">
+              <input class="seg-input" data-numeric maxlength="3" placeholder="000" style="width:65px">
               <span class="seg-sep">-</span>
-              <input class="seg-input" data-numeric maxlength="2" placeholder="00" style="width:calc(2ch + 22px)">
+              <input class="seg-input" data-numeric maxlength="2" placeholder="00" style="width:52px">
               <span class="seg-sep">-</span>
-              <input class="seg-input" data-numeric maxlength="8" placeholder="00000000" style="width:calc(8ch + 22px)">
+              <input class="seg-input" data-numeric maxlength="8" placeholder="00000000" style="width:130px">
             </div>
           </div>
         </div>
