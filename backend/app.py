@@ -1271,6 +1271,20 @@ def _next_invoice_numero(account):
     return f"{parts[0]}-{parts[1]}-{parts[2]}-{seq}"
 
 
+def _validate_invoice_date(account_id, fecha, exclude_invoice_id=None):
+    """Facturas must stay in chronological order (matches sequential numbering
+    conventions in Honduras). Returns an error message, or None if the date is OK."""
+    q = Invoice.query.filter(Invoice.account_id == account_id, Invoice.deleted_at.is_(None),
+                              Invoice.fecha > fecha)
+    if exclude_invoice_id:
+        q = q.filter(Invoice.id != exclude_invoice_id)
+    later = q.order_by(Invoice.fecha.desc()).first()
+    if later:
+        return (f"Esta fecha es anterior a otra factura ya existente ({later.numero}, "
+                f"fechada {later.fecha}). Las facturas deben mantener orden cronológico.")
+    return None
+
+
 def _sync_invoice_lines(invoice, lines_data):
     for ln in list(invoice.lines):
         db.session.delete(ln)
@@ -1298,13 +1312,18 @@ def create_invoice():
     if not cliente_nombre:
         return jsonify({"error": "El nombre del cliente es requerido."}), 400
 
+    fecha = data.get("fecha") or datetime.utcnow().strftime("%Y-%m-%d")
+    date_error = _validate_invoice_date(account.id, fecha)
+    if date_error:
+        return jsonify({"error": date_error}), 400
+
     invoice = Invoice(
         account_id=account.id,
         numero=numero,
         template=(data.get("template") or "clasica").strip(),
         cliente_nombre=cliente_nombre,
         cliente_rtn=(data.get("cliente_rtn") or "").strip(),
-        fecha=data.get("fecha") or datetime.utcnow().strftime("%Y-%m-%d"),
+        fecha=fecha,
         termino_pago=data.get("termino_pago") or "contado",
         descuentos=float(data.get("descuentos", 0) or 0),
         importe_exonerado=float(data.get("importe_exonerado", 0) or 0),
@@ -1337,7 +1356,14 @@ def update_invoice(invoice_id):
         return jsonify({"error": "El nombre del cliente es requerido."}), 400
     invoice.cliente_nombre = cliente_nombre
     invoice.cliente_rtn = (data.get("cliente_rtn", invoice.cliente_rtn) or "").strip()
-    invoice.fecha = data.get("fecha", invoice.fecha)
+
+    new_fecha = data.get("fecha", invoice.fecha)
+    if new_fecha != invoice.fecha:
+        date_error = _validate_invoice_date(invoice.account_id, new_fecha, exclude_invoice_id=invoice.id)
+        if date_error:
+            return jsonify({"error": date_error}), 400
+    invoice.fecha = new_fecha
+
     invoice.termino_pago = data.get("termino_pago", invoice.termino_pago)
     invoice.template = (data.get("template", invoice.template) or "clasica").strip()
     if "descuentos" in data:

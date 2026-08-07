@@ -21,6 +21,12 @@ async function loadAccount() {
     <div class="contact-row"><span class="contact-icon">⌂</span> ${esc(account.address || "—")}</div>
     <div class="contact-row"><span class="contact-icon">🌐</span> ${esc(account.website || "—")}</div>
   `;
+  // The globe emoji above renders as a fixed-color glyph on most systems and
+  // ignores CSS `color`. Swap it for plain "WWW" text (which does respect
+  // color: white) specifically where a solid-fill icon circle is used.
+  document.querySelectorAll(".contact-icon").forEach(el => {
+    if (el.textContent.trim() === "🌐") el.innerHTML = '<span style="font-size:0.55em;letter-spacing:-0.05em">WWW</span>';
+  });
   document.getElementById("caiValue").textContent = account.cai || "— sin configurar —";
   document.getElementById("footRtn").textContent = account.tax_id || "—";
   document.getElementById("footFechaLimite").textContent = account.cai_fecha_limite || "—";
@@ -229,15 +235,9 @@ document.getElementById("btnEliminar").addEventListener("click", async () => {
 })();
 
 // ---- Template switcher ----
-const TEMPLATE_BY_FILE = {
-  "ver.html": "clasica", "ver-moderna.html": "moderna", "ver-elegante.html": "elegante",
-  "ver-compacta.html": "compacta", "ver-colorblock.html": "colorblock",
-  "ver-termica58.html": "termica58", "ver-termica80.html": "termica80",
-};
-const currentFile = window.location.pathname.split("/").filter(Boolean).pop() || "ver.html";
 const templateSwitcher = document.getElementById("templateSwitcher");
 if (templateSwitcher) {
-  templateSwitcher.value = TEMPLATE_BY_FILE[currentFile] || "clasica";
+  templateSwitcher.value = window.CURRENT_TEMPLATE || "clasica";
   templateSwitcher.addEventListener("change", async () => {
     const newTemplate = templateSwitcher.value;
     if (!invoiceId) {
