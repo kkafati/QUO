@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Factura — Grupo Liquidámbar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Ubuntu:wght@300;400;500;700&family=Audiowide&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root { --blue: #065dac; --lime: #cddc28; --ink: #16232f; --ink-soft: #5a6570; --dark-head: #3a3f45; }
   * { box-sizing: border-box; }
@@ -37,42 +37,44 @@
   .fhead-left { display: flex; gap: 18px; align-items: flex-start; }
   .fhead-logo { width: 110px; height: auto; }
   .contact-list { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
-  .contact-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #333; }
+  .contact-row { display: flex; align-items: center; gap: 8px; font-family: 'PT Sans', sans-serif; font-size: 6pt; color: #333; }
   .contact-icon {
-    width: 20px; height: 20px; border-radius: 50%; border: 1.4px solid var(--blue); color: var(--blue);
+    width: 20px; height: 20px; border-radius: 50%; background: #585858; color: #fff;
     display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0;
   }
-  .contact-row input { border: none; background: transparent; font-size: 12px; color: #333; font-family: inherit; padding: 0; }
+  .contact-row input { border: none; background: transparent; font-family: 'PT Sans', sans-serif; font-size: 6pt; color: #333; padding: 0; }
   .fhead-right { text-align: right; }
-  .fhead-right .factura-title { font-size: 34px; font-weight: 800; letter-spacing: 0.03em; color: var(--dark-head); margin: 0; }
-  .fhead-right .factura-numero { font-size: 17px; font-weight: 700; color: var(--ink); margin-top: 6px; }
+  .fhead-right .factura-title { font-family: 'Audiowide', sans-serif; font-size: 30pt; font-weight: 400; letter-spacing: 0.03em; color: var(--dark-head); margin: 0; }
+  .fhead-right .factura-numero { font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 12pt; color: var(--ink); margin-top: 6px; }
 
   /* ---- cliente / fecha ---- */
-  .info-row { display: flex; justify-content: space-between; border-bottom: 1.5px solid #c9ced3; padding-bottom: 10px; margin-bottom: 14px; }
-  .info-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); font-weight: 600; margin-bottom: 4px; }
-  .cliente-nombre-input { font-size: 16px; font-weight: 700; border: none; background: transparent; font-family: inherit; padding: 0; width: 260px; }
+  .info-labels-row { display: flex; justify-content: space-between; }
+  .info-rule { border: none; border-top: 1.5px solid #c9ced3; margin: 4px 0 10px; }
+  .info-values-row { display: flex; justify-content: space-between; margin-bottom: 14px; }
+  .info-label { font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); margin-bottom: 4px; }
+  .cliente-nombre-input { font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 12pt; border: none; background: transparent; padding: 0; width: 260px; }
   .cliente-rtn-row { font-size: 13px; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
   .cliente-rtn-row input { border: none; background: transparent; font-family: inherit; font-size: 13px; padding: 0; width: 160px; }
-  .fecha-value { font-size: 20px; font-weight: 700; text-align: right; }
-  .fecha-value input { border: none; background: transparent; font-family: inherit; font-size: 20px; font-weight: 700; text-align: right; width: 130px; }
+  .fecha-value { font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 12pt; text-align: right; }
+  .fecha-value input { border: none; background: transparent; font-family: inherit; font-size: 12pt; font-weight: 400; text-align: right; width: 130px; }
 
-  .term-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px; }
-  .term-row label { display: flex; align-items: center; gap: 5px; font-weight: 600; cursor: pointer; }
+  .term-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 8px; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 8pt; }
+  .term-row label { display: flex; align-items: center; gap: 5px; font-weight: 400; cursor: pointer; }
   .term-title { color: var(--blue); font-weight: 700; }
 
-  .cai-row { text-align: right; font-size: 12px; color: #333; border-bottom: 2px solid var(--blue); padding-bottom: 10px; margin-bottom: 4px; }
+  .cai-row { text-align: right; font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; color: #333; border-bottom: 2px solid var(--blue); padding-bottom: 10px; margin-bottom: 4px; }
   .cai-row .cai-value { font-family: monospace; letter-spacing: 0.02em; }
 
   /* ---- line items ---- */
   .items-table { width: 100%; border-collapse: collapse; margin-top: 18px; }
   .items-table thead th {
-    background: var(--dark-head); color: #fff; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
-    padding: 10px 12px; text-align: left; font-weight: 600;
+    background: var(--dark-head); color: #fff; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 10px 12px; text-align: left;
   }
   .items-table thead th.num { text-align: right; }
-  .items-table td { padding: 8px 12px; border-bottom: 1px solid #eceeef; vertical-align: top; font-size: 13px; }
+  .items-table td { padding: 8px 12px; border-bottom: 1px solid #eceeef; vertical-align: top; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 9pt; }
   .items-table td.num { text-align: right; }
-  .items-table input { border: none; background: transparent; font-family: inherit; font-size: 13px; width: 100%; padding: 4px 0; }
+  .items-table input { border: none; background: transparent; font-family: inherit; font-size: 9pt; width: 100%; padding: 4px 0; }
   .items-table input.cantidad { text-align: center; }
   .items-table input.precio, .items-table .total-cell { text-align: right; }
   .items-table tbody tr:hover { background: #fafbfc; }
@@ -84,28 +86,30 @@
   /* ---- totals section ---- */
   .totals-section { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 20px; gap: 24px; }
   .letras-box { display: flex; flex: 1; border: 1px solid #dde1e5; border-radius: 4px; overflow: hidden; }
-  .letras-label { background: var(--blue); color: #fff; font-weight: 700; font-size: 13px; text-align: center; padding: 14px 10px; width: 90px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-  .letras-value { padding: 10px 14px; font-size: 11.5px; color: #333; line-height: 1.5; }
+  .letras-label { background: var(--blue); color: #fff; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 8pt; text-align: center; padding: 14px 10px; width: 90px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .letras-value { padding: 10px 14px; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 8pt; color: #333; line-height: 1.5; }
 
-  .totals-table { width: 300px; flex-shrink: 0; font-size: 13px; }
+  .totals-table { width: 300px; flex-shrink: 0; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 10pt; }
   .totals-table .trow { display: flex; justify-content: space-between; padding: 3px 0; }
-  .totals-table .trow.editable input { border: none; background: transparent; font-family: inherit; font-size: 13px; text-align: right; width: 90px; }
-  .totals-table .trow .tlabel { color: var(--ink-soft); }
-  .totals-table .trow.grand { border-top: 2px solid var(--blue); margin-top: 6px; padding-top: 8px; font-weight: 700; font-size: 14px; }
+  .totals-table .trow.editable input { border: none; background: transparent; font-family: inherit; font-size: 10pt; text-align: right; width: 90px; }
+  .totals-table .trow .tlabel { color: var(--ink-soft); font-size: 7pt; }
+  .totals-table .trow.grand { border-top: 2px solid var(--blue); margin-top: 6px; padding-top: 8px; font-weight: 700; font-size: 10pt; }
+  .totals-table .trow.grand .tlabel { font-size: 7pt; font-weight: 700; color: var(--ink); }
   .totals-table .trow .lcode { font-weight: 600; margin-right: 4px; }
 
   /* ---- exemption references ---- */
-  .exempt-refs { margin-top: 22px; font-size: 11px; width: 60%; }
+  .exempt-refs { margin-top: 22px; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 6pt; width: 60%; }
   .exempt-refs .erow { display: flex; border: 1px solid #dde1e5; border-top: none; }
   .exempt-refs .erow:first-child { border-top: 1px solid #dde1e5; }
   .exempt-refs .elabel { padding: 5px 8px; width: 62%; color: #333; }
   .exempt-refs .evalue { padding: 5px 8px; width: 38%; border-left: 1px solid #dde1e5; }
-  .exempt-refs .evalue input { border: none; background: transparent; font-family: inherit; font-size: 11px; width: 100%; }
+  .exempt-refs .evalue input { border: none; background: transparent; font-family: inherit; font-size: 6pt; width: 100%; }
 
   /* ---- footer ---- */
-  .foot-lines { margin-top: 18px; font-size: 12px; line-height: 1.9; }
-  .foot-lines .flabel { font-weight: 700; }
-  .foot-tagline { text-align: center; font-size: 12px; font-style: italic; margin-top: 22px; color: #333; }
+  .foot-lines { margin-top: 18px; font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; line-height: 1.9; }
+  .foot-lines .flabel { font-weight: 300; }
+  .foot-lines .flabel-bold { font-weight: 700; }
+  .foot-tagline { text-align: center; font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; margin-top: 22px; color: #333; }
   .toggle-gravado { margin-top: 6px; font-size: 11px; }
   .toggle-gravado label { cursor: pointer; }
 
@@ -157,14 +161,17 @@
         </div>
       </div>
 
-      <div class="info-row">
+      <div class="info-labels-row">
+        <div class="info-label">Cliente</div>
+        <div class="info-label" style="text-align:right">Fecha</div>
+      </div>
+      <hr class="info-rule">
+      <div class="info-values-row">
         <div>
-          <div class="info-label">Cliente</div>
           <input class="cliente-nombre-input" id="cliente_nombre" placeholder="Nombre del cliente">
           <div class="cliente-rtn-row">RTN: <input id="cliente_rtn" placeholder="00000000000000"></div>
         </div>
         <div>
-          <div class="info-label" style="text-align:right">Fecha</div>
           <div class="fecha-value"><input id="fecha" type="date"></div>
         </div>
       </div>
@@ -219,7 +226,7 @@
         <div><span class="flabel">RTN</span> <span id="footRtn">—</span></div>
         <div><span class="flabel">Fecha Límite de Emisión:</span> <span id="footFechaLimite">—</span></div>
         <div><span class="flabel">Rango Autorizado:</span> <span id="footRango">—</span></div>
-        <div><span class="flabel">Original Blanca:</span> Cliente&nbsp;&nbsp;&nbsp;<span class="flabel">Copia Amarilla:</span> Administración&nbsp;&nbsp;&nbsp;<span class="flabel">Copia Azul:</span> Contabilidad</div>
+        <div><span class="flabel-bold">Original Blanca:</span> Cliente&nbsp;&nbsp;&nbsp;<span class="flabel-bold">Copia Amarilla:</span> Administración&nbsp;&nbsp;&nbsp;<span class="flabel-bold">Copia Azul:</span> Contabilidad</div>
       </div>
 
       <div class="foot-tagline">La factura es beneficio de todos "Exíjala"</div>
