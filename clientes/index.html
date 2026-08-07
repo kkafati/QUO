@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clientes — Grupo Liquidámbar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --blue: #065dac; --lime: #cddc28; --ink: #16232f; --ink-soft: #5a6570; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; min-height: 100vh; font-family: 'Poppins', sans-serif; background: #fafbfc; color: var(--ink); }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  .topbar { display: flex; justify-content: space-between; align-items: center; padding: 18px 32px; background: #fff; border-bottom: 1px solid #e7e9ec; }
+  .topbar-brand { font-weight: 600; font-size: 14px; }
+  .topbar-links { display: flex; gap: 20px; align-items: center; }
+  .topbar-links a { color: var(--blue); text-decoration: none; font-weight: 600; font-size: 13px; }
+  .topbar-links a:hover { text-decoration: underline; }
+
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 28px 24px 80px; }
+  .head-row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; }
+  h1 { font-size: 22px; font-weight: 700; margin: 0; }
+
+  .btn { border: 1.5px solid var(--ink); background: #fff; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 8px; }
+  .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn-primary:hover { background: #054a87; }
+  .btn-ghost { border-color: #dde1e5; color: var(--ink-soft); }
+  .btn-ghost:hover { border-color: var(--ink); color: var(--ink); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-danger { border-color: #b5453b; color: #b5453b; }
+  .btn-danger:hover { background: #b5453b; color: #fff; }
+
+  .layout { display: grid; grid-template-columns: 340px 1fr; gap: 22px; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel { background: #fff; border: 1px solid #e7e9ec; border-radius: 12px; }
+  .panel-pad { padding: 18px 20px; }
+
+  .search-row { padding: 14px 16px; border-bottom: 1px solid #eef0f2; display: flex; gap: 8px; }
+  .search-row input { flex: 1; padding: 9px 12px; border: 1.5px solid #dde1e5; border-radius: 8px; font-size: 13px; font-family: inherit; }
+  .search-row input:focus { outline: none; border-color: var(--blue); }
+
+  .client-list { max-height: 620px; overflow-y: auto; }
+  .client-row { padding: 12px 16px; border-bottom: 1px solid #f0f1f3; cursor: pointer; }
+  .client-row:hover { background: #f7f9fb; }
+  .client-row.active { background: #eaf2fa; border-left: 3px solid var(--blue); }
+  .client-row .cname { font-weight: 600; font-size: 13.5px; }
+  .client-row .cmeta { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
+  .empty-msg { padding: 24px 16px; color: var(--ink-soft); font-size: 13px; text-align: center; }
+
+  .detail-empty { padding: 60px 20px; text-align: center; color: var(--ink-soft); font-size: 14px; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); font-weight: 600; margin-bottom: 5px; }
+  .field input { width: 100%; padding: 9px 12px; border: 1.5px solid #dde1e5; border-radius: 8px; font-size: 13.5px; font-family: inherit; }
+  .field input:focus { outline: none; border-color: var(--blue); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+  .detail-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #eef0f2; }
+  .detail-head h2 { font-size: 16px; margin: 0; }
+  .detail-actions { display: flex; gap: 8px; }
+
+  .section-title { font-size: 13px; font-weight: 700; margin: 22px 0 12px; padding-top: 18px; border-top: 1px solid #eef0f2; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); padding: 8px 10px; border-bottom: 1px solid #eef0f2; }
+  td { padding: 10px; border-bottom: 1px solid #f4f5f6; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: #f7f9fb; }
+  .num { text-align: right; }
+
+  .estado-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .estado-Pagado { background: rgba(63,143,106,0.14); color: #3f8f6a; }
+  .estado-FaltaPago { background: rgba(181,69,59,0.12); color: #b5453b; }
+  .estado-EnProceso { background: rgba(6,93,172,0.1); color: var(--blue); }
+  select.estado-select { border: 1.5px solid #dde1e5; border-radius: 6px; font-size: 12px; padding: 4px 6px; font-family: inherit; }
+
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(15,41,66,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .modal-backdrop[hidden] { display: none; }
+  .modal { background: #fff; border-radius: 12px; padding: 24px; width: 480px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
+  .modal h2 { margin: 0 0 16px; font-size: 16px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+  .status { font-size: 12px; color: var(--ink-soft); margin-left: 10px; }
+  .status.ok { color: #3f8f6a; }
+  .status.error { color: #b5453b; }
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-brand">Clientes</div>
+    <div class="topbar-links">
+      <a href="/panel/">← Panel</a>
+      <a href="/logout">Cerrar sesión</a>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="head-row">
+      <h1>Clientes</h1>
+      <div style="display:flex; gap:10px">
+        <button class="btn btn-ghost" id="btnTrash">🗑 Papelera</button>
+        <button class="btn btn-primary" id="btnNuevo">+ Nuevo Cliente</button>
+      </div>
+    </div>
+
+    <div class="layout">
+      <div class="panel">
+        <div class="search-row">
+          <input type="search" id="searchInput" placeholder="Buscar por nombre, RTN, correo, teléfono…">
+        </div>
+        <div class="client-list" id="clientList"></div>
+      </div>
+
+      <div class="panel" id="detailPanel">
+        <div class="detail-empty">Selecciona un cliente de la lista, o crea uno nuevo.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="trashModal" hidden>
+    <div class="modal">
+      <h2>Papelera — Clientes</h2>
+      <table><thead><tr><th>Nombre</th><th>RTN</th><th></th></tr></thead><tbody id="trashBody"></tbody></table>
+      <div class="modal-actions"><button class="btn btn-ghost" id="closeTrash">Cerrar</button></div>
+    </div>
+  </div>
+
+<script>
+let clientsCache = [];
+let selectedClientId = null;
+let editingNew = false;
+
+function esc(s) { return (s ?? "").toString().replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+function fmt(n) { return "L " + (Number(n) || 0).toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function estadoClass(estado) { return "estado-" + (estado || "").replace(/\s+/g, ""); }
+
+async function loadClientList() {
+  const q = document.getElementById("searchInput").value.trim();
+  const url = q ? `/api/clientes?q=${encodeURIComponent(q)}` : "/api/clientes";
+  clientsCache = await fetch(url).then(r => r.json());
+
+  const host = document.getElementById("clientList");
+  if (clientsCache.length === 0) {
+    host.innerHTML = '<div class="empty-msg">Sin clientes todavía.</div>';
+    return;
+  }
+  host.innerHTML = clientsCache.map(c => `
+    <div class="client-row ${c.id === selectedClientId ? 'active' : ''}" data-id="${c.id}">
+      <div class="cname">${esc(c.nombre)}</div>
+      <div class="cmeta">${esc(c.rtn || 'Sin RTN')} ${c.telefono ? '· ' + esc(c.telefono) : ''}</div>
+    </div>
+  `).join("");
+  host.querySelectorAll(".client-row").forEach(el => {
+    el.addEventListener("click", () => selectClient(parseInt(el.dataset.id)));
+  });
+}
+
+async function selectClient(id) {
+  selectedClientId = id;
+  editingNew = false;
+  await loadClientList();
+  const cliente = await fetch(`/api/clientes/${id}`).then(r => r.json());
+  renderDetail(cliente);
+  loadClientInvoices(id);
+}
+
+function renderDetail(cliente) {
+  const isNew = !cliente || !cliente.id;
+  document.getElementById("detailPanel").innerHTML = `
+    <div class="detail-head">
+      <h2>${isNew ? "Nuevo Cliente" : esc(cliente.nombre)}</h2>
+      <div class="detail-actions">
+        <button class="btn btn-primary btn-sm" id="btnGuardarCliente">Guardar</button>
+        ${!isNew ? '<button class="btn btn-danger btn-sm" id="btnEliminarCliente">Eliminar</button>' : ""}
+        <span class="status" id="clientStatusMsg"></span>
+      </div>
+    </div>
+    <div class="panel-pad">
+      <div class="row2">
+        <div class="field"><label>Nombre del Cliente</label><input id="f_nombre" value="${esc(cliente?.nombre)}"></div>
+        <div class="field"><label>RTN</label><input id="f_rtn" value="${esc(cliente?.rtn)}"></div>
+      </div>
+      <div class="field"><label>Dirección</label><input id="f_direccion" value="${esc(cliente?.direccion)}"></div>
+      <div class="row2">
+        <div class="field"><label>Contacto</label><input id="f_contacto" value="${esc(cliente?.contacto)}"></div>
+        <div class="field"><label>Teléfono</label><input id="f_telefono" value="${esc(cliente?.telefono)}"></div>
+      </div>
+      <div class="field"><label>Correo</label><input id="f_correo" type="email" value="${esc(cliente?.correo)}"></div>
+
+      ${!isNew ? `
+        <div class="section-title">Facturas de este cliente</div>
+        <table>
+          <thead><tr><th>Número</th><th>Fecha</th><th>Estado</th><th class="num">Total</th></tr></thead>
+          <tbody id="clientInvoicesBody"><tr><td colspan="4" style="color:var(--ink-soft)">Cargando…</td></tr></tbody>
+        </table>
+      ` : ""}
+    </div>
+  `;
+
+  document.getElementById("btnGuardarCliente").addEventListener("click", () => saveClient(cliente?.id));
+  const delBtn = document.getElementById("btnEliminarCliente");
+  if (delBtn) delBtn.addEventListener("click", () => deleteClient(cliente.id, cliente.nombre));
+}
+
+async function saveClient(existingId) {
+  const statusMsg = document.getElementById("clientStatusMsg");
+  statusMsg.textContent = "Guardando…"; statusMsg.className = "status";
+  const body = {
+    nombre: document.getElementById("f_nombre").value,
+    rtn: document.getElementById("f_rtn").value,
+    direccion: document.getElementById("f_direccion").value,
+    contacto: document.getElementById("f_contacto").value,
+    telefono: document.getElementById("f_telefono").value,
+    correo: document.getElementById("f_correo").value,
+  };
+  try {
+    const url = existingId ? `/api/clientes/${existingId}` : "/api/clientes";
+    const method = existingId ? "PUT" : "POST";
+    const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = data.error || "Error al guardar.";
+      statusMsg.className = "status error";
+      return;
+    }
+    statusMsg.textContent = "Guardado ✓"; statusMsg.className = "status ok";
+    await loadClientList();
+    selectClient(data.id);
+  } catch (err) {
+    statusMsg.textContent = "Error de conexión."; statusMsg.className = "status error";
+  }
+}
+
+async function deleteClient(id, nombre) {
+  if (!confirm(`¿Mover a "${nombre}" a la papelera? Podrás restaurarlo después desde 🗑 Papelera.`)) return;
+  await fetch(`/api/clientes/${id}`, { method: "DELETE" });
+  selectedClientId = null;
+  document.getElementById("detailPanel").innerHTML = '<div class="detail-empty">Selecciona un cliente de la lista, o crea uno nuevo.</div>';
+  loadClientList();
+}
+
+async function loadClientInvoices(clienteId) {
+  const invoices = await fetch(`/api/clientes/${clienteId}/invoices`).then(r => r.json());
+  const body = document.getElementById("clientInvoicesBody");
+  if (!body) return;
+  body.innerHTML = invoices.map(inv => `
+    <tr class="clickable" data-id="${inv.id}">
+      <td class="mono">${esc(inv.numero)}</td>
+      <td>${esc(inv.fecha)}</td>
+      <td>
+        <select class="estado-select" data-invoice-id="${inv.id}">
+          <option value="Falta Pago" ${inv.estado === "Falta Pago" ? "selected" : ""}>Falta Pago</option>
+          <option value="En Proceso" ${inv.estado === "En Proceso" ? "selected" : ""}>En Proceso</option>
+          <option value="Pagado" ${inv.estado === "Pagado" ? "selected" : ""}>Pagado</option>
+        </select>
+      </td>
+      <td class="num">${fmt(inv.total_a_pagar)}</td>
+    </tr>
+  `).join("") || '<tr><td colspan="4" style="color:var(--ink-soft)">Sin facturas todavía.</td></tr>';
+
+  body.querySelectorAll("tr[data-id]").forEach(tr => {
+    tr.addEventListener("click", (e) => {
+      if (e.target.tagName === "SELECT") return;
+      window.open(`/facturacion/ver/?id=${tr.dataset.id}`, "_blank");
+    });
+  });
+  body.querySelectorAll(".estado-select").forEach(sel => {
+    sel.addEventListener("click", (e) => e.stopPropagation());
+    sel.addEventListener("change", async (e) => {
+      e.stopPropagation();
+      await fetch(`/api/invoices/${sel.dataset.invoiceId}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado: sel.value }),
+      });
+    });
+  });
+}
+
+document.getElementById("btnNuevo").addEventListener("click", () => {
+  selectedClientId = null;
+  editingNew = true;
+  loadClientList();
+  renderDetail(null);
+});
+
+document.getElementById("searchInput").addEventListener("input", loadClientList);
+
+document.getElementById("btnTrash").addEventListener("click", async () => {
+  const items = await fetch("/api/clientes/trash").then(r => r.json());
+  document.getElementById("trashBody").innerHTML = items.map(c => `
+    <tr>
+      <td>${esc(c.nombre)}</td>
+      <td class="mono">${esc(c.rtn || "—")}</td>
+      <td>
+        <button class="btn btn-sm btn-primary" onclick="restoreClient(${c.id})">Restaurar</button>
+        <button class="btn btn-sm btn-danger" onclick="permanentDeleteClient(${c.id})">Eliminar</button>
+      </td>
+    </tr>
+  `).join("") || '<tr><td colspan="3" style="color:var(--ink-soft)">La papelera está vacía.</td></tr>';
+  document.getElementById("trashModal").hidden = false;
+});
+document.getElementById("closeTrash").addEventListener("click", () => {
+  document.getElementById("trashModal").hidden = true;
+  loadClientList();
+});
+async function restoreClient(id) {
+  await fetch(`/api/clientes/${id}/restore`, { method: "POST" });
+  document.getElementById("btnTrash").click();
+}
+async function permanentDeleteClient(id) {
+  if (!confirm("¿Eliminar PERMANENTEMENTE? No se puede deshacer.")) return;
+  await fetch(`/api/clientes/${id}/permanent`, { method: "DELETE" });
+  document.getElementById("btnTrash").click();
+}
+
+loadClientList();
+</script>
+</body>
+</html>

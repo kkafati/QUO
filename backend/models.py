@@ -221,6 +221,25 @@ class PageView(db.Model):
     ip_address = db.Column(db.String(64))
 
 
+class Cliente(db.Model):
+    """A saved customer/client record - separate from Invoice.cliente_nombre/cliente_rtn,
+    which stay as free text on each invoice for backward compatibility and so an
+    invoice's printed client info doesn't retroactively change if the Cliente record
+    is edited later."""
+    __tablename__ = "clientes"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    nombre = db.Column(db.String(255), nullable=False)
+    rtn = db.Column(db.String(32))
+    direccion = db.Column(db.String(255))
+    contacto = db.Column(db.String(255))
+    telefono = db.Column(db.String(64))
+    correo = db.Column(db.String(255))
+    created_at = db.Column(db.String(16))
+    updated_at = db.Column(db.String(16))
+    deleted_at = db.Column(db.String(16))
+
+
 class Invoice(db.Model):
     """A Factura. CAI, Rango Autorizado, Fecha Límite, and the business's own
     RTN/contact info all come live from the Account profile at render time -
@@ -233,8 +252,10 @@ class Invoice(db.Model):
 
     cliente_nombre = db.Column(db.String(255), nullable=False)
     cliente_rtn = db.Column(db.String(32))
+    cliente_id = db.Column(db.Integer, db.ForeignKey("clientes.id"))  # optional link to a saved Cliente
     fecha = db.Column(db.String(16), nullable=False)
     termino_pago = db.Column(db.String(16), nullable=False, default="contado")  # contado | credito
+    estado = db.Column(db.String(32), nullable=False, default="Falta Pago")  # Pagado | Falta Pago | En Proceso | ...
 
     descuentos = db.Column(db.Float, default=0)
     importe_exonerado = db.Column(db.Float, default=0)

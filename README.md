@@ -37,6 +37,14 @@ Deleting a Material, Labor, Herramienta, Transporte, Gasto, Ficha de Costo, or C
 
 **Scope note:** this covers the items people most often worry about losing by accident. Individual supplier price quotes (Cotización de Proveedores entries) are still deleted immediately when removed — those are quick to re-enter and lower-stakes than losing a whole ficha or cotización, so they weren't included in this system. Ask if you'd like that extended to cover them too.
 
+## Clientes
+
+Live at `/clientes/`, linked from the dashboard. Full CRUD (create/edit/delete-to-trash/restore, same soft-delete pattern as everywhere else) for customer records — Nombre, RTN, Dirección, Contacto, Teléfono, Correo — with a search bar and a click-to-select list.
+
+Selecting a client shows their full invoice history, each with a payment-status badge (**Falta Pago / En Proceso / Pagado**) that can be changed right from that list, no need to open the invoice itself. That same status selector is also on the Facturación list page and on every invoice's own edit toolbar — change it from wherever's convenient, it's the same underlying field everywhere.
+
+**Scope note on linking**: new invoices can be tied to a client via `cliente_id`, but I didn't rebuild the invoice-creation flow to require picking one from a dropdown — `cliente_nombre`/`cliente_rtn` stay as free-text fields on the invoice (so a printed invoice's client info never silently changes if you later edit the Cliente record). A client's invoice list picks up both explicitly-linked invoices and older/unlinked ones matched by name, so nothing existing gets orphaned.
+
 ## Facturación (billing/invoicing)
 
 **5 templates now available**: Clásica (your real format), Moderna (light, minimalist, colored accent bar), Elegante (formal/corporate, centered, muted palette), Compacta (dense, print-economical), and Color Block (bold branded header band). Pick one when creating a new invoice via "+ Nueva Factura," or switch an existing invoice's template anytime from the "Plantilla" dropdown in its toolbar — your data carries over, only the visual layout changes.

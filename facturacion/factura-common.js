@@ -160,6 +160,8 @@ async function loadInvoice() {
   document.getElementById("orden_compra_exenta").value = inv.orden_compra_exenta || "";
   document.getElementById("constancia_registro_exonerado").value = inv.constancia_registro_exonerado || "";
   document.getElementById("registro_sag").value = inv.registro_sag || "";
+  const estadoEl = document.getElementById("estadoSwitcher");
+  if (estadoEl) { estadoEl.value = inv.estado || "Falta Pago"; estadoEl.disabled = false; }
   lines = inv.lines.map(l => ({ _key: uid(), cantidad: l.cantidad, descripcion: l.descripcion, precio_unitario: l.precio_unitario }));
   if (lines.length === 0) lines = [blankLine()];
   renderLines();
@@ -182,6 +184,7 @@ document.getElementById("btnGuardar").addEventListener("click", async () => {
     cliente_rtn: document.getElementById("cliente_rtn").value,
     fecha: document.getElementById("fecha").value,
     termino_pago: document.getElementById("term-credito").checked ? "credito" : "contado",
+    estado: document.getElementById("estadoSwitcher") ? document.getElementById("estadoSwitcher").value : undefined,
     descuentos: document.getElementById("descuentos").value,
     importe_exonerado: document.getElementById("importe_exonerado").value,
     importe_exento: document.getElementById("importe_exento").value,
@@ -234,6 +237,18 @@ document.getElementById("btnEliminar").addEventListener("click", async () => {
   await loadInvoice();
 })();
 
+// ---- Estado (payment status) switcher ----
+const estadoSwitcher = document.getElementById("estadoSwitcher");
+if (estadoSwitcher) {
+  if (!invoiceId) estadoSwitcher.disabled = true; // nothing to set yet on an unsaved invoice
+  estadoSwitcher.addEventListener("change", async () => {
+    if (!invoiceId) return;
+    await fetch(`/api/invoices/${invoiceId}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ estado: estadoSwitcher.value }),
+    });
+  });
+}
 // ---- Template switcher ----
 const templateSwitcher = document.getElementById("templateSwitcher");
 if (templateSwitcher) {

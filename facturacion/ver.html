@@ -69,10 +69,12 @@
   .items-table { width: 100%; border-collapse: collapse; margin-top: 18px; }
   .items-table thead th {
     background: var(--dark-head); color: #fff; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.05em;
-    padding: 10px 12px; text-align: left;
+    padding: 10px 12px; text-align: left; border-right: 1px solid rgba(255,255,255,0.25);
   }
+  .items-table thead th:last-child, .items-table thead th.no-print { border-right: none; }
   .items-table thead th.num { text-align: right; }
-  .items-table td { padding: 8px 12px; border-bottom: 1px solid #eceeef; vertical-align: top; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 9pt; }
+  .items-table td { padding: 8px 12px; border-bottom: 1px solid #eceeef; border-right: 1px solid #e3e5e8; vertical-align: top; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 9pt; }
+  .items-table td:last-child, .items-table td.no-print { border-right: none; }
   .items-table td.num { text-align: right; }
   .items-table input { border: none; background: transparent; font-family: inherit; font-size: 9pt; width: 100%; padding: 4px 0; }
   .items-table input.cantidad { text-align: center; }
@@ -108,18 +110,21 @@
   .exempt-refs .evalue input { border: none; background: transparent; font-family: inherit; font-size: 6pt; width: 100%; }
 
   /* ---- footer ---- */
-  .foot-lines { margin-top: 18px; font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; line-height: 1.9; }
+  .foot-lines { font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; line-height: 1.7; }
   .foot-lines .flabel { font-weight: 300; }
   .foot-lines .flabel-bold { font-weight: 700; }
-  .foot-tagline { text-align: center; font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; margin-top: 22px; color: #333; }
+  .foot-tagline { text-align: left; font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; color: #333; }
   .toggle-gravado { margin-top: 6px; font-size: 11px; }
   .toggle-gravado label { cursor: pointer; }
+
+  @page { size: letter; margin: 0.5in; }
 
   @media print {
     body { background: #fff; }
     .toolbar { display: none !important; }
     .sheet-wrap { margin: 0; max-width: 100%; }
-    .sheet { box-shadow: none; padding: 20px 30px; }
+    .sheet { box-shadow: none; padding: 20px 30px; display: flex; flex-direction: column; min-height: 10in; }
+    .bottom-block { margin-top: auto; break-inside: avoid; page-break-inside: avoid; }
     input { pointer-events: none; }
     .remove-line-btn, .add-line-row, .toggle-gravado { display: none !important; }
     .min-rows-spacer { height: auto !important; }
@@ -134,6 +139,11 @@
       <span class="status" id="statusMsg"></span>
     </div>
     <div class="toolbar-left">
+      <select class="btn btn-ghost" id="estadoSwitcher" style="cursor:pointer">
+        <option value="Falta Pago">Estado: Falta Pago</option>
+        <option value="En Proceso">Estado: En Proceso</option>
+        <option value="Pagado">Estado: Pagado</option>
+      </select>
       <button class="btn btn-primary" id="btnGuardar">Guardar Factura</button>
       <select class="btn btn-ghost" id="templateSwitcher" style="cursor:pointer">
         <option value="clasica">Plantilla: Clásica</option>
@@ -197,6 +207,7 @@
       </table>
       <div class="add-line-row"><button type="button" id="btnAddLine">+ Agregar línea</button></div>
 
+      <div class="bottom-block">
       <hr class="pre-totals-rule">
 
       <div class="totals-section">
@@ -210,6 +221,13 @@
             <div class="erow"><div class="elabel">No. Correlativo de Constancia de Registro Exonerado</div><div class="evalue"><input id="constancia_registro_exonerado"></div></div>
             <div class="erow"><div class="elabel">No. de Registro de la SAG</div><div class="evalue"><input id="registro_sag"></div></div>
           </div>
+          <div class="foot-lines">
+            <div><span class="flabel">RTN</span> <span id="footRtn">—</span></div>
+            <div><span class="flabel">Fecha Límite de Emisión:</span> <span id="footFechaLimite">—</span></div>
+            <div><span class="flabel">Rango Autorizado:</span> <span id="footRango">—</span></div>
+            <div><span class="flabel-bold">Original Blanca:</span> Cliente&nbsp;&nbsp;&nbsp;<span class="flabel-bold">Copia Amarilla:</span> Administración&nbsp;&nbsp;&nbsp;<span class="flabel-bold">Copia Azul:</span> Contabilidad</div>
+          </div>
+          <div class="foot-tagline">La factura es beneficio de todos "Exíjala"</div>
         </div>
         <div class="totals-table">
           <div class="trow"><span class="tlabel">Sub-Total</span><span id="t_subtotal">L. 0.00</span></div>
@@ -224,15 +242,7 @@
           <input type="hidden" id="gravado_18_pct">
         </div>
       </div>
-
-      <div class="foot-lines">
-        <div><span class="flabel">RTN</span> <span id="footRtn">—</span></div>
-        <div><span class="flabel">Fecha Límite de Emisión:</span> <span id="footFechaLimite">—</span></div>
-        <div><span class="flabel">Rango Autorizado:</span> <span id="footRango">—</span></div>
-        <div><span class="flabel-bold">Original Blanca:</span> Cliente&nbsp;&nbsp;&nbsp;<span class="flabel-bold">Copia Amarilla:</span> Administración&nbsp;&nbsp;&nbsp;<span class="flabel-bold">Copia Azul:</span> Contabilidad</div>
       </div>
-
-      <div class="foot-tagline">La factura es beneficio de todos "Exíjala"</div>
 
     </div>
   </div>

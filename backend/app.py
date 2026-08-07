@@ -5,7 +5,7 @@ from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
 from werkzeug.security import check_password_hash, generate_password_hash
-from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine
+from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente
 from numero_a_letras import numero_a_letras
 
 # On some Windows machines, a corrupted registry entry makes Python think
@@ -25,6 +25,7 @@ PANEL_DIR = os.path.join(os.path.dirname(BASE_DIR), "panel")
 CUENTA_DIR = os.path.join(os.path.dirname(BASE_DIR), "cuenta")
 ADMIN_DIR = os.path.join(os.path.dirname(BASE_DIR), "admin")
 FACTURACION_DIR = os.path.join(os.path.dirname(BASE_DIR), "facturacion")
+CLIENTES_DIR = os.path.join(os.path.dirname(BASE_DIR), "clientes")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/cotizaciones")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(BASE_DIR, "quoting.db")
@@ -1186,6 +1187,134 @@ def factura_ver():
     return send_from_directory(FACTURACION_DIR, filename)
 
 
+# ---------------------------------------------------------------------------
+# Clientes (customer records)
+# ---------------------------------------------------------------------------
+
+@app.route("/clientes/")
+@login_required
+def clientes_page():
+    log_page_view("/clientes/")
+    return send_from_directory(CLIENTES_DIR, "index.html")
+
+
+def cliente_to_dict(c):
+    return {
+        "id": c.id, "nombre": c.nombre, "rtn": c.rtn, "direccion": c.direccion,
+        "contacto": c.contacto, "telefono": c.telefono, "correo": c.correo,
+        "created_at": c.created_at, "updated_at": c.updated_at,
+    }
+
+
+@app.route("/api/clientes", methods=["GET"])
+@login_required
+def list_clientes():
+    q = request.args.get("q", "").strip().lower()
+    clientes = Cliente.query.filter_by(account_id=current_account_id(), deleted_at=None).order_by(Cliente.nombre).all()
+    if q:
+        clientes = [c for c in clientes if q in c.nombre.lower() or q in (c.rtn or "").lower()
+                    or q in (c.correo or "").lower() or q in (c.telefono or "").lower()]
+    return jsonify([cliente_to_dict(c) for c in clientes])
+
+
+@app.route("/api/clientes/trash", methods=["GET"])
+@login_required
+def list_clientes_trash():
+    clientes = (Cliente.query.filter(Cliente.account_id == current_account_id(), Cliente.deleted_at.isnot(None))
+                .order_by(Cliente.deleted_at.desc()).all())
+    return jsonify([cliente_to_dict(c) for c in clientes])
+
+
+@app.route("/api/clientes/<int:cliente_id>", methods=["GET"])
+@login_required
+def get_cliente(cliente_id):
+    c = Cliente.query.filter_by(id=cliente_id, account_id=current_account_id()).first_or_404()
+    return jsonify(cliente_to_dict(c))
+
+
+@app.route("/api/clientes/<int:cliente_id>/invoices", methods=["GET"])
+@login_required
+def get_cliente_invoices(cliente_id):
+    cliente = Cliente.query.filter_by(id=cliente_id, account_id=current_account_id()).first_or_404()
+    # Match invoices linked by cliente_id, plus older invoices that predate the
+    # link and were only ever recorded by name (kept so history isn't lost).
+    invoices = (Invoice.query.filter_by(account_id=current_account_id(), deleted_at=None)
+                .filter(db.or_(Invoice.cliente_id == cliente_id, Invoice.cliente_nombre == cliente.nombre))
+                .order_by(Invoice.fecha.desc()).all())
+    return jsonify([compute_invoice_totals(i) for i in invoices])
+
+
+@app.route("/api/clientes", methods=["POST"])
+@login_required
+def create_cliente():
+    data = request.json or {}
+    nombre = (data.get("nombre") or "").strip()
+    if not nombre:
+        return jsonify({"error": "El nombre del cliente es requerido."}), 400
+    c = Cliente(
+        account_id=current_account_id(),
+        nombre=nombre,
+        rtn=(data.get("rtn") or "").strip(),
+        direccion=(data.get("direccion") or "").strip(),
+        contacto=(data.get("contacto") or "").strip(),
+        telefono=(data.get("telefono") or "").strip(),
+        correo=(data.get("correo") or "").strip(),
+        created_at=datetime.utcnow().strftime("%Y-%m-%d"),
+        updated_at=datetime.utcnow().strftime("%Y-%m-%d"),
+    )
+    db.session.add(c)
+    db.session.commit()
+    return jsonify(cliente_to_dict(c)), 201
+
+
+@app.route("/api/clientes/<int:cliente_id>", methods=["PUT"])
+@login_required
+def update_cliente(cliente_id):
+    c = Cliente.query.filter_by(id=cliente_id, account_id=current_account_id()).first_or_404()
+    data = request.json or {}
+    nombre = (data.get("nombre") or c.nombre).strip()
+    if not nombre:
+        return jsonify({"error": "El nombre del cliente es requerido."}), 400
+    c.nombre = nombre
+    c.rtn = (data.get("rtn", c.rtn) or "").strip()
+    c.direccion = (data.get("direccion", c.direccion) or "").strip()
+    c.contacto = (data.get("contacto", c.contacto) or "").strip()
+    c.telefono = (data.get("telefono", c.telefono) or "").strip()
+    c.correo = (data.get("correo", c.correo) or "").strip()
+    c.updated_at = datetime.utcnow().strftime("%Y-%m-%d")
+    db.session.commit()
+    return jsonify(cliente_to_dict(c))
+
+
+@app.route("/api/clientes/<int:cliente_id>", methods=["DELETE"])
+@login_required
+def delete_cliente(cliente_id):
+    c = Cliente.query.filter_by(id=cliente_id, account_id=current_account_id(), deleted_at=None).first_or_404()
+    c.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    db.session.commit()
+    return "", 204
+
+
+@app.route("/api/clientes/<int:cliente_id>/restore", methods=["POST"])
+@login_required
+def restore_cliente(cliente_id):
+    c = Cliente.query.filter(Cliente.id == cliente_id, Cliente.account_id == current_account_id(),
+                              Cliente.deleted_at.isnot(None)).first_or_404()
+    c.deleted_at = None
+    db.session.commit()
+    return jsonify(cliente_to_dict(c))
+
+
+@app.route("/api/clientes/<int:cliente_id>/permanent", methods=["DELETE"])
+@login_required
+def permanent_delete_cliente(cliente_id):
+    c = Cliente.query.filter(Cliente.id == cliente_id, Cliente.account_id == current_account_id(),
+                              Cliente.deleted_at.isnot(None)).first_or_404()
+    db.session.delete(c)
+    db.session.commit()
+    return "", 204
+
+
 def compute_invoice_totals(invoice):
     lines = []
     subtotal = 0.0
@@ -1219,6 +1348,8 @@ def compute_invoice_totals(invoice):
         "template": invoice.template,
         "cliente_nombre": invoice.cliente_nombre,
         "cliente_rtn": invoice.cliente_rtn,
+        "cliente_id": invoice.cliente_id,
+        "estado": invoice.estado,
         "fecha": invoice.fecha,
         "termino_pago": invoice.termino_pago,
         "lines": lines,
@@ -1323,6 +1454,8 @@ def create_invoice():
         template=(data.get("template") or "clasica").strip(),
         cliente_nombre=cliente_nombre,
         cliente_rtn=(data.get("cliente_rtn") or "").strip(),
+        cliente_id=data.get("cliente_id") or None,
+        estado=(data.get("estado") or "Falta Pago").strip(),
         fecha=fecha,
         termino_pago=data.get("termino_pago") or "contado",
         descuentos=float(data.get("descuentos", 0) or 0),
@@ -1356,6 +1489,9 @@ def update_invoice(invoice_id):
         return jsonify({"error": "El nombre del cliente es requerido."}), 400
     invoice.cliente_nombre = cliente_nombre
     invoice.cliente_rtn = (data.get("cliente_rtn", invoice.cliente_rtn) or "").strip()
+    if "cliente_id" in data:
+        invoice.cliente_id = data.get("cliente_id") or None
+    invoice.estado = (data.get("estado", invoice.estado) or "Falta Pago").strip()
 
     new_fecha = data.get("fecha", invoice.fecha)
     if new_fecha != invoice.fecha:
