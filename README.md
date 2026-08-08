@@ -49,6 +49,10 @@ Selecting a client shows their full invoice history, each with a payment-status 
 
 **Scope note on linking**: new invoices can be tied to a client via `cliente_id`, but I didn't rebuild the invoice-creation flow to require picking one from a dropdown — `cliente_nombre`/`cliente_rtn` stay as free-text fields on the invoice (so a printed invoice's client info never silently changes if you later edit the Cliente record). A client's invoice list picks up both explicitly-linked invoices and older/unlinked ones matched by name, so nothing existing gets orphaned.
 
+## Plantilla de Factura (account-level, not per-invoice)
+
+Which of the 7 invoice templates gets used is now set once in `/cuenta/` (Facturación section → "Plantilla de Factura"), not chosen per-invoice. "+ Nueva Factura" always uses whatever's configured there; the picker modal and the per-invoice "Plantilla" switcher have both been removed. Changing this setting only affects *new* invoices going forward — existing invoices keep whichever template they were created with, so a previously-printed/saved invoice never silently changes format after the fact.
+
 ## Facturación (billing/invoicing)
 
 **5 templates now available**: Clásica (your real format), Moderna (light, minimalist, colored accent bar), Elegante (formal/corporate, centered, muted palette), Compacta (dense, print-economical), and Color Block (bold branded header band). Pick one when creating a new invoice via "+ Nueva Factura," or switch an existing invoice's template anytime from the "Plantilla" dropdown in its toolbar — your data carries over, only the visual layout changes.

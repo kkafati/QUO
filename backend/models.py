@@ -22,6 +22,7 @@ class Account(db.Model):
     currency = db.Column(db.String(8), default="HNL")
     logo_data_url = db.Column(db.Text)           # base64 data: URL, optional custom logo
     invoice_prefix = db.Column(db.String(24), default="")   # e.g. 000-001-01-00000000
+    default_invoice_template = db.Column(db.String(32), default="clasica")
     next_invoice_number = db.Column(db.Integer, default=1)
     cai = db.Column(db.String(40))                          # Código de Autorización de Impresión
     cai_fecha_limite = db.Column(db.String(10))              # DD/MM/AAAA

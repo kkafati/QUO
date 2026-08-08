@@ -169,6 +169,7 @@ def account_profile_dict(account):
         "cai_fecha_limite": account.cai_fecha_limite,
         "rango_autorizado_desde": account.rango_autorizado_desde,
         "rango_autorizado_hasta": account.rango_autorizado_hasta,
+        "default_invoice_template": account.default_invoice_template or "clasica",
     }
 
 
@@ -189,22 +190,24 @@ def update_account_profile():
     if not company_name:
         return jsonify({"error": "El nombre comercial es requerido."}), 400
     account.company_name = company_name
-    account.legal_name = (data.get("legal_name") or "").strip()
-    account.tax_id = (data.get("tax_id") or "").strip()
-    account.address = (data.get("address") or "").strip()
-    account.phone = (data.get("phone") or "").strip()
-    account.email = (data.get("email") or "").strip()
-    account.website = (data.get("website") or "").strip()
-    account.currency = (data.get("currency") or "HNL").strip()
-    account.invoice_prefix = (data.get("invoice_prefix") or "").strip()
+    account.legal_name = (data.get("legal_name", account.legal_name) or "").strip()
+    account.tax_id = (data.get("tax_id", account.tax_id) or "").strip()
+    account.address = (data.get("address", account.address) or "").strip()
+    account.phone = (data.get("phone", account.phone) or "").strip()
+    account.email = (data.get("email", account.email) or "").strip()
+    account.website = (data.get("website", account.website) or "").strip()
+    account.currency = (data.get("currency", account.currency) or "HNL").strip()
+    account.invoice_prefix = (data.get("invoice_prefix", account.invoice_prefix) or "").strip()
     try:
         account.next_invoice_number = int(data.get("next_invoice_number", account.next_invoice_number) or 1)
     except (TypeError, ValueError):
         pass
-    account.cai = (data.get("cai") or "").strip().upper()
-    account.cai_fecha_limite = (data.get("cai_fecha_limite") or "").strip()
-    account.rango_autorizado_desde = (data.get("rango_autorizado_desde") or "").strip()
-    account.rango_autorizado_hasta = (data.get("rango_autorizado_hasta") or "").strip()
+    account.cai = (data.get("cai", account.cai) or "").strip().upper()
+    account.cai_fecha_limite = (data.get("cai_fecha_limite", account.cai_fecha_limite) or "").strip()
+    account.rango_autorizado_desde = (data.get("rango_autorizado_desde", account.rango_autorizado_desde) or "").strip()
+    account.rango_autorizado_hasta = (data.get("rango_autorizado_hasta", account.rango_autorizado_hasta) or "").strip()
+    incoming_template = (data.get("default_invoice_template", account.default_invoice_template) or "clasica").strip()
+    account.default_invoice_template = incoming_template if incoming_template in TEMPLATE_FILES else "clasica"
     if "logo_data_url" in data:
         account.logo_data_url = data.get("logo_data_url") or None
 
@@ -1178,11 +1181,12 @@ TEMPLATE_FILES = {
 def factura_ver():
     log_page_view("/facturacion/ver/")
     invoice_id = request.args.get("id", type=int)
-    template = request.args.get("template")
     if invoice_id:
         invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id()).first()
-        if invoice:
-            template = invoice.template
+        template = invoice.template if invoice else "clasica"
+    else:
+        account = Account.query.get(current_account_id())
+        template = (account.default_invoice_template if account else None) or "clasica"
     filename = TEMPLATE_FILES.get(template, "ver.html")
     return send_from_directory(FACTURACION_DIR, filename)
 
@@ -1482,7 +1486,7 @@ def create_invoice():
     invoice = Invoice(
         account_id=account.id,
         numero=numero,
-        template=(data.get("template") or "clasica").strip(),
+        template=account.default_invoice_template or "clasica",
         cliente_nombre=cliente_nombre,
         cliente_rtn=cliente_rtn,
         cliente_id=resolved_cliente_id,

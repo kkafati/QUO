@@ -115,7 +115,7 @@
   .foot-lines { font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; line-height: 1.7; }
   .foot-lines .flabel { font-weight: 300; }
   .foot-lines .flabel-bold { font-weight: 700; }
-  .foot-tagline { text-align: left; font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; color: #333; }
+  .foot-tagline { text-align: center; font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; color: #333; }
   .toggle-gravado { margin-top: 6px; font-size: 11px; }
   .toggle-gravado label { cursor: pointer; }
 
@@ -158,15 +158,6 @@
         <option value="Pagado">Estado: Pagado</option>
       </select>
       <button class="btn btn-primary" id="btnGuardar">Guardar Factura</button>
-      <select class="btn btn-ghost" id="templateSwitcher" style="cursor:pointer">
-        <option value="clasica">Plantilla: Clásica</option>
-        <option value="moderna">Plantilla: Moderna</option>
-        <option value="elegante">Plantilla: Elegante</option>
-        <option value="compacta">Plantilla: Compacta</option>
-        <option value="colorblock">Plantilla: Color Block</option>
-        <option value="termica58">Plantilla: Térmica 58mm</option>
-        <option value="termica80">Plantilla: Térmica 80mm</option>
-      </select>
       <button class="btn btn-ghost" id="btnImprimir">🖨 Imprimir / PDF</button>
       <button class="btn btn-danger" id="btnEliminar" style="display:none">Eliminar</button>
     </div>
@@ -267,7 +258,6 @@
     </div>
   </div>
 
-<script>window.CURRENT_TEMPLATE = "clasica";</script>
 <script src="/facturacion/factura-common.js"></script>
 </body>
 </html>

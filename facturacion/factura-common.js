@@ -325,20 +325,3 @@ if (estadoSwitcher) {
     });
   });
 }
-// ---- Template switcher ----
-const templateSwitcher = document.getElementById("templateSwitcher");
-if (templateSwitcher) {
-  templateSwitcher.value = window.CURRENT_TEMPLATE || "clasica";
-  templateSwitcher.addEventListener("change", async () => {
-    const newTemplate = templateSwitcher.value;
-    if (!invoiceId) {
-      window.location.href = `/facturacion/ver/?template=${newTemplate}`;
-      return;
-    }
-    await fetch(`/api/invoices/${invoiceId}`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ template: newTemplate }),
-    });
-    window.location.href = `/facturacion/ver/?id=${invoiceId}`;
-  });
-}

@@ -171,6 +171,22 @@
       <div class="card">
         <h2>Facturación</h2>
 
+        <div class="field" style="margin-bottom:18px; max-width:320px">
+          <label>Plantilla de Factura</label>
+          <select id="default_invoice_template">
+            <option value="clasica">Clásica</option>
+            <option value="moderna">Moderna</option>
+            <option value="elegante">Elegante</option>
+            <option value="compacta">Compacta</option>
+            <option value="colorblock">Color Block</option>
+            <option value="termica58">Térmica 58mm</option>
+            <option value="termica80">Térmica 80mm</option>
+          </select>
+          <div style="font-size:11.5px; color:var(--ink-soft); margin-top:6px">
+            Se usa en todas las facturas nuevas que crees a partir de ahora. Las facturas ya creadas conservan su propia plantilla.
+          </div>
+        </div>
+
         <div class="field" style="margin-bottom:18px">
           <label>Prefijo de Factura</label>
           <div class="seg-group" id="seg-invoice_prefix" data-sep="-">
@@ -361,6 +377,7 @@ async function loadProfile() {
   document.getElementById("email").value = p.email || "";
   document.getElementById("website").value = p.website || "";
   setSegmentedValue("seg-invoice_prefix", p.invoice_prefix);
+  document.getElementById("default_invoice_template").value = p.default_invoice_template || "clasica";
   setNextInvoiceNumber(p.next_invoice_number || 1);
   setSegmentedValue("seg-cai", p.cai);
   setSegmentedValue("seg-cai_fecha_limite", p.cai_fecha_limite);
@@ -415,6 +432,7 @@ document.getElementById("settingsForm").addEventListener("submit", async (e) => 
     email: document.getElementById("email").value,
     website: document.getElementById("website").value,
     invoice_prefix: getSegmentedValue("seg-invoice_prefix"),
+    default_invoice_template: document.getElementById("default_invoice_template").value,
     next_invoice_number: document.getElementById("next_invoice_number").value,
     cai: getSegmentedValue("seg-cai"),
     cai_fecha_limite: getSegmentedValue("seg-cai_fecha_limite"),
