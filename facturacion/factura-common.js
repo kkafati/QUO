@@ -23,10 +23,13 @@ async function loadAccount() {
     <div class="contact-row"><span class="contact-icon">🌐</span> ${esc(account.website || "—")}</div>
   `;
   // The globe emoji above renders as a fixed-color glyph on most systems and
-  // ignores CSS `color`. Swap it for plain "WWW" text (which does respect
-  // color: white) specifically where a solid-fill icon circle is used.
+  // ignores CSS `color`. Templates can opt into a real SVG globe icon via
+  // window.GLOBE_ICON_SVG; otherwise fall back to plain "WWW" text (which
+  // does respect color: white, unlike the emoji).
   document.querySelectorAll(".contact-icon").forEach(el => {
-    if (el.textContent.trim() === "🌐") el.innerHTML = '<span style="font-size:0.55em;letter-spacing:-0.05em">WWW</span>';
+    if (el.textContent.trim() === "🌐") {
+      el.innerHTML = window.GLOBE_ICON_SVG || '<span style="font-size:0.55em;letter-spacing:-0.05em">WWW</span>';
+    }
   });
   document.getElementById("caiValue").textContent = account.cai || "— sin configurar —";
   document.getElementById("footRtn").textContent = account.tax_id || "—";
@@ -83,6 +86,16 @@ function renderLines() {
   });
 }
 
+function setMoneyDisplay(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.parentElement && el.parentElement.classList.contains("tvalue-wrap")) {
+    el.textContent = (Number(value) || 0).toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  } else {
+    el.textContent = fmt(value);
+  }
+}
+
 function updateTotals() {
   const subtotal = lines.reduce((s, l) => s + (l.cantidad || 0) * (l.precio_unitario || 0), 0);
   const descuentos = parseFloat(document.getElementById("descuentos").value) || 0;
@@ -97,12 +110,12 @@ function updateTotals() {
   const isv18 = gravado18 ? round2(base * 0.18) : 0;
   const total = round2(subtotal - descuentos + isv15 + isv18);
 
-  document.getElementById("t_subtotal").textContent = fmt(subtotal);
-  document.getElementById("t_gravado15").textContent = fmt(gravado15amt);
-  document.getElementById("t_gravado18").textContent = fmt(gravado18amt);
-  document.getElementById("t_isv15").textContent = fmt(isv15);
-  document.getElementById("t_isv18").textContent = fmt(isv18);
-  document.getElementById("t_total").textContent = fmt(total);
+  setMoneyDisplay("t_subtotal", subtotal);
+  setMoneyDisplay("t_gravado15", gravado15amt);
+  setMoneyDisplay("t_gravado18", gravado18amt);
+  setMoneyDisplay("t_isv15", isv15);
+  setMoneyDisplay("t_isv18", isv18);
+  setMoneyDisplay("t_total", total);
   document.getElementById("totalEnLetras").textContent = numeroALetrasLocal(total);
 }
 
@@ -286,12 +299,12 @@ document.getElementById("btnGuardar").addEventListener("click", async () => {
       window.location.href = `/facturacion/ver/?id=${data.id}`;
     } else {
       document.getElementById("facturaNumero").textContent = data.numero;
-      document.getElementById("t_subtotal").textContent = fmt(data.subtotal);
-      document.getElementById("t_gravado15").textContent = fmt(data.importe_gravado_15);
-      document.getElementById("t_gravado18").textContent = fmt(data.importe_gravado_18);
-      document.getElementById("t_isv15").textContent = fmt(data.isv_15);
-      document.getElementById("t_isv18").textContent = fmt(data.isv_18);
-      document.getElementById("t_total").textContent = fmt(data.total_a_pagar);
+      setMoneyDisplay("t_subtotal", data.subtotal);
+      setMoneyDisplay("t_gravado15", data.importe_gravado_15);
+      setMoneyDisplay("t_gravado18", data.importe_gravado_18);
+      setMoneyDisplay("t_isv15", data.isv_15);
+      setMoneyDisplay("t_isv18", data.isv_18);
+      setMoneyDisplay("t_total", data.total_a_pagar);
       document.getElementById("totalEnLetras").textContent = data.total_en_letras;
     }
   } catch (err) {

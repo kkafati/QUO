@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Ubuntu:wght@300;400;500;700&family=Audiowide&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet">
 <style>
-  :root { --blue: #065dac; --lime: #cddc28; --ink: #16232f; --ink-soft: #5a6570; --dark-head: #39454A; --invoice-blue: #0552FF; --tlabel-grey: #748B8D; }
+  :root { --blue: #065dac; --lime: #cddc28; --ink: #16232f; --ink-soft: #5a6570; --dark-head: #39454A; --invoice-blue: #065dac; --tlabel-grey: #748B8D; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: #eef0f2; color: var(--ink); font-family: 'Poppins', sans-serif; }
 
@@ -49,8 +49,8 @@
 
   /* ---- cliente / fecha ---- */
   .info-labels-row { display: flex; justify-content: space-between; }
-  .info-rule { border: none; border-top: 1.5px solid #c9ced3; margin: 4px 0 10px; }
-  .info-values-row { display: flex; justify-content: space-between; margin-bottom: 14px; }
+  .info-rule { border: none; border-top: 2.5px solid #6b7480; margin: 4px 0 4px; }
+  .info-values-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
   .info-label { font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); margin-bottom: 4px; }
   .cliente-nombre-input { font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 12pt; border: none; background: transparent; padding: 0; width: 260px; }
   .cliente-rtn-row { font-size: 13px; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
@@ -67,14 +67,14 @@
   .cai-row .cai-value { font-family: monospace; letter-spacing: 0.02em; }
 
   /* ---- line items ---- */
-  .items-table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+  .items-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
   .items-table thead th {
     background: var(--dark-head); color: #fff; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.05em;
     padding: 10px 12px; text-align: left; border-right: 1px solid rgba(255,255,255,0.25);
   }
   .items-table thead th:last-child, .items-table thead th.no-print { border-right: none; }
   .items-table thead th.num { text-align: right; }
-  .items-table td { padding: 8px 12px; border-bottom: 1px solid #eceeef; border-right: 1px solid #e3e5e8; vertical-align: top; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 9pt; }
+  .items-table td { padding: 8px 12px; border-right: 1px solid #e3e5e8; vertical-align: top; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 9pt; }
   .items-table td:last-child, .items-table td.no-print { border-right: none; }
   .items-table td.num { text-align: right; }
   .items-table input { border: none; background: transparent; font-family: inherit; font-size: 9pt; width: 100%; padding: 4px 0; }
@@ -94,10 +94,12 @@
   .letras-label { background: var(--invoice-blue); color: #fff; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 8pt; text-align: center; padding: 14px 10px; width: 90px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
   .letras-value { padding: 10px 14px; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 8pt; color: #333; line-height: 1.5; }
 
-  .totals-table { width: 300px; flex-shrink: 0; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 10pt; }
+  .totals-table { width: 230px; flex-shrink: 0; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 10pt; }
   .totals-table .trow { display: flex; justify-content: space-between; padding: 3px 0; }
   .totals-table .trow.editable input { border: none; background: transparent; font-family: inherit; font-size: 10pt; text-align: right; width: 78px; }
   .totals-table .tprefix { display: flex; align-items: center; gap: 4px; }
+  .totals-table .tvalue-wrap { display: flex; justify-content: space-between; width: 76px; }
+  .totals-table .lprefix { color: var(--ink); }
   .totals-table .trow .tlabel { color: var(--tlabel-grey); font-size: 7pt; }
   .totals-table .trow.grand { border-bottom: 2px solid var(--invoice-blue); margin-top: 6px; padding-top: 8px; padding-bottom: 8px; font-weight: 700; font-size: 10pt; }
   .totals-table .trow.grand .tlabel { font-size: 7pt; font-weight: 700; color: var(--ink); }
@@ -238,26 +240,39 @@
             <div><span class="flabel">Rango Autorizado:</span> <span id="footRango">—</span></div>
             <div><span class="flabel-bold">Original Blanca:</span> Cliente&nbsp;&nbsp;&nbsp;<span class="flabel-bold">Copia Amarilla:</span> Administración&nbsp;&nbsp;&nbsp;<span class="flabel-bold">Copia Azul:</span> Contabilidad</div>
           </div>
-          <div class="foot-tagline">La factura es beneficio de todos "Exíjala"</div>
         </div>
         <div class="totals-table">
-          <div class="trow"><span class="tlabel">Sub-Total</span><span id="t_subtotal">L. 0.00</span></div>
+          <div class="trow"><span class="tlabel">Sub-Total</span><span class="tvalue-wrap"><span class="lprefix">L.</span><span id="t_subtotal">0.00</span></span></div>
           <div class="trow editable"><span class="tlabel">Descuentos y Rebajas</span><span class="tprefix"><span>L.</span><input id="descuentos" type="number" step="0.01" value="0.00"></span></div>
           <div class="trow editable"><span class="tlabel">Importe Exonerado</span><span class="tprefix"><span>L.</span><input id="importe_exonerado" type="number" step="0.01" value="0.00"></span></div>
           <div class="trow editable"><span class="tlabel">Importe Exento</span><span class="tprefix"><span>L.</span><input id="importe_exento" type="number" step="0.01" value="0.00"></span></div>
-          <div class="trow"><span class="tlabel">Importe Gravado 15%</span><span id="t_gravado15">L. 0.00</span></div>
-          <div class="trow"><span class="tlabel">Importe Gravado 18%</span><span id="t_gravado18">L. 0.00</span></div>
-          <div class="trow"><span class="tlabel">I.S.V. 15%</span><span id="t_isv15">L. 0.00</span></div>
-          <div class="trow"><span class="tlabel">I.S.V. 18%</span><span id="t_isv18">L. 0.00</span></div>
-          <div class="trow grand"><span>Total a Pagar</span><span id="t_total">L. 0.00</span></div>
+          <div class="trow"><span class="tlabel">Importe Gravado 15%</span><span class="tvalue-wrap"><span class="lprefix">L.</span><span id="t_gravado15">0.00</span></span></div>
+          <div class="trow"><span class="tlabel">Importe Gravado 18%</span><span class="tvalue-wrap"><span class="lprefix">L.</span><span id="t_gravado18">0.00</span></span></div>
+          <div class="trow"><span class="tlabel">I.S.V. 15%</span><span class="tvalue-wrap"><span class="lprefix">L.</span><span id="t_isv15">0.00</span></span></div>
+          <div class="trow"><span class="tlabel">I.S.V. 18%</span><span class="tvalue-wrap"><span class="lprefix">L.</span><span id="t_isv18">0.00</span></span></div>
+          <div class="trow grand"><span>Total a Pagar</span><span class="tvalue-wrap"><span class="lprefix">L.</span><span id="t_total">0.00</span></span></div>
           <input type="hidden" id="gravado_18_pct">
         </div>
       </div>
+
+      <div class="foot-tagline">La factura es beneficio de todos "Exíjala"</div>
       </div>
 
     </div>
   </div>
 
+<script>
+window.GLOBE_ICON_SVG = `<svg viewBox="0 0 100 100" width="13" height="13" style="display:block">
+  <g fill="none" stroke="#fff" stroke-width="7">
+    <circle cx="50" cy="50" r="45"/>
+    <line x1="6" y1="38" x2="94" y2="38"/>
+    <line x1="6" y1="66" x2="94" y2="66"/>
+    <path d="M50,5 C25,25 25,75 50,95" />
+    <path d="M50,5 C75,25 75,75 50,95" />
+  </g>
+  <text x="50" y="58" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="800" fill="#fff">WWW</text>
+</svg>`;
+</script>
 <script src="/facturacion/factura-common.js"></script>
 </body>
 </html>
