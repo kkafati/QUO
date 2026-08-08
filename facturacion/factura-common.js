@@ -45,8 +45,9 @@ function renderLines() {
 
   document.getElementById("linesBody").innerHTML = lines.map(ln => compact ? `
     <div class="line-row" data-row="${ln._key}">
-      <div class="line-desc-row">
-        <input class="descripcion" value="${esc(ln.descripcion)}" placeholder="Descripción">
+      <div class="line-desc-row" style="position:relative">
+        <textarea class="descripcion" rows="1" placeholder="Descripción">${esc(ln.descripcion)}</textarea>
+        <div class="line-suggest no-print" hidden></div>
         <button type="button" class="remove-line-btn no-print">×</button>
       </div>
       <div class="line-meta-row">
@@ -58,7 +59,10 @@ function renderLines() {
   ` : `
     <tr data-row="${ln._key}">
       <td><input class="cantidad" type="number" step="1" value="${ln.cantidad}"></td>
-      <td><input class="descripcion" value="${esc(ln.descripcion)}" placeholder="Descripción del artículo/servicio"></td>
+      <td style="position:relative">
+        <textarea class="descripcion" rows="1" placeholder="Descripción del artículo/servicio">${esc(ln.descripcion)}</textarea>
+        <div class="line-suggest no-print" hidden></div>
+      </td>
       <td class="num"><input class="precio" type="number" step="0.01" value="${ln.precio_unitario}"></td>
       <td class="num total-cell">${fmt((ln.cantidad || 0) * (ln.precio_unitario || 0))}</td>
       <td class="no-print"><button type="button" class="remove-line-btn">×</button></td>
@@ -68,12 +72,27 @@ function renderLines() {
   document.querySelectorAll("#linesBody [data-row]").forEach(row => {
     const key = row.dataset.row;
     const line = lines.find(l => l._key === key);
+    const descEl = row.querySelector(".descripcion");
+
+    autoGrowTextarea(descEl);
+
     row.querySelector(".cantidad").addEventListener("input", (e) => {
       line.cantidad = parseFloat(e.target.value) || 0;
       row.querySelector(".total-cell").textContent = fmt((line.cantidad || 0) * (line.precio_unitario || 0));
       updateTotals();
     });
-    row.querySelector(".descripcion").addEventListener("input", (e) => { line.descripcion = e.target.value; });
+
+    descEl.addEventListener("input", (e) => {
+      line.descripcion = e.target.value;
+      autoGrowTextarea(e.target);
+      clearTimeout(clientSearchTimer);
+      const query = e.target.value.trim();
+      clientSearchTimer = setTimeout(() => searchFichasForLine(query, row, key), 200);
+    });
+    descEl.addEventListener("blur", () => {
+      setTimeout(() => hideSuggestBox(row.querySelector(".line-suggest"), true), 150);
+    });
+
     row.querySelector(".precio").addEventListener("input", (e) => {
       line.precio_unitario = parseFloat(e.target.value) || 0;
       row.querySelector(".total-cell").textContent = fmt((line.cantidad || 0) * (line.precio_unitario || 0));
@@ -203,8 +222,8 @@ function selectClient(c) {
   hideSuggestBox("rtnSuggestBox");
 }
 
-function hideSuggestBox(boxId) {
-  const box = document.getElementById(boxId);
+function hideSuggestBox(boxOrId) {
+  const box = typeof boxOrId === "string" ? document.getElementById(boxOrId) : boxOrId;
   if (box) { box.hidden = true; box.innerHTML = ""; }
 }
 
@@ -229,6 +248,59 @@ function renderSuggestBox(boxId, results, query) {
     });
   }
   box.hidden = false;
+}
+
+function autoGrowTextarea(el) {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = el.scrollHeight + "px";
+}
+
+function renderFichaSuggestBox(box, results, query) {
+  if (!box) return;
+  if (!query) { box.hidden = true; return; }
+  if (results.length === 0) {
+    box.innerHTML = '<div class="cs-empty">Sin coincidencias — se guardará como texto libre.</div>';
+  } else {
+    box.innerHTML = results.map(f => `
+      <div class="cs-item" data-id="${f.id}">
+        ${esc(f.code)} — ${esc(f.description || f.name)}<br>
+        <span class="cs-sub">${esc(f.name)} · ${fmt(f.total_cost)}</span>
+      </div>
+    `).join("");
+    box.querySelectorAll(".cs-item").forEach(el => {
+      el.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const f = results.find(r => r.id == el.dataset.id);
+        if (f) selectFichaForLine(f, box);
+      });
+    });
+  }
+  box.hidden = false;
+}
+
+function selectFichaForLine(ficha, box) {
+  const row = box.closest("[data-row]");
+  if (!row) return;
+  const key = row.dataset.row;
+  const line = lines.find(l => l._key === key);
+  const descEl = row.querySelector(".descripcion");
+  const precioEl = row.querySelector(".precio");
+  line.descripcion = ficha.description || ficha.name || "";
+  line.precio_unitario = ficha.total_cost || 0;
+  descEl.value = line.descripcion;
+  precioEl.value = line.precio_unitario;
+  autoGrowTextarea(descEl);
+  row.querySelector(".total-cell").textContent = fmt((line.cantidad || 0) * (line.precio_unitario || 0));
+  updateTotals();
+  hideSuggestBox(box);
+}
+
+async function searchFichasForLine(query, row, key) {
+  const box = row.querySelector(".line-suggest");
+  if (!query) { hideSuggestBox(box); return; }
+  const results = await fetch(`/api/costcards?q=${encodeURIComponent(query)}`).then(r => r.json()).catch(() => []);
+  renderFichaSuggestBox(box, results, query);
 }
 
 async function searchClients(query, boxId) {

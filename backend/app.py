@@ -713,7 +713,7 @@ def list_costcards():
     q = request.args.get("q", "").strip().lower()
     cards = CostCard.query.filter_by(account_id=current_account_id(), deleted_at=None).order_by(CostCard.code).all()
     if q:
-        cards = [c for c in cards if q in c.code.lower() or q in c.name.lower()]
+        cards = [c for c in cards if q in c.code.lower() or q in c.name.lower() or q in (c.description or "").lower()]
     return jsonify([compute_card_totals(c) for c in cards])
 
 

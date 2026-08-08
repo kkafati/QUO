@@ -100,15 +100,19 @@
     .min-rows-spacer { height: auto !important; }
   }
 
-  .client-suggest {
+  .client-suggest, .line-suggest {
     position: absolute; top: 100%; left: 0; right: 0; z-index: 20; background: #fff;
     border: 1px solid #dde1e5; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,0.12);
     max-height: 180px; overflow-y: auto; margin-top: 2px; font-family: sans-serif;
   }
-  .client-suggest .cs-item { padding: 7px 10px; font-size: 12px; cursor: pointer; color: #16232f; }
-  .client-suggest .cs-item:hover { background: #eaf2fa; }
-  .client-suggest .cs-item .cs-sub { color: #8a94a0; font-size: 10.5px; }
-  .client-suggest .cs-empty { padding: 8px 10px; font-size: 11.5px; color: #8a94a0; }
+  .client-suggest .cs-item, .line-suggest .cs-item { padding: 7px 10px; font-size: 12px; cursor: pointer; color: #16232f; }
+  .client-suggest .cs-item:hover, .line-suggest .cs-item:hover { background: #eaf2fa; }
+  .client-suggest .cs-item .cs-sub, .line-suggest .cs-item .cs-sub { color: #8a94a0; font-size: 10.5px; }
+  .client-suggest .cs-empty, .line-suggest .cs-empty { padding: 8px 10px; font-size: 11.5px; color: #8a94a0; }
+  textarea.descripcion {
+    border: none; background: transparent; font-family: inherit; font-size: inherit; width: 100%;
+    resize: none; overflow: hidden; padding: 4px 0; line-height: 1.4; display: block;
+  }
 </style>
 </head>
 <body>

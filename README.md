@@ -53,6 +53,12 @@ Selecting a client shows their full invoice history, each with a payment-status 
 
 Which of the 7 invoice templates gets used is now set once in `/cuenta/` (Facturación section → "Plantilla de Factura"), not chosen per-invoice. "+ Nueva Factura" always uses whatever's configured there; the picker modal and the per-invoice "Plantilla" switcher have both been removed. Changing this setting only affects *new* invoices going forward — existing invoices keep whichever template they were created with, so a previously-printed/saved invoice never silently changes format after the fact.
 
+## Invoice line items: multi-line descriptions, and adding from Fichas de Costo
+
+Applies to all 7 templates. The Descripción field on each invoice line is now a proper multi-line, auto-growing text area — long text wraps instead of clipping, and the row grows to fit as you type.
+
+You can also type a few letters into that field to search your existing Fichas de Costo — matching results show up in a dropdown (código, descripción, ficha's own computed total cost). Picking one fills the line's description with the **ficha's Descripción field** (not its código or name) and its price with the ficha's all-in total cost; quantity stays independent and editable. If nothing matches, or you just keep typing, it saves as a plain custom line item exactly as before — nothing is forced to link to a ficha.
+
 ## Facturación (billing/invoicing)
 
 **5 templates now available**: Clásica (your real format), Moderna (light, minimalist, colored accent bar), Elegante (formal/corporate, centered, muted palette), Compacta (dense, print-economical), and Color Block (bold branded header band). Pick one when creating a new invoice via "+ Nueva Factura," or switch an existing invoice's template anytime from the "Plantilla" dropdown in its toolbar — your data carries over, only the visual layout changes.
