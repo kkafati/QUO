@@ -19,10 +19,10 @@
     color:var(--text); font-size:12px; margin:-32px -20px 32px;
   }
   .topbar-label{font-family:var(--mono); text-transform:uppercase; letter-spacing:.05em; color:var(--cyan); font-size:10.5px;}
-  .topbar-panel-link{color:var(--cyan); text-decoration:none; font-family:var(--mono); font-size:11.5px; font-weight:600;}
+  .topbar-panel-link{margin-left:auto; color:var(--cyan); text-decoration:none; font-family:var(--mono); font-size:11.5px; font-weight:600;}
   .topbar-panel-link:hover{text-decoration:underline;}
   #topbarClient{font-weight:600;}
-  .topbar-logout{margin-left:auto; color:var(--cyan); text-decoration:none;}
+  .topbar-logout{color:var(--cyan); text-decoration:none;}
   .topbar-logout:hover{text-decoration:underline;}
   @media print{ .topbar{display:none;} }
   .wrap{max-width:1180px; margin:0 auto;}
@@ -146,9 +146,9 @@
 </head>
 <body>
 <div class="topbar">
-  <a href="/panel/" class="topbar-panel-link">← Panel</a>
   <span class="topbar-label">Cliente:</span>
   <span id="topbarClient">—</span>
+  <a href="/panel/" class="topbar-panel-link">← Panel</a>
   <a href="/logout" class="topbar-logout">Cerrar sesión</a>
 </div>
 <div class="wrap">

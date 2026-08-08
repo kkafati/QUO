@@ -52,6 +52,7 @@ button, input { font-family: inherit; }
 }
 
 .topbar-panel-link {
+  margin-left: auto;
   color: var(--blueprint-cyan);
   text-decoration: none;
   font-family: var(--font-display);
@@ -76,7 +77,6 @@ button, input { font-family: inherit; }
 }
 
 .topbar-logout {
-  margin-left: auto;
   color: var(--blueprint-cyan);
   text-decoration: none;
 }
