@@ -62,7 +62,8 @@
   .term-row label { display: flex; align-items: center; gap: 5px; font-weight: 400; cursor: pointer; }
   .term-title { color: var(--invoice-blue); font-weight: 700; }
 
-  .cai-row { text-align: right; font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; color: #333; border-bottom: 2px solid var(--blue); padding-bottom: 10px; margin-bottom: 4px; }
+  .cai-row { text-align: right; font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; color: #333; padding-top: 8px; margin-bottom: 4px; }
+  .term-cai-divider { border: none; border-top: 2px solid var(--invoice-blue); width: 50%; margin: 4px 0 0 auto; }
   .cai-row .cai-value { font-family: monospace; letter-spacing: 0.02em; }
 
   /* ---- line items ---- */
@@ -95,7 +96,8 @@
 
   .totals-table { width: 300px; flex-shrink: 0; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 10pt; }
   .totals-table .trow { display: flex; justify-content: space-between; padding: 3px 0; }
-  .totals-table .trow.editable input { border: none; background: transparent; font-family: inherit; font-size: 10pt; text-align: right; width: 90px; }
+  .totals-table .trow.editable input { border: none; background: transparent; font-family: inherit; font-size: 10pt; text-align: right; width: 78px; }
+  .totals-table .tprefix { display: flex; align-items: center; gap: 4px; }
   .totals-table .trow .tlabel { color: var(--tlabel-grey); font-size: 7pt; }
   .totals-table .trow.grand { border-bottom: 2px solid var(--invoice-blue); margin-top: 6px; padding-top: 8px; padding-bottom: 8px; font-weight: 700; font-size: 10pt; }
   .totals-table .trow.grand .tlabel { font-size: 7pt; font-weight: 700; color: var(--ink); }
@@ -120,6 +122,7 @@
   @page { size: letter; margin: 0.5in; }
 
   @media print {
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
     body { background: #fff; }
     .toolbar { display: none !important; }
     .sheet-wrap { margin: 0; max-width: 100%; }
@@ -209,6 +212,8 @@
         <label><input type="radio" name="termino_pago" value="contado" id="term-contado"> Contado</label>
       </div>
 
+      <hr class="term-cai-divider">
+
       <div class="cai-row">C.A.I. <span class="cai-value" id="caiValue">—</span></div>
 
       <table class="items-table">
@@ -246,9 +251,9 @@
         </div>
         <div class="totals-table">
           <div class="trow"><span class="tlabel">Sub-Total</span><span id="t_subtotal">L. 0.00</span></div>
-          <div class="trow editable"><span class="tlabel">Descuentos y Rebajas</span><input id="descuentos" type="number" step="0.01" value="0"></div>
-          <div class="trow editable"><span class="tlabel">Importe Exonerado</span><input id="importe_exonerado" type="number" step="0.01" value="0"></div>
-          <div class="trow editable"><span class="tlabel">Importe Exento</span><input id="importe_exento" type="number" step="0.01" value="0"></div>
+          <div class="trow editable"><span class="tlabel">Descuentos y Rebajas</span><span class="tprefix"><span>L.</span><input id="descuentos" type="number" step="0.01" value="0.00"></span></div>
+          <div class="trow editable"><span class="tlabel">Importe Exonerado</span><span class="tprefix"><span>L.</span><input id="importe_exonerado" type="number" step="0.01" value="0.00"></span></div>
+          <div class="trow editable"><span class="tlabel">Importe Exento</span><span class="tprefix"><span>L.</span><input id="importe_exento" type="number" step="0.01" value="0.00"></span></div>
           <div class="trow"><span class="tlabel">Importe Gravado 15%</span><span id="t_gravado15">L. 0.00</span></div>
           <div class="trow"><span class="tlabel">Importe Gravado 18%</span><span id="t_gravado18">L. 0.00</span></div>
           <div class="trow"><span class="tlabel">I.S.V. 15%</span><span id="t_isv15">L. 0.00</span></div>

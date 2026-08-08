@@ -65,9 +65,17 @@ function renderLines() {
   document.querySelectorAll("#linesBody [data-row]").forEach(row => {
     const key = row.dataset.row;
     const line = lines.find(l => l._key === key);
-    row.querySelector(".cantidad").addEventListener("input", (e) => { line.cantidad = parseFloat(e.target.value) || 0; renderLines(); updateTotals(); });
+    row.querySelector(".cantidad").addEventListener("input", (e) => {
+      line.cantidad = parseFloat(e.target.value) || 0;
+      row.querySelector(".total-cell").textContent = fmt((line.cantidad || 0) * (line.precio_unitario || 0));
+      updateTotals();
+    });
     row.querySelector(".descripcion").addEventListener("input", (e) => { line.descripcion = e.target.value; });
-    row.querySelector(".precio").addEventListener("input", (e) => { line.precio_unitario = parseFloat(e.target.value) || 0; renderLines(); updateTotals(); });
+    row.querySelector(".precio").addEventListener("input", (e) => {
+      line.precio_unitario = parseFloat(e.target.value) || 0;
+      row.querySelector(".total-cell").textContent = fmt((line.cantidad || 0) * (line.precio_unitario || 0));
+      updateTotals();
+    });
     row.querySelector(".remove-line-btn").addEventListener("click", () => {
       lines = lines.filter(l => l._key !== key);
       renderLines(); updateTotals();
