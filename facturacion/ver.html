@@ -52,11 +52,12 @@
   .info-rule { border: none; border-top: 2.5px solid #6b7480; margin: 4px 0 4px; }
   .info-values-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
   .info-label { font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); margin-bottom: 4px; }
-  .cliente-nombre-input { font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 12pt; border: none; background: transparent; padding: 0; width: 260px; }
+  .cliente-nombre-input { font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 12pt; text-transform: uppercase; border: none; background: transparent; padding: 0; width: 260px; }
   .cliente-rtn-row { font-size: 13px; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
   .cliente-rtn-row input { border: none; background: transparent; font-family: inherit; font-size: 13px; padding: 0; width: 160px; }
   .fecha-value { font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 12pt; text-align: right; }
   .fecha-value input { border: none; background: transparent; font-family: inherit; font-size: 12pt; font-weight: 400; text-align: right; width: 130px; }
+  .fecha-value input::-webkit-calendar-picker-indicator { opacity: 0; }
 
   .term-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 8px; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 8pt; }
   .term-row label { display: flex; align-items: center; gap: 5px; font-weight: 400; cursor: pointer; }
@@ -67,7 +68,7 @@
   .cai-row .cai-value { font-family: monospace; letter-spacing: 0.02em; }
 
   /* ---- line items ---- */
-  .items-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  .items-table { width: 100%; border-collapse: collapse; margin-top: 6px; border-left: 1px solid #e3e5e8; border-right: 1px solid #e3e5e8; }
   .items-table thead th {
     background: var(--dark-head); color: #fff; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.05em;
     padding: 10px 12px; text-align: left; border-right: 1px solid rgba(255,255,255,0.25);
@@ -106,11 +107,11 @@
   .totals-table .trow .lcode { font-weight: 600; margin-right: 4px; }
 
   /* ---- exemption references ---- */
-  .exempt-refs { font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 6pt; width: 100%; }
-  .exempt-refs .erow { display: flex; border: 1px solid #dde1e5; border-top: none; }
-  .exempt-refs .erow:first-child { border-top: 1px solid #dde1e5; }
-  .exempt-refs .elabel { padding: 5px 8px; width: 62%; color: #333; }
-  .exempt-refs .evalue { padding: 5px 8px; width: 38%; border-left: 1px solid #dde1e5; }
+  .exempt-refs { display: grid; grid-template-columns: max-content 1fr; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 6pt; width: 100%; border: 1px solid #dde1e5; }
+  .exempt-refs .erow { display: contents; }
+  .exempt-refs .elabel { padding: 5px 8px; color: #333; border-bottom: 1px solid #dde1e5; white-space: nowrap; }
+  .exempt-refs .evalue { padding: 5px 8px; border-left: 1px solid #dde1e5; border-bottom: 1px solid #dde1e5; }
+  .exempt-refs .erow:last-child .elabel, .exempt-refs .erow:last-child .evalue { border-bottom: none; }
   .exempt-refs .evalue input { border: none; background: transparent; font-family: inherit; font-size: 6pt; width: 100%; }
 
   /* ---- footer ---- */
