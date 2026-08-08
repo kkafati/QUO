@@ -74,6 +74,7 @@
   .estado-Pagado { background: rgba(63,143,106,0.14); color: #3f8f6a; }
   .estado-FaltaPago { background: rgba(181,69,59,0.12); color: #b5453b; }
   .estado-EnProceso { background: rgba(6,93,172,0.1); color: var(--blue); }
+  .estado-DatosIncompletos { background: rgba(214,158,46,0.15); color: #92660f; }
   select.estado-select { border: 1.5px solid #dde1e5; border-radius: 6px; font-size: 12px; padding: 4px 6px; font-family: inherit; }
 
   .modal-backdrop { position: fixed; inset: 0; background: rgba(15,41,66,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
@@ -148,7 +149,7 @@ async function loadClientList() {
   }
   host.innerHTML = clientsCache.map(c => `
     <div class="client-row ${c.id === selectedClientId ? 'active' : ''}" data-id="${c.id}">
-      <div class="cname">${esc(c.nombre)}</div>
+      <div class="cname">${esc(c.nombre)} ${c.datos_incompletos ? '<span class="estado-badge estado-DatosIncompletos">Datos Incompletos</span>' : ''}</div>
       <div class="cmeta">${esc(c.rtn || 'Sin RTN')} ${c.telefono ? '· ' + esc(c.telefono) : ''}</div>
     </div>
   `).join("");
@@ -170,7 +171,7 @@ function renderDetail(cliente) {
   const isNew = !cliente || !cliente.id;
   document.getElementById("detailPanel").innerHTML = `
     <div class="detail-head">
-      <h2>${isNew ? "Nuevo Cliente" : esc(cliente.nombre)}</h2>
+      <h2>${isNew ? "Nuevo Cliente" : esc(cliente.nombre)} ${!isNew && cliente.datos_incompletos ? '<span class="estado-badge estado-DatosIncompletos">Datos Incompletos</span>' : ''}</h2>
       <div class="detail-actions">
         <button class="btn btn-primary btn-sm" id="btnGuardarCliente">Guardar</button>
         ${!isNew ? '<button class="btn btn-danger btn-sm" id="btnEliminarCliente">Eliminar</button>' : ""}

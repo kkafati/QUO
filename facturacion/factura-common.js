@@ -2,6 +2,7 @@ const params = new URLSearchParams(window.location.search);
 const invoiceId = params.get("id");
 let lines = [];
 let account = null;
+let selectedClienteId = null;
 
 function esc(s) { return (s ?? "").toString().replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
 function fmt(n) { return "L. " + (Number(n) || 0).toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -151,6 +152,7 @@ async function loadInvoice() {
   document.getElementById("facturaNumero").textContent = inv.numero;
   document.getElementById("cliente_nombre").value = inv.cliente_nombre || "";
   document.getElementById("cliente_rtn").value = inv.cliente_rtn || "";
+  selectedClienteId = inv.cliente_id || null;
   document.getElementById("fecha").value = inv.fecha || "";
   document.getElementById(inv.termino_pago === "credito" ? "term-credito" : "term-contado").checked = true;
   document.getElementById("descuentos").value = inv.descuentos || 0;
@@ -169,6 +171,71 @@ async function loadInvoice() {
   document.getElementById("btnEliminar").style.display = "inline-block";
 }
 
+// ---- Cliente search/autocomplete (both name and RTN fields search the same client list) ----
+let clientSearchTimer = null;
+
+function selectClient(c) {
+  document.getElementById("cliente_nombre").value = c.nombre;
+  document.getElementById("cliente_rtn").value = c.rtn || "";
+  selectedClienteId = c.id;
+  hideSuggestBox("clienteSuggestBox");
+  hideSuggestBox("rtnSuggestBox");
+}
+
+function hideSuggestBox(boxId) {
+  const box = document.getElementById(boxId);
+  if (box) { box.hidden = true; box.innerHTML = ""; }
+}
+
+function renderSuggestBox(boxId, results, query) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  if (!query) { box.hidden = true; return; }
+  if (results.length === 0) {
+    box.innerHTML = '<div class="cs-empty">Sin coincidencias — se creará un cliente nuevo al guardar.</div>';
+  } else {
+    box.innerHTML = results.map(c => `
+      <div class="cs-item" data-id="${c.id}">
+        ${esc(c.nombre)}<br><span class="cs-sub">${esc(c.rtn || "Sin RTN")}</span>
+      </div>
+    `).join("");
+    box.querySelectorAll(".cs-item").forEach(el => {
+      el.addEventListener("mousedown", (e) => {
+        e.preventDefault(); // fire before the input's blur hides the box
+        const c = results.find(r => r.id == el.dataset.id);
+        if (c) selectClient(c);
+      });
+    });
+  }
+  box.hidden = false;
+}
+
+async function searchClients(query, boxId) {
+  if (!query) { hideSuggestBox(boxId); return; }
+  const results = await fetch(`/api/clientes?q=${encodeURIComponent(query)}`).then(r => r.json()).catch(() => []);
+  renderSuggestBox(boxId, results, query);
+}
+
+function wireClientSearchInput(inputId, boxId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  input.addEventListener("input", () => {
+    selectedClienteId = null; // typing again after a selection means it may no longer match
+    clearTimeout(clientSearchTimer);
+    const query = input.value.trim();
+    clientSearchTimer = setTimeout(() => searchClients(query, boxId), 200);
+  });
+  input.addEventListener("blur", () => {
+    setTimeout(() => hideSuggestBox(boxId), 150); // delay so a click on a suggestion still registers
+  });
+  input.addEventListener("focus", () => {
+    if (input.value.trim()) searchClients(input.value.trim(), boxId);
+  });
+}
+
+wireClientSearchInput("cliente_nombre", "clienteSuggestBox");
+wireClientSearchInput("cliente_rtn", "rtnSuggestBox");
+
 document.getElementById("btnAddLine").addEventListener("click", () => { lines.push(blankLine()); renderLines(); });
 ["descuentos","importe_exonerado","importe_exento","gravado_18_pct"].forEach(id => {
   document.getElementById(id).addEventListener("input", updateTotals);
@@ -182,6 +249,7 @@ document.getElementById("btnGuardar").addEventListener("click", async () => {
   const body = {
     cliente_nombre: document.getElementById("cliente_nombre").value,
     cliente_rtn: document.getElementById("cliente_rtn").value,
+    cliente_id: selectedClienteId,
     fecha: document.getElementById("fecha").value,
     termino_pago: document.getElementById("term-credito").checked ? "credito" : "contado",
     estado: document.getElementById("estadoSwitcher") ? document.getElementById("estadoSwitcher").value : undefined,

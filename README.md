@@ -37,6 +37,10 @@ Deleting a Material, Labor, Herramienta, Transporte, Gasto, Ficha de Costo, or C
 
 **Scope note:** this covers the items people most often worry about losing by accident. Individual supplier price quotes (Cotización de Proveedores entries) are still deleted immediately when removed — those are quick to re-enter and lower-stakes than losing a whole ficha or cotización, so they weren't included in this system. Ask if you'd like that extended to cover them too.
 
+**Now connected to Facturación**: the Cliente and RTN fields on every invoice (all 7 templates) are searchable — type a few letters into either one and matching clients show up in a dropdown; picking one fills both fields and links the invoice to that client. Type a name that doesn't match anyone, save the invoice, and a new Cliente record gets created automatically from just the name/RTN you entered — no separate step required. Retype an *existing* client's exact name without clicking the suggestion and it still links correctly rather than creating a duplicate (matched by exact name, case-insensitive).
+
+Any client missing RTN, Dirección, Contacto, Teléfono, or Correo shows a **"Datos Incompletos"** badge in the Clientes list — this is exactly what you'll see on clients auto-created from Facturación, since those only start with a name and RTN.
+
 ## Clientes
 
 Live at `/clientes/`, linked from the dashboard. Full CRUD (create/edit/delete-to-trash/restore, same soft-delete pattern as everywhere else) for customer records — Nombre, RTN, Dirección, Contacto, Teléfono, Correo — with a search bar and a click-to-select list.

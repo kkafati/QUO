@@ -1199,10 +1199,12 @@ def clientes_page():
 
 
 def cliente_to_dict(c):
+    campos_requeridos = [c.rtn, c.direccion, c.contacto, c.telefono, c.correo]
     return {
         "id": c.id, "nombre": c.nombre, "rtn": c.rtn, "direccion": c.direccion,
         "contacto": c.contacto, "telefono": c.telefono, "correo": c.correo,
         "created_at": c.created_at, "updated_at": c.updated_at,
+        "datos_incompletos": any(not (f or "").strip() for f in campos_requeridos),
     }
 
 
@@ -1402,6 +1404,32 @@ def _next_invoice_numero(account):
     return f"{parts[0]}-{parts[1]}-{parts[2]}-{seq}"
 
 
+def _resolve_cliente_id(account_id, cliente_id, cliente_nombre, cliente_rtn):
+    """Figures out which Cliente this invoice should link to:
+    - If cliente_id was given explicitly (picked from the search box), use it.
+    - Otherwise, if an existing client's name matches exactly (case-insensitive),
+      link to that one instead of creating a duplicate.
+    - Otherwise, this is a genuinely new client typed on the invoice - create it
+      with just the name/RTN we have, so it shows up in Clientes ready to fill in."""
+    if cliente_id:
+        exists = Cliente.query.filter_by(id=cliente_id, account_id=account_id, deleted_at=None).first()
+        if exists:
+            return cliente_id
+    if not cliente_nombre:
+        return None
+    match = (Cliente.query.filter_by(account_id=account_id, deleted_at=None)
+             .filter(db.func.lower(Cliente.nombre) == cliente_nombre.strip().lower()).first())
+    if match:
+        return match.id
+    nuevo = Cliente(
+        account_id=account_id, nombre=cliente_nombre.strip(), rtn=(cliente_rtn or "").strip(),
+        created_at=datetime.utcnow().strftime("%Y-%m-%d"), updated_at=datetime.utcnow().strftime("%Y-%m-%d"),
+    )
+    db.session.add(nuevo)
+    db.session.flush()  # get nuevo.id without a full commit yet
+    return nuevo.id
+
+
 def _validate_invoice_date(account_id, fecha, exclude_invoice_id=None):
     """Facturas must stay in chronological order (matches sequential numbering
     conventions in Honduras). Returns an error message, or None if the date is OK."""
@@ -1448,13 +1476,16 @@ def create_invoice():
     if date_error:
         return jsonify({"error": date_error}), 400
 
+    cliente_rtn = (data.get("cliente_rtn") or "").strip()
+    resolved_cliente_id = _resolve_cliente_id(account.id, data.get("cliente_id"), cliente_nombre, cliente_rtn)
+
     invoice = Invoice(
         account_id=account.id,
         numero=numero,
         template=(data.get("template") or "clasica").strip(),
         cliente_nombre=cliente_nombre,
-        cliente_rtn=(data.get("cliente_rtn") or "").strip(),
-        cliente_id=data.get("cliente_id") or None,
+        cliente_rtn=cliente_rtn,
+        cliente_id=resolved_cliente_id,
         estado=(data.get("estado") or "Falta Pago").strip(),
         fecha=fecha,
         termino_pago=data.get("termino_pago") or "contado",
@@ -1489,8 +1520,8 @@ def update_invoice(invoice_id):
         return jsonify({"error": "El nombre del cliente es requerido."}), 400
     invoice.cliente_nombre = cliente_nombre
     invoice.cliente_rtn = (data.get("cliente_rtn", invoice.cliente_rtn) or "").strip()
-    if "cliente_id" in data:
-        invoice.cliente_id = data.get("cliente_id") or None
+    invoice.cliente_id = _resolve_cliente_id(invoice.account_id, data.get("cliente_id", invoice.cliente_id),
+                                              invoice.cliente_nombre, invoice.cliente_rtn)
     invoice.estado = (data.get("estado", invoice.estado) or "Falta Pago").strip()
 
     new_fecha = data.get("fecha", invoice.fecha)
