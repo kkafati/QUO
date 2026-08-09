@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import mimetypes
 from functools import wraps
@@ -1411,11 +1412,33 @@ def get_invoice_pdf(invoice_id):
         pdf_bytes = render_invoice_pdf(invoice_dict, account)
     except Exception as e:
         return jsonify({"error": f"No se pudo generar el PDF: {e}"}), 500
-    filename = f"factura_{invoice.numero}.pdf"
+    filename = _build_invoice_pdf_filename(invoice)
     return pdf_bytes, 200, {
         "Content-Type": "application/pdf",
         "Content-Disposition": f'inline; filename="{filename}"',
     }
+
+
+def _build_invoice_pdf_filename(invoice):
+    """Factura_{numero}_{ClienteName}_{DD-MM-YYYY}.pdf - sanitized since the
+    client name is free-text and could contain characters invalid in
+    Windows/Unix filenames."""
+    def _safe(s):
+        s = re.sub(r'[\\/:*?"<>|]', '', s or '')
+        s = re.sub(r'\s+', '_', s.strip())
+        return s or "SinNombre"
+
+    cliente_part = _safe(invoice.cliente_nombre)
+    numero_part = _safe(invoice.numero)
+
+    raw_fecha = invoice.fecha or ""
+    try:
+        y, m, d = raw_fecha.split("-")
+        fecha_part = f"{d}-{m}-{y}"
+    except (ValueError, AttributeError):
+        fecha_part = _safe(raw_fecha)
+
+    return f"Factura_{numero_part}_{cliente_part}_{fecha_part}.pdf"
 
 
 def _next_invoice_numero(account):

@@ -20,7 +20,7 @@ async function loadAccount() {
   document.getElementById("contactList").innerHTML = `
     <div class="contact-row"><span class="contact-icon">☎</span> ${esc(account.phone || "—")}</div>
     <div class="contact-row"><span class="contact-icon">✉</span> ${esc(account.email || "—")}</div>
-    <div class="contact-row"><span class="contact-icon">⌂</span> ${esc(account.address || "—")}</div>
+    <div class="contact-row"><span class="contact-icon" style="font-size:13px">⌂</span> ${esc(account.address || "—")}</div>
     <div class="contact-row"><span class="contact-icon">🌐</span> ${esc(account.website || "—")}</div>
   `;
   // The globe emoji above renders as a fixed-color glyph on most systems and

@@ -127,7 +127,7 @@ INVOICE_PDF_TEMPLATE = """
       <div class="contact-list">
         <div class="contact-row"><span class="contact-icon">&#9742;</span> {{ account.phone or "—" }}</div>
         <div class="contact-row"><span class="contact-icon" style="font-size:10px">&#9993;</span> {{ account.email or "—" }}</div>
-        <div class="contact-row"><span class="contact-icon" style="font-size:10px">&#8962;</span> {{ account.address or "—" }}</div>
+        <div class="contact-row"><span class="contact-icon" style="font-size:13px">&#8962;</span> {{ account.address or "—" }}</div>
         <div class="contact-row"><span class="contact-icon">{{ globe_svg | safe }}</span> {{ account.website or "—" }}</div>
       </div>
     </div>
