@@ -3,6 +3,7 @@ const invoiceId = params.get("id");
 let lines = [];
 let account = null;
 let selectedClienteId = null;
+let currentInvoiceTemplate = null;
 
 function esc(s) { return (s ?? "").toString().replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
 function fmt(n) { return "L. " + (Number(n) || 0).toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -181,6 +182,7 @@ function numeroALetrasLocal(monto) {
 
 async function loadInvoice() {
   if (!invoiceId) {
+    currentInvoiceTemplate = (account && account.default_invoice_template) || "clasica";
     lines = [blankLine()];
     document.getElementById("term-contado").checked = true;
     document.getElementById("fecha").value = new Date().toISOString().slice(0, 10);
@@ -189,6 +191,7 @@ async function loadInvoice() {
     return;
   }
   const inv = await fetch(`/api/invoices/${invoiceId}`).then(r => r.json());
+  currentInvoiceTemplate = inv.template || "clasica";
   document.getElementById("facturaNumero").textContent = inv.numero;
   document.getElementById("cliente_nombre").value = inv.cliente_nombre || "";
   document.getElementById("cliente_rtn").value = inv.cliente_rtn || "";
@@ -384,7 +387,15 @@ document.getElementById("btnGuardar").addEventListener("click", async () => {
   }
 });
 
-document.getElementById("btnImprimir").addEventListener("click", () => window.print());
+document.getElementById("btnImprimir").addEventListener("click", () => {
+  if (currentInvoiceTemplate === "clasica" && invoiceId) {
+    window.open(`/api/invoices/${invoiceId}/pdf`, "_blank");
+  } else if (currentInvoiceTemplate === "clasica" && !invoiceId) {
+    alert("Guarda la factura primero para generar el PDF.");
+  } else {
+    window.print();
+  }
+});
 
 document.getElementById("btnEliminar").addEventListener("click", async () => {
   const numero = document.getElementById("facturaNumero").textContent;

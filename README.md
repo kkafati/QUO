@@ -59,6 +59,16 @@ Applies to all 7 templates. The Descripción field on each invoice line is now a
 
 You can also type a few letters into that field to search your existing Fichas de Costo — matching results show up in a dropdown (código, descripción, ficha's own computed total cost). Picking one fills the line's description with the **ficha's Descripción field** (not its código or name) and its price with the ficha's all-in total cost; quantity stays independent and editable. If nothing matches, or you just keep typing, it saves as a plain custom line item exactly as before — nothing is forced to link to a ficha.
 
+## Server-side PDF generation (Clásica, Phases 1-3)
+
+**Wired into the UI now**: clicking "🖨 Imprimir / PDF" on a Clásica invoice opens a real server-rendered PDF in a new tab (via `GET /api/invoices/<id>/pdf`) instead of the browser's print dialog. Generated fresh from current data every time - no snapshot/locking, so it always reflects whatever's currently saved. If you click it on a brand-new, not-yet-saved invoice, it asks you to save first (a PDF needs something in the database to render from). The other 6 templates still use the browser's own print dialog for now - that's a smaller follow-up (Phase 4), now that the pipeline itself is proven.
+
+`GET /api/invoices/<id>/pdf` renders via WeasyPrint (`backend/pdf_render.py`), from the invoice's already-saved data - no browser, no JavaScript, no dependency on whoever's printer/browser the customer happens to have.
+
+**Requires WeasyPrint's GTK3 dependency installed separately on each machine** that will call this route (test machine and live deployment both need it independently - it's an OS-level library, not something `pip install` or `git pull` carries). If you ever see `libgobject-2.0-0` load errors: this is a known, common WeasyPrint-on-Windows issue where the older GTK3-runtime installer many guides reference doesn't reliably work with current WeasyPrint versions. The fix that's confirmed working: install MSYS2, run `pacman -S mingw-w64-x86_64-pango` in its shell, then set a `WEASYPRINT_DLL_DIRECTORIES` environment variable pointing to `C:\msys64\mingw64\bin` (or wherever MSYS2 was installed) and open a fresh terminal.
+
+Fonts (Ubuntu, Audiowide, PT Sans) are self-hosted in `facturacion/fonts/` rather than pulled from Google Fonts at render time - WeasyPrint has no browser cache to fall back on, and the live server may not have outbound internet access at the exact moment a PDF is generated, so a CDN dependency here would be fragile.
+
 ## Facturación (billing/invoicing)
 
 **5 templates now available**: Clásica (your real format), Moderna (light, minimalist, colored accent bar), Elegante (formal/corporate, centered, muted palette), Compacta (dense, print-economical), and Color Block (bold branded header band). Pick one when creating a new invoice via "+ Nueva Factura," or switch an existing invoice's template anytime from the "Plantilla" dropdown in its toolbar — your data carries over, only the visual layout changes.

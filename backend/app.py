@@ -7,6 +7,7 @@ from flask import Flask, request, jsonify, send_from_directory, session, redirec
 from werkzeug.security import check_password_hash, generate_password_hash
 from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente
 from numero_a_letras import numero_a_letras
+from pdf_render import render_invoice_pdf
 
 # On some Windows machines, a corrupted registry entry makes Python think
 # .html/.js/.css are text/plain, causing browsers to show raw source instead
@@ -1398,6 +1399,23 @@ def list_invoices_trash():
 def get_invoice(invoice_id):
     invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id()).first_or_404()
     return jsonify(compute_invoice_totals(invoice))
+
+
+@app.route("/api/invoices/<int:invoice_id>/pdf", methods=["GET"])
+@login_required
+def get_invoice_pdf(invoice_id):
+    invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id()).first_or_404()
+    account = Account.query.get_or_404(current_account_id())
+    invoice_dict = compute_invoice_totals(invoice)
+    try:
+        pdf_bytes = render_invoice_pdf(invoice_dict, account)
+    except Exception as e:
+        return jsonify({"error": f"No se pudo generar el PDF: {e}"}), 500
+    filename = f"factura_{invoice.numero}.pdf"
+    return pdf_bytes, 200, {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": f'inline; filename="{filename}"',
+    }
 
 
 def _next_invoice_numero(account):
