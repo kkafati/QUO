@@ -28,6 +28,16 @@ def _font_url(filename):
     return f"file:///{path.lstrip('/')}" if not path.startswith("/") else f"file://{path}"
 
 
+def _money(value):
+    """Format like the web page's fmt(): thousand separators + 2 decimals,
+    e.g. 1875.97 -> '1,875.97'. Jinja's %-style format filter doesn't do
+    this, so this is passed into the template as a callable instead."""
+    try:
+        return "{:,.2f}".format(float(value or 0))
+    except (TypeError, ValueError):
+        return "0.00"
+
+
 GLOBE_ICON_SVG = """<svg viewBox="0 0 100 100" width="11" height="11" style="display:block">
   <g fill="none" stroke="#fff" stroke-width="7">
     <circle cx="50" cy="50" r="45"/>
@@ -68,7 +78,7 @@ INVOICE_PDF_TEMPLATE = """
   .factura-numero { font-family: 'Ubuntu', sans-serif; font-size: 12pt; margin-top: 4px; color: #000; }
 
   .info-labels-row { display: flex; justify-content: space-between; font-size: 8pt; font-weight: 300;
-                      text-transform: uppercase; color: #748B8D; letter-spacing: 0.06em; }
+                      text-transform: uppercase; color: #6D7075; letter-spacing: 0.06em; }
   .info-rule { border: none; border-top: 2.5px solid #c9ced3; margin: 4px 0; }
   .info-values-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
   .cliente-nombre { font-size: 12pt; text-transform: uppercase; color: #000; }
@@ -99,13 +109,13 @@ INVOICE_PDF_TEMPLATE = """
   .pre-totals-rule { border: none; border-top: 2.5px solid #6b7480; margin: 4px 0 0; }
   .totals-section { display: flex; justify-content: space-between; margin-top: 14px; gap: 20px; }
   .totals-left-col { flex: 1; }
-  .letras-box { display: flex; border: 1px solid #dde1e5; overflow: hidden; margin-bottom: 12px; }
+  .letras-box { display: flex; border: 1px solid #dde1e5; border-radius: 0 4px 4px 0; overflow: hidden; margin-bottom: 12px; }
   .letras-label { background: #065dac; color: #fff; font-size: 8pt; text-align: center; padding: 10px; width: 80px; flex-shrink: 0; }
   .letras-value { padding: 8px 10px; font-size: 8pt; color: #000; }
 
   .exempt-refs { display: grid; grid-template-columns: max-content 1fr; align-items: center; font-size: 6.5pt; border: 1px solid #dde1e5; margin-bottom: 12px; line-height: 1.5; }
-  .exempt-refs .elabel { padding: 9px 8px; border-bottom: 1px solid #dde1e5; text-align: center; white-space: nowrap; }
-  .exempt-refs .evalue { padding: 9px 8px; border-left: 1px solid #dde1e5; border-bottom: 1px solid #dde1e5; }
+  .exempt-refs .elabel { padding: 5px 8px; border-bottom: 1px solid #dde1e5; text-align: center; white-space: nowrap; }
+  .exempt-refs .evalue { padding: 5px 8px; border-left: 1px solid #dde1e5; border-bottom: 1px solid #dde1e5; }
   .exempt-refs .erow-last .elabel, .exempt-refs .erow-last .evalue { border-bottom: none; }
 
   .foot-lines { font-size: 9pt; font-weight: 300; line-height: 1.7; }
@@ -114,7 +124,7 @@ INVOICE_PDF_TEMPLATE = """
 
   .totals-table { width: 220px; flex-shrink: 0; font-size: 10pt; }
   .trow { display: flex; justify-content: flex-end; align-items: baseline; padding: 5px 0; gap: 10px; }
-  .trow .tlabel { color: #748B8D; font-size: 7pt; text-align: right; flex: 1; }
+  .trow .tlabel { color: #6D7075; font-size: 7pt; text-align: right; flex: 1; }
   .trow .tvalue-wrap { display: flex; justify-content: space-between; width: 76px; color: #000; }
   .trow.grand { border-bottom: 2px solid #065dac; margin-top: 6px; padding-bottom: 8px; font-weight: 700; }
 </style>
@@ -167,8 +177,8 @@ INVOICE_PDF_TEMPLATE = """
         <tr>
           <td>{{ "%g"|format(line.cantidad) }}</td>
           <td style="white-space: pre-wrap;">{{ line.descripcion }}</td>
-          <td class="num">L. {{ "%.2f"|format(line.precio_unitario) }}</td>
-          <td class="num">L. {{ "%.2f"|format(line.total) }}</td>
+          <td class="num">L. {{ money(line.precio_unitario) }}</td>
+          <td class="num">L. {{ money(line.total) }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -202,15 +212,15 @@ INVOICE_PDF_TEMPLATE = """
       </div>
     </div>
     <div class="totals-table">
-      <div class="trow"><span class="tlabel">Sub-Total</span><span class="tvalue-wrap"><span>L.</span><span>{{ "%.2f"|format(invoice.subtotal) }}</span></span></div>
-      <div class="trow"><span class="tlabel">Descuentos y Rebajas</span><span class="tvalue-wrap"><span>L.</span><span>{{ "%.2f"|format(invoice.descuentos) }}</span></span></div>
-      <div class="trow"><span class="tlabel">Importe Exonerado</span><span class="tvalue-wrap"><span>L.</span><span>{{ "%.2f"|format(invoice.importe_exonerado) }}</span></span></div>
-      <div class="trow"><span class="tlabel">Importe Exento</span><span class="tvalue-wrap"><span>L.</span><span>{{ "%.2f"|format(invoice.importe_exento) }}</span></span></div>
-      <div class="trow"><span class="tlabel">Importe Gravado 15%</span><span class="tvalue-wrap"><span>L.</span><span>{{ "%.2f"|format(invoice.importe_gravado_15) }}</span></span></div>
-      <div class="trow"><span class="tlabel">Importe Gravado 18%</span><span class="tvalue-wrap"><span>L.</span><span>{{ "%.2f"|format(invoice.importe_gravado_18) }}</span></span></div>
-      <div class="trow"><span class="tlabel">I.S.V. 15%</span><span class="tvalue-wrap"><span>L.</span><span>{{ "%.2f"|format(invoice.isv_15) }}</span></span></div>
-      <div class="trow"><span class="tlabel">I.S.V. 18%</span><span class="tvalue-wrap"><span>L.</span><span>{{ "%.2f"|format(invoice.isv_18) }}</span></span></div>
-      <div class="trow grand"><span class="tlabel">Total a Pagar</span><span class="tvalue-wrap"><span>L.</span><span>{{ "%.2f"|format(invoice.total_a_pagar) }}</span></span></div>
+      <div class="trow"><span class="tlabel">Sub-Total</span><span class="tvalue-wrap"><span>L.</span><span>{{ money(invoice.subtotal) }}</span></span></div>
+      <div class="trow"><span class="tlabel">Descuentos y Rebajas</span><span class="tvalue-wrap"><span>L.</span><span>{{ money(invoice.descuentos) }}</span></span></div>
+      <div class="trow"><span class="tlabel">Importe Exonerado</span><span class="tvalue-wrap"><span>L.</span><span>{{ money(invoice.importe_exonerado) }}</span></span></div>
+      <div class="trow"><span class="tlabel">Importe Exento</span><span class="tvalue-wrap"><span>L.</span><span>{{ money(invoice.importe_exento) }}</span></span></div>
+      <div class="trow"><span class="tlabel">Importe Gravado 15%</span><span class="tvalue-wrap"><span>L.</span><span>{{ money(invoice.importe_gravado_15) }}</span></span></div>
+      <div class="trow"><span class="tlabel">Importe Gravado 18%</span><span class="tvalue-wrap"><span>L.</span><span>{{ money(invoice.importe_gravado_18) }}</span></span></div>
+      <div class="trow"><span class="tlabel">I.S.V. 15%</span><span class="tvalue-wrap"><span>L.</span><span>{{ money(invoice.isv_15) }}</span></span></div>
+      <div class="trow"><span class="tlabel">I.S.V. 18%</span><span class="tvalue-wrap"><span>L.</span><span>{{ money(invoice.isv_18) }}</span></span></div>
+      <div class="trow grand"><span class="tlabel">Total a Pagar</span><span class="tvalue-wrap"><span>L.</span><span>{{ money(invoice.total_a_pagar) }}</span></span></div>
     </div>
   </div>
 
@@ -236,6 +246,7 @@ def render_invoice_pdf(invoice_dict, account):
         invoice=display_invoice,
         account=account,
         globe_svg=GLOBE_ICON_SVG,
+        money=_money,
         font_ubuntu_300=_font_url("ubuntu-300.woff2"),
         font_ubuntu_400=_font_url("ubuntu-400.woff2"),
         font_ubuntu_700=_font_url("ubuntu-700.woff2"),
