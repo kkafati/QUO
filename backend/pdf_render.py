@@ -52,7 +52,7 @@ INVOICE_PDF_TEMPLATE = """
   @font-face { font-family: 'PT Sans'; src: url('{{ font_ptsans }}') format('woff2'); font-weight: 400; }
 
   @page { size: letter; margin: 0.5in; }
-  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  * { box-sizing: border-box; }
   body { font-family: 'Ubuntu', sans-serif; color: #16232f; margin: 0; font-size: 10pt;
          display: flex; flex-direction: column; min-height: 10in; }
 
@@ -103,7 +103,7 @@ INVOICE_PDF_TEMPLATE = """
   .letras-label { background: #065dac; color: #fff; font-size: 8pt; text-align: center; padding: 10px; width: 80px; flex-shrink: 0; }
   .letras-value { padding: 8px 10px; font-size: 8pt; color: #000; }
 
-  .exempt-refs { display: grid; grid-template-columns: max-content 1fr; font-size: 6.5pt; border: 1px solid #dde1e5; margin-bottom: 12px; line-height: 1.5; }
+  .exempt-refs { display: grid; grid-template-columns: max-content 1fr; align-items: center; font-size: 6.5pt; border: 1px solid #dde1e5; margin-bottom: 12px; line-height: 1.5; }
   .exempt-refs .elabel { padding: 9px 8px; border-bottom: 1px solid #dde1e5; text-align: center; white-space: nowrap; }
   .exempt-refs .evalue { padding: 9px 8px; border-left: 1px solid #dde1e5; border-bottom: 1px solid #dde1e5; }
   .exempt-refs .erow-last .elabel, .exempt-refs .erow-last .evalue { border-bottom: none; }
