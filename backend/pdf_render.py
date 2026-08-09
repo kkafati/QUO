@@ -36,7 +36,7 @@ GLOBE_ICON_SVG = """<svg viewBox="0 0 100 100" width="11" height="11" style="dis
     <path d="M50,5 C25,25 25,75 50,95" />
     <path d="M50,5 C75,25 75,75 50,95" />
   </g>
-  <text x="53" y="58" text-anchor="middle" font-family="sans-serif" font-size="24" font-weight="800" fill="#fff">WWW</text>
+  <text x="50" y="58" text-anchor="middle" font-family="sans-serif" font-size="24" font-weight="800" fill="#fff">WWW</text>
 </svg>"""
 
 INVOICE_PDF_TEMPLATE = """
@@ -99,7 +99,7 @@ INVOICE_PDF_TEMPLATE = """
   .pre-totals-rule { border: none; border-top: 2.5px solid #6b7480; margin: 4px 0 0; }
   .totals-section { display: flex; justify-content: space-between; margin-top: 14px; gap: 20px; }
   .totals-left-col { flex: 1; }
-  .letras-box { display: flex; border: 1px solid #dde1e5; border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+  .letras-box { display: flex; border: 1px solid #dde1e5; overflow: hidden; margin-bottom: 12px; }
   .letras-label { background: #065dac; color: #fff; font-size: 8pt; text-align: center; padding: 10px; width: 80px; flex-shrink: 0; }
   .letras-value { padding: 8px 10px; font-size: 8pt; color: #000; }
 
