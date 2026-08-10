@@ -96,7 +96,7 @@ INVOICE_PDF_TEMPLATE = """
   .items-wrapper { flex: 1; display: flex; flex-direction: column; margin-top: 6px;
                     border-left: 1px solid #e3e5e8; border-right: 1px solid #e3e5e8; }
   table.items { width: 100%; border-collapse: collapse; font-size: 9pt; table-layout: fixed; }
-  table.items thead th { background: #555859; color: #fff; font-size: 7pt; text-transform: uppercase;
+  table.items thead th { background: #4e5152; color: #fff; font-size: 7pt; text-transform: uppercase;
                           padding: 8px 10px; text-align: center; white-space: nowrap; border-right: 1px solid rgba(255,255,255,0.25); }
   table.items thead th:last-child { border-right: none; }
   table.items td { padding: 6px 10px; border-right: 1px solid #e3e5e8; vertical-align: top; color: #000; }
