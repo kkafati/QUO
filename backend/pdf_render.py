@@ -88,10 +88,10 @@ INVOICE_PDF_TEMPLATE = """
   .term-row { text-align: right; font-size: 8pt; margin-bottom: 4px; color: #39454A; }
   .term-row .tp-label { color: #065dac; font-weight: 500; }
   .tp-check { display: inline-block; width: 15px; height: 15px; border: 1.5px solid #065dac; border-radius: 4px;
-              text-align: center; line-height: 9px; font-size: 10px; font-weight: 800; color: #000; margin: 0 3px 0 8px; vertical-align: middle; }
+              text-align: center; line-height: 9px; font-size: 12px; font-weight: 800; color: #000; margin: 0 3px 0 8px; vertical-align: middle; }
 
   .cai-row { text-align: right; font-size: 8pt; font-family: 'Ubuntu', sans-serif; font-weight: 250; }
-  .term-cai-divider { border: none; border-top: 2px solid #065dac; width: 50%; margin: 8px 0 0 auto; }
+  .term-cai-divider { border: none; border-top: 2px solid #065dac; width: 50%; margin: 4px 0 4px auto; }
 
   .items-wrapper { flex: 1; display: flex; flex-direction: column; margin-top: 6px;
                     border-left: 1px solid #e3e5e8; border-right: 1px solid #e3e5e8; }
