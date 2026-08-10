@@ -123,10 +123,10 @@ INVOICE_PDF_TEMPLATE = """
   .foot-lines .bold { font-weight: 700; }
   .foot-tagline { text-align: center; font-size: 9pt; margin-top: 10px; }
 
-  .totals-table { width: 280px; flex-shrink: 0; font-size: 10pt; }
-  .trow { display: flex; justify-content: flex-end; align-items: baseline; padding: 5px 0; gap: 10px; }
+  .totals-table { width: 220px; flex-shrink: 0; font-size: 10pt; }
+  .trow { display: flex; justify-content: flex-end; align-items: baseline; padding: 5px 0; gap: 6px; }
   .trow .tlabel { color: #6D7075; font-size: 7pt; text-align: right; flex: 1; }
-  .trow .tvalue-wrap { display: flex; justify-content: flex-end; align-items: baseline; gap: 4px; min-width: 90px; color: #000; }
+  .trow .tvalue-wrap { display: flex; justify-content: flex-end; align-items: baseline; gap: 3px; min-width: 78px; color: #000; }
   .trow.grand { border-bottom: 2px solid #065dac; margin-top: 6px; padding-bottom: 8px; font-weight: 700; }
 </style>
 </head>
