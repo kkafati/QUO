@@ -71,10 +71,10 @@ INVOICE_PDF_TEMPLATE = """
   .fhead-logo { width: 100px; }
   .contact-list { margin-top: 4px; }
   .contact-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-family: 'PT Sans', sans-serif; font-size: 6pt; color: #333; }
-  .contact-icon { width: 16px; height: 16px; border-radius: 50%; background: #39454A; color: #fff;
+  .contact-icon { width: 16px; height: 16px; border-radius: 50%; background: #4e5152; color: #fff;
                    display: flex; align-items: center; justify-content: center; font-size: 8px; flex-shrink: 0; }
   .fhead-right { text-align: right; }
-  .factura-title { font-family: 'Audiowide', sans-serif; font-size: 26pt; font-weight: 400; letter-spacing: 0.03em; color: #39454A; margin: 0; }
+  .factura-title { font-family: 'Audiowide', sans-serif; font-size: 26pt; font-weight: 400; letter-spacing: 0.03em; color: #4e5152; margin: 0; }
   .factura-numero { font-family: 'Ubuntu', sans-serif; font-size: 12pt; margin-top: 4px; color: #000; }
 
   .info-labels-row { display: flex; justify-content: space-between; font-size: 8pt; font-weight: 300;
@@ -85,7 +85,7 @@ INVOICE_PDF_TEMPLATE = """
   .cliente-rtn { font-size: 9pt; margin-top: 2px; color: #000; }
   .fecha-value { font-size: 12pt; text-align: right; color: #000; }
 
-  .term-row { text-align: right; font-size: 8pt; margin-bottom: 4px; color: #39454A; }
+  .term-row { text-align: right; font-size: 8pt; margin-bottom: 4px; color: #4e5152; }
   .term-row .tp-label { color: #065dac; font-weight: 500; }
   .tp-check { display: inline-block; width: 15px; height: 15px; border: 1.5px solid #065dac; border-radius: 4px;
               text-align: center; line-height: 9px; font-size: 12px; font-weight: 600; color: #000; margin: 1px 3px 0 8px; vertical-align: middle; }
@@ -106,8 +106,8 @@ INVOICE_PDF_TEMPLATE = """
   .items-spacer .sp-col { border-right: 1px solid #e3e5e8; }
   .items-spacer .sp-col:last-child { border-right: none; }
 
-  .pre-totals-rule { border: none; border-top: 4px solid #6b7480; margin: 2px 0 0; }
-  .totals-section { display: flex; justify-content: space-between; margin-top: 14px; gap: 50px; }
+  .pre-totals-rule { border: none; border-top: 4px solid #4e5152; margin: 2px 0 0; }
+  .totals-section { display: flex; justify-content: space-between; margin-top: 14px; gap: 20px; }
   .totals-left-col { flex: 1; }
   .letras-box { display: flex; border: 1px solid #dde1e5; border-radius: 0 0 0 0; overflow: hidden; margin-bottom: 12px; }
   .letras-label { background: #065dac; color: #fff; font-size: 8pt; text-align: center; padding: 10px; width: 80px; flex-shrink: 0; }
