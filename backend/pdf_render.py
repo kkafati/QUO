@@ -109,12 +109,12 @@ INVOICE_PDF_TEMPLATE = """
 
   .pre-totals-rule { border: none; border-top: 4px solid #4e5152; margin: 2px 0 0; }
   .totals-section { display: flex; justify-content: space-between; margin-top: 14px; gap: 20px; }
-  .totals-left-col { flex: 1; }
+  .totals-left-col { flex: 1; min-width: 0; }
   .letras-box { display: flex; border: 1px solid #dde1e5; border-radius: 0 0 0 0; overflow: hidden; margin-bottom: 12px; }
   .letras-label { background: #065dac; color: #fff; font-size: 8pt; text-align: center; padding: 10px; width: 80px; flex-shrink: 0; }
   .letras-value { padding: 8px 10px; font-size: 8pt; color: #000; }
 
-  .exempt-refs { display: grid; grid-template-columns: max-content 1fr; align-items: center; font-size: 6.5pt; border: 1px solid #dde1e5; margin-bottom: 12px; line-height: 1.5; }
+  .exempt-refs { display: grid; grid-template-columns: max-content 1fr; align-items: center; font-size: 6.5pt; border: 1px solid #dde1e5; margin-bottom: 12px; line-height: 1.5; overflow: hidden; }
   .exempt-refs .elabel { padding: 5px 8px; border-bottom: 1px solid #dde1e5; text-align: center; white-space: nowrap; }
   .exempt-refs .evalue { padding: 5px 8px; min-height: 1.5em; border-left: 1px solid #dde1e5; border-bottom: 1px solid #dde1e5; }
   .exempt-refs .erow-last .elabel, .exempt-refs .erow-last .evalue { border-bottom: none; }
