@@ -88,7 +88,7 @@ INVOICE_PDF_TEMPLATE = """
   .term-row { text-align: right; font-size: 8pt; margin-bottom: 4px; color: #39454A; }
   .term-row .tp-label { color: #065dac; font-weight: 500; }
   .tp-check { display: inline-block; width: 15px; height: 15px; border: 1.5px solid #065dac; border-radius: 4px;
-              text-align: center; line-height: 9px; font-size: 12px; font-weight: 800; color: #000; margin: 0 3px 0 8px; vertical-align: middle; }
+              text-align: center; line-height: 9px; font-size: 12px; font-weight: 600; color: #000; margin: 1px 3px 0 8px; vertical-align: middle; }
 
   .cai-row { text-align: right; font-size: 8pt; font-family: 'Ubuntu', sans-serif; font-weight: 200; }
   .term-cai-divider { border: none; border-top: 2px solid #065dac; width: 50%; margin: 4px 0 4px auto; }
@@ -106,10 +106,10 @@ INVOICE_PDF_TEMPLATE = """
   .items-spacer .sp-col { border-right: 1px solid #e3e5e8; }
   .items-spacer .sp-col:last-child { border-right: none; }
 
-  .pre-totals-rule { border: none; border-top: 2.5px solid #6b7480; margin: 4px 0 0; }
-  .totals-section { display: flex; justify-content: space-between; margin-top: 14px; gap: 20px; }
+  .pre-totals-rule { border: none; border-top: 4px solid #6b7480; margin: 2px 0 0; }
+  .totals-section { display: flex; justify-content: space-between; margin-top: 14px; gap: 50px; }
   .totals-left-col { flex: 1; }
-  .letras-box { display: flex; border: 1px solid #dde1e5; border-radius: 0 4px 4px 0; overflow: hidden; margin-bottom: 12px; }
+  .letras-box { display: flex; border: 1px solid #dde1e5; border-radius: 0 0 0 0; overflow: hidden; margin-bottom: 12px; }
   .letras-label { background: #065dac; color: #fff; font-size: 8pt; text-align: center; padding: 10px; width: 80px; flex-shrink: 0; }
   .letras-value { padding: 8px 10px; font-size: 8pt; color: #000; }
 
