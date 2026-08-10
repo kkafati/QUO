@@ -323,3 +323,43 @@ class CotizacionLine(db.Model):
     descripcion = db.Column(db.String(500), nullable=False)
     precio_unitario = db.Column(db.Float, nullable=False, default=0)
 
+
+class Proforma(db.Model):
+    """A Factura Proforma - same visual format/fields as a Factura Clásica
+    (total en letras, No. Correlativo, CAI), but with no invoice numbering
+    (that's assigned only when/if it's converted into a real Factura) and
+    without the RTN/Rango-Autorizado/Original-Copia issuance footer."""
+    __tablename__ = "proformas"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+
+    cliente_nombre = db.Column(db.String(255), nullable=False)
+    cliente_rtn = db.Column(db.String(32))
+    cliente_id = db.Column(db.Integer, db.ForeignKey("clientes.id"))
+    fecha = db.Column(db.String(16), nullable=False)
+    termino_pago = db.Column(db.String(16), nullable=False, default="contado")
+
+    descuentos = db.Column(db.Float, default=0)
+    importe_exonerado = db.Column(db.Float, default=0)
+    importe_exento = db.Column(db.Float, default=0)
+    gravado_18_pct = db.Column(db.Boolean, default=False)
+
+    orden_compra_exenta = db.Column(db.String(64))
+    constancia_registro_exonerado = db.Column(db.String(64))
+    registro_sag = db.Column(db.String(64))
+
+    created_at = db.Column(db.String(16))
+    updated_at = db.Column(db.String(16))
+    deleted_at = db.Column(db.String(16))
+
+    lines = db.relationship("ProformaLine", backref="proforma", cascade="all, delete-orphan")
+
+
+class ProformaLine(db.Model):
+    __tablename__ = "proforma_lines"
+    id = db.Column(db.Integer, primary_key=True)
+    proforma_id = db.Column(db.Integer, db.ForeignKey("proformas.id"), nullable=False)
+    cantidad = db.Column(db.Float, nullable=False, default=1)
+    descripcion = db.Column(db.String(500), nullable=False)
+    precio_unitario = db.Column(db.Float, nullable=False, default=0)
+

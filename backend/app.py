@@ -6,10 +6,11 @@ from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
 from werkzeug.security import check_password_hash, generate_password_hash
-from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine
+from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine
 from numero_a_letras import numero_a_letras
 from pdf_render import render_invoice_pdf
 from pdf_render_cotizacion import render_cotizacion_pdf
+from pdf_render_proforma import render_proforma_pdf
 
 # On some Windows machines, a corrupted registry entry makes Python think
 # .html/.js/.css are text/plain, causing browsers to show raw source instead
@@ -29,6 +30,7 @@ CUENTA_DIR = os.path.join(os.path.dirname(BASE_DIR), "cuenta")
 ADMIN_DIR = os.path.join(os.path.dirname(BASE_DIR), "admin")
 FACTURACION_DIR = os.path.join(os.path.dirname(BASE_DIR), "facturacion")
 COTIZACION_CLASICA_DIR = os.path.join(os.path.dirname(BASE_DIR), "cotizacion-clasica")
+PROFORMA_DIR = os.path.join(os.path.dirname(BASE_DIR), "proforma")
 CLIENTES_DIR = os.path.join(os.path.dirname(BASE_DIR), "clientes")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/cotizaciones")
@@ -1229,6 +1231,23 @@ def cotizacion_clasica_common_js():
 
 
 # ---------------------------------------------------------------------------
+# Factura Proforma
+# ---------------------------------------------------------------------------
+
+@app.route("/proforma/ver/")
+@login_required
+def proforma_ver():
+    log_page_view("/proforma/ver/")
+    return send_from_directory(PROFORMA_DIR, "ver.html")
+
+
+@app.route("/proforma/proforma-common.js")
+@login_required
+def proforma_common_js():
+    return send_from_directory(PROFORMA_DIR, "proforma-common.js", mimetype="application/javascript")
+
+
+# ---------------------------------------------------------------------------
 # Clientes (customer records)
 # ---------------------------------------------------------------------------
 
@@ -1295,6 +1314,16 @@ def get_cliente_cotizaciones_clasica(cliente_id):
             .filter(db.or_(Cotizacion.cliente_id == cliente_id, Cotizacion.cliente_nombre == cliente.nombre))
             .order_by(Cotizacion.fecha.desc()).all())
     return jsonify([compute_cotizacion_totals(c) for c in cots])
+
+
+@app.route("/api/clientes/<int:cliente_id>/proformas", methods=["GET"])
+@login_required
+def get_cliente_proformas(cliente_id):
+    cliente = Cliente.query.filter_by(id=cliente_id, account_id=current_account_id()).first_or_404()
+    pfs = (Proforma.query.filter_by(account_id=current_account_id(), deleted_at=None)
+           .filter(db.or_(Proforma.cliente_id == cliente_id, Proforma.cliente_nombre == cliente.nombre))
+           .order_by(Proforma.fecha.desc()).all())
+    return jsonify([compute_proforma_totals(p) for p in pfs])
 
 
 @app.route("/api/clientes", methods=["POST"])
@@ -1913,10 +1942,17 @@ def convertir_cotizacion_a_factura(cot_id):
     if not numero:
         return jsonify({"error": "Configura el Prefijo de Factura en Configuración de la Cuenta antes de convertir cotizaciones en facturas."}), 400
 
-    fecha = datetime.utcnow().strftime("%Y-%m-%d")  # the invoice is issued today, not backdated to the quote's date
-    date_error = _validate_invoice_date(account.id, fecha)
-    if date_error:
-        return jsonify({"error": date_error}), 400
+    # The invoice is issued right now (when the button is pressed), not
+    # backdated to the quote's own date. Facturas must stay in chronological
+    # order, so if a later-dated invoice already exists for some reason,
+    # use that date instead of today rather than blocking the conversion -
+    # a one-click "convert this quote" action should never fail just
+    # because of ordering housekeeping the user didn't ask to think about.
+    fecha = datetime.utcnow().strftime("%Y-%m-%d")
+    latest = (Invoice.query.filter_by(account_id=account.id, deleted_at=None)
+              .order_by(Invoice.fecha.desc()).first())
+    if latest and latest.fecha and latest.fecha > fecha:
+        fecha = latest.fecha
 
     invoice = Invoice(
         account_id=account.id,
@@ -1939,6 +1975,290 @@ def convertir_cotizacion_a_factura(cot_id):
     db.session.commit()
 
     for ln in cot.lines:
+        db.session.add(InvoiceLine(
+            invoice_id=invoice.id,
+            cantidad=ln.cantidad,
+            descripcion=ln.descripcion,
+            precio_unitario=ln.precio_unitario,
+        ))
+    db.session.commit()
+
+    account.next_invoice_number = (account.next_invoice_number or 1) + 1
+    db.session.commit()
+
+    return jsonify(compute_invoice_totals(invoice)), 201
+
+
+# ---------------------------------------------------------------------------
+# Factura Proforma API
+# ---------------------------------------------------------------------------
+
+def compute_proforma_totals(pf):
+    lines = []
+    subtotal = 0.0
+    for ln in pf.lines:
+        total = round((ln.cantidad or 0) * (ln.precio_unitario or 0), 2)
+        subtotal += total
+        lines.append({
+            "id": ln.id, "cantidad": ln.cantidad,
+            "descripcion": ln.descripcion, "precio_unitario": ln.precio_unitario,
+            "total": total,
+        })
+    subtotal = round(subtotal, 2)
+
+    descuentos = pf.descuentos or 0
+    importe_exonerado = pf.importe_exonerado or 0
+    importe_exento = pf.importe_exento or 0
+    base_gravable = max(0.0, round(subtotal - descuentos - importe_exonerado - importe_exento, 2))
+
+    if pf.gravado_18_pct:
+        importe_gravado_15, importe_gravado_18 = 0.0, base_gravable
+        isv_15, isv_18 = 0.0, round(base_gravable * 0.18, 2)
+    else:
+        importe_gravado_15, importe_gravado_18 = base_gravable, 0.0
+        isv_15, isv_18 = round(base_gravable * 0.15, 2), 0.0
+
+    total_a_pagar = round(subtotal - descuentos + isv_15 + isv_18, 2)
+
+    return {
+        "id": pf.id,
+        "cliente_nombre": pf.cliente_nombre,
+        "cliente_rtn": pf.cliente_rtn,
+        "cliente_id": pf.cliente_id,
+        "fecha": pf.fecha,
+        "termino_pago": pf.termino_pago,
+        "lines": lines,
+        "subtotal": subtotal,
+        "descuentos": descuentos,
+        "importe_exonerado": importe_exonerado,
+        "importe_exento": importe_exento,
+        "importe_gravado_15": importe_gravado_15,
+        "importe_gravado_18": importe_gravado_18,
+        "isv_15": isv_15,
+        "isv_18": isv_18,
+        "total_a_pagar": total_a_pagar,
+        "total_en_letras": numero_a_letras(total_a_pagar),
+        "orden_compra_exenta": pf.orden_compra_exenta,
+        "constancia_registro_exonerado": pf.constancia_registro_exonerado,
+        "registro_sag": pf.registro_sag,
+        "created_at": pf.created_at,
+        "updated_at": pf.updated_at,
+    }
+
+
+def _sync_proforma_lines(pf, lines_data):
+    for ln in list(pf.lines):
+        db.session.delete(ln)
+    db.session.flush()
+    for ln in lines_data:
+        db.session.add(ProformaLine(
+            proforma_id=pf.id,
+            cantidad=float(ln.get("cantidad", 1) or 0),
+            descripcion=(ln.get("descripcion") or "").strip(),
+            precio_unitario=float(ln.get("precio_unitario", 0) or 0),
+        ))
+    db.session.commit()
+
+
+def _build_proforma_pdf_filename(pf):
+    """Proforma_{ClienteName}_{DD-MM-YYYY}.pdf - no invoice number to
+    include since a proforma isn't numbered. Sanitized since the client
+    name is free-text."""
+    def _safe(s):
+        s = re.sub(r'[\\/:*?"<>|]', '', s or '')
+        s = re.sub(r'\s+', '_', s.strip())
+        return s or "SinNombre"
+
+    cliente_part = _safe(pf.cliente_nombre)
+    raw_fecha = pf.fecha or ""
+    try:
+        y, m, d = raw_fecha.split("-")
+        fecha_part = f"{d}-{m}-{y}"
+    except (ValueError, AttributeError):
+        fecha_part = _safe(raw_fecha)
+
+    return f"Proforma_{cliente_part}_{fecha_part}.pdf"
+
+
+@app.route("/api/proformas", methods=["GET"])
+@login_required
+def list_proformas():
+    pfs = (Proforma.query.filter_by(account_id=current_account_id(), deleted_at=None)
+           .order_by(Proforma.id.desc()).all())
+    return jsonify([compute_proforma_totals(p) for p in pfs])
+
+
+@app.route("/api/proformas/trash", methods=["GET"])
+@login_required
+def list_proformas_trash():
+    pfs = (Proforma.query.filter(Proforma.account_id == current_account_id(), Proforma.deleted_at.isnot(None))
+           .order_by(Proforma.deleted_at.desc()).all())
+    return jsonify([compute_proforma_totals(p) for p in pfs])
+
+
+@app.route("/api/proformas/<int:pf_id>", methods=["GET"])
+@login_required
+def get_proforma(pf_id):
+    pf = Proforma.query.filter_by(id=pf_id, account_id=current_account_id()).first_or_404()
+    return jsonify(compute_proforma_totals(pf))
+
+
+@app.route("/api/proformas/<int:pf_id>/pdf", methods=["GET"])
+@login_required
+def get_proforma_pdf(pf_id):
+    pf = Proforma.query.filter_by(id=pf_id, account_id=current_account_id()).first_or_404()
+    account = Account.query.get_or_404(current_account_id())
+    pf_dict = compute_proforma_totals(pf)
+    try:
+        pdf_bytes = render_proforma_pdf(pf_dict, account)
+    except Exception as e:
+        return jsonify({"error": f"No se pudo generar el PDF: {e}"}), 500
+    filename = _build_proforma_pdf_filename(pf)
+    return pdf_bytes, 200, {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": f'inline; filename="{filename}"',
+    }
+
+
+@app.route("/api/proformas", methods=["POST"])
+@login_required
+def create_proforma():
+    account = Account.query.get_or_404(current_account_id())
+    data = request.json or {}
+    cliente_nombre = (data.get("cliente_nombre") or "").strip()
+    if not cliente_nombre:
+        return jsonify({"error": "El nombre del cliente es requerido."}), 400
+
+    cliente_rtn = (data.get("cliente_rtn") or "").strip()
+    resolved_cliente_id = _resolve_cliente_id(account.id, data.get("cliente_id"), cliente_nombre, cliente_rtn)
+
+    pf = Proforma(
+        account_id=account.id,
+        cliente_nombre=cliente_nombre,
+        cliente_rtn=cliente_rtn,
+        cliente_id=resolved_cliente_id,
+        fecha=data.get("fecha") or datetime.utcnow().strftime("%Y-%m-%d"),
+        termino_pago=data.get("termino_pago") or "contado",
+        descuentos=float(data.get("descuentos", 0) or 0),
+        importe_exonerado=float(data.get("importe_exonerado", 0) or 0),
+        importe_exento=float(data.get("importe_exento", 0) or 0),
+        gravado_18_pct=bool(data.get("gravado_18_pct", False)),
+        orden_compra_exenta=(data.get("orden_compra_exenta") or "").strip(),
+        constancia_registro_exonerado=(data.get("constancia_registro_exonerado") or "").strip(),
+        registro_sag=(data.get("registro_sag") or "").strip(),
+        created_at=datetime.utcnow().strftime("%Y-%m-%d"),
+        updated_at=datetime.utcnow().strftime("%Y-%m-%d"),
+    )
+    db.session.add(pf)
+    db.session.commit()
+    _sync_proforma_lines(pf, data.get("lines", []))
+
+    return jsonify(compute_proforma_totals(pf)), 201
+
+
+@app.route("/api/proformas/<int:pf_id>", methods=["PUT"])
+@login_required
+def update_proforma(pf_id):
+    pf = Proforma.query.filter_by(id=pf_id, account_id=current_account_id()).first_or_404()
+    data = request.json or {}
+
+    cliente_nombre = (data.get("cliente_nombre") or pf.cliente_nombre).strip()
+    if not cliente_nombre:
+        return jsonify({"error": "El nombre del cliente es requerido."}), 400
+    pf.cliente_nombre = cliente_nombre
+    pf.cliente_rtn = (data.get("cliente_rtn", pf.cliente_rtn) or "").strip()
+    pf.cliente_id = _resolve_cliente_id(pf.account_id, data.get("cliente_id", pf.cliente_id),
+                                         pf.cliente_nombre, pf.cliente_rtn)
+    pf.fecha = data.get("fecha", pf.fecha)
+    pf.termino_pago = data.get("termino_pago", pf.termino_pago)
+    if "descuentos" in data:
+        pf.descuentos = float(data.get("descuentos") or 0)
+    if "importe_exonerado" in data:
+        pf.importe_exonerado = float(data.get("importe_exonerado") or 0)
+    if "importe_exento" in data:
+        pf.importe_exento = float(data.get("importe_exento") or 0)
+    if "gravado_18_pct" in data:
+        pf.gravado_18_pct = bool(data.get("gravado_18_pct"))
+    pf.orden_compra_exenta = (data.get("orden_compra_exenta", pf.orden_compra_exenta) or "").strip()
+    pf.constancia_registro_exonerado = (data.get("constancia_registro_exonerado", pf.constancia_registro_exonerado) or "").strip()
+    pf.registro_sag = (data.get("registro_sag", pf.registro_sag) or "").strip()
+    pf.updated_at = datetime.utcnow().strftime("%Y-%m-%d")
+
+    if "lines" in data:
+        _sync_proforma_lines(pf, data["lines"])
+    db.session.commit()
+    return jsonify(compute_proforma_totals(pf))
+
+
+@app.route("/api/proformas/<int:pf_id>", methods=["DELETE"])
+@login_required
+def delete_proforma(pf_id):
+    pf = Proforma.query.filter_by(id=pf_id, account_id=current_account_id(), deleted_at=None).first_or_404()
+    pf.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    db.session.commit()
+    return "", 204
+
+
+@app.route("/api/proformas/<int:pf_id>/restore", methods=["POST"])
+@login_required
+def restore_proforma(pf_id):
+    pf = Proforma.query.filter(Proforma.id == pf_id, Proforma.account_id == current_account_id(),
+                                Proforma.deleted_at.isnot(None)).first_or_404()
+    pf.deleted_at = None
+    db.session.commit()
+    return jsonify(compute_proforma_totals(pf))
+
+
+@app.route("/api/proformas/<int:pf_id>/permanent", methods=["DELETE"])
+@login_required
+def permanent_delete_proforma(pf_id):
+    pf = Proforma.query.filter(Proforma.id == pf_id, Proforma.account_id == current_account_id(),
+                                Proforma.deleted_at.isnot(None)).first_or_404()
+    db.session.delete(pf)
+    db.session.commit()
+    return "", 204
+
+
+@app.route("/api/proformas/<int:pf_id>/convertir-a-factura", methods=["POST"])
+@login_required
+def convertir_proforma_a_factura(pf_id):
+    pf = Proforma.query.filter_by(id=pf_id, account_id=current_account_id(), deleted_at=None).first_or_404()
+    account = Account.query.get_or_404(current_account_id())
+
+    numero = _next_invoice_numero(account)
+    if not numero:
+        return jsonify({"error": "Configura el Prefijo de Factura en Configuración de la Cuenta antes de convertir proformas en facturas."}), 400
+
+    fecha = datetime.utcnow().strftime("%Y-%m-%d")
+    latest = (Invoice.query.filter_by(account_id=account.id, deleted_at=None)
+              .order_by(Invoice.fecha.desc()).first())
+    if latest and latest.fecha and latest.fecha > fecha:
+        fecha = latest.fecha
+
+    invoice = Invoice(
+        account_id=account.id,
+        numero=numero,
+        template=account.default_invoice_template or "clasica",
+        cliente_nombre=pf.cliente_nombre,
+        cliente_rtn=pf.cliente_rtn,
+        cliente_id=pf.cliente_id,
+        estado="Falta Pago",
+        fecha=fecha,
+        termino_pago=pf.termino_pago,
+        descuentos=pf.descuentos,
+        importe_exonerado=pf.importe_exonerado,
+        importe_exento=pf.importe_exento,
+        gravado_18_pct=pf.gravado_18_pct,
+        orden_compra_exenta=pf.orden_compra_exenta,
+        constancia_registro_exonerado=pf.constancia_registro_exonerado,
+        registro_sag=pf.registro_sag,
+        created_at=fecha,
+        updated_at=fecha,
+    )
+    db.session.add(invoice)
+    db.session.commit()
+
+    for ln in pf.lines:
         db.session.add(InvoiceLine(
             invoice_id=invoice.id,
             cantidad=ln.cantidad,

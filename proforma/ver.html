@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factura — Grupo Liquidámbar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Ubuntu:wght@300;400;500;700&family=Audiowide&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root { --blue: #065dac; --lime: #cddc28; --ink: #16232f; --ink-soft: #5a6570; --dark-head: #39454A; --invoice-blue: #065dac; --tlabel-grey: #748B8D; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #eef0f2; color: var(--ink); font-family: 'Poppins', sans-serif; }
+
+  .toolbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 24px; background: #fff; border-bottom: 1px solid #e7e9ec; position: sticky; top: 0; z-index: 5;
+  }
+  .toolbar-left { display: flex; gap: 10px; align-items: center; }
+  .toolbar a { color: var(--blue); text-decoration: none; font-weight: 600; font-size: 13px; }
+  .btn { border: 1.5px solid var(--ink); background: #fff; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 8px; }
+  .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn-primary:hover { background: #054a87; }
+  .btn-ghost { border-color: #dde1e5; color: var(--ink-soft); }
+  .btn-danger { border-color: #b5453b; color: #b5453b; }
+  .btn-danger:hover { background: #b5453b; color: #fff; }
+  .status { font-size: 12px; color: var(--ink-soft); margin-left: 10px; }
+  .status.ok { color: #3f8f6a; }
+  .status.error { color: #b5453b; }
+
+  .sheet-wrap { max-width: 900px; margin: 28px auto 80px; }
+  .sheet {
+    background: #fff; padding: 40px 44px; box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  }
+
+  /* ---- header ---- */
+  .fhead { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; }
+  .fhead-left { display: flex; gap: 18px; align-items: flex-start; }
+  .fhead-logo { width: 110px; height: auto; }
+  .contact-list { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+  .contact-row { display: flex; align-items: center; gap: 8px; font-family: 'PT Sans', sans-serif; font-size: 6pt; color: #333; }
+  .contact-icon {
+    width: 20px; height: 20px; border-radius: 50%; background: #585858; color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0;
+  }
+  .contact-row input { border: none; background: transparent; font-family: 'PT Sans', sans-serif; font-size: 6pt; color: #333; padding: 0; }
+  .fhead-right { text-align: right; }
+  .fhead-right .factura-title { font-family: 'Audiowide', sans-serif; font-size: 30pt; font-weight: 400; letter-spacing: 0.03em; color: var(--dark-head); margin: 0; }
+  .fhead-right .factura-numero { font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 12pt; color: var(--ink); margin-top: 6px; }
+  .fhead-right .proforma-label { font-family: 'Audiowide', sans-serif; font-size: 16pt; font-weight: 400; letter-spacing: 0.03em; color: var(--dark-head); margin-top: 6px; text-align: right; }
+
+  /* ---- cliente / fecha ---- */
+  .info-labels-row { display: flex; justify-content: space-between; }
+  .info-rule { border: none; border-top: 2.5px solid #c9ced3; margin: 4px 0 4px; }
+  .info-values-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .info-label { font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); margin-bottom: 4px; }
+  .cliente-nombre-input { font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 12pt; text-transform: uppercase; border: none; background: transparent; padding: 0; width: 260px; }
+  .cliente-rtn-row { font-size: 13px; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
+  .cliente-rtn-row input { border: none; background: transparent; font-family: inherit; font-size: 13px; padding: 0; width: 160px; }
+  .fecha-value { font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 12pt; text-align: right; }
+  .fecha-value input { border: none; background: transparent; font-family: inherit; font-size: 12pt; font-weight: 400; text-align: right; width: 130px; }
+  .fecha-value input::-webkit-calendar-picker-indicator { opacity: 1; cursor: pointer; }
+
+  .term-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 8px; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 8pt; }
+  .term-row label { display: flex; align-items: center; gap: 5px; font-weight: 400; cursor: pointer; }
+  .term-title { color: var(--invoice-blue); font-weight: 700; }
+
+  .cai-row { text-align: right; font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; color: #333; padding-top: 8px; margin-bottom: 4px; }
+  .term-cai-divider { border: none; border-top: 2px solid var(--invoice-blue); width: 50%; margin: 4px 0 0 auto; }
+  .cai-row .cai-value { font-family: monospace; letter-spacing: 0.02em; }
+
+  /* ---- line items ---- */
+  .items-table { width: 100%; border-collapse: collapse; margin-top: 6px; border-left: 1px solid #e3e5e8; border-right: 1px solid #e3e5e8; }
+  .items-table thead th {
+    background: var(--dark-head); color: #fff; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 10px 12px; text-align: left; border-right: 1px solid rgba(255,255,255,0.25);
+  }
+  .items-table thead th:last-child, .items-table thead th.no-print { border-right: none; }
+  .items-table thead th.num { text-align: right; }
+  .items-table td { padding: 8px 12px; border-right: 1px solid #e3e5e8; vertical-align: top; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 9pt; }
+  .items-table td:last-child, .items-table td.no-print { border-right: none; }
+  .items-table td.num { text-align: right; }
+  .items-table input { border: none; background: transparent; font-family: inherit; font-size: 9pt; width: 100%; padding: 4px 0; }
+  .items-table input.cantidad { text-align: center; }
+  .items-table input.precio, .items-table .total-cell { text-align: right; }
+  .items-table tbody tr:hover { background: #fafbfc; }
+  .min-rows-spacer td { border-bottom: none; height: 180px; vertical-align: top; }
+  .remove-line-btn { background: none; border: none; color: #b5453b; cursor: pointer; font-size: 14px; padding: 0 4px; }
+  .add-line-row { margin: 10px 0 0; }
+  .add-line-row button { background: none; border: 1px dashed #c9ced3; color: var(--ink-soft); font-size: 12px; padding: 6px 14px; cursor: pointer; border-radius: 6px; }
+
+  /* ---- totals section ---- */
+  .pre-totals-rule { border: none; border-top: 2.5px solid #6b7480; margin: 4px 0 0; }
+  .totals-section { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 20px; gap: 24px; }
+  .totals-left-col { flex: 1; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .letras-box { display: flex; border: 1px solid #dde1e5; border-radius: 4px; overflow: hidden; }
+  .letras-label { background: var(--invoice-blue); color: #fff; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 8pt; text-align: center; padding: 14px 10px; width: 90px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .letras-value { padding: 10px 14px; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 8pt; color: #333; line-height: 1.5; }
+
+  .totals-table { width: 260px; flex-shrink: 0; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 10pt; }
+  .totals-table .trow { display: flex; justify-content: flex-end; align-items: baseline; padding: 3px 0; gap: 6px; }
+  .totals-table .trow .tlabel { flex: 1; text-align: right; }
+  .totals-table .trow.editable input { border: none; background: transparent; font-family: inherit; font-size: 10pt; text-align: right; width: 100px; }
+  .totals-table .tprefix { display: flex; align-items: baseline; gap: 4px; }
+  .totals-table .tvalue-wrap { display: flex; justify-content: flex-end; align-items: baseline; gap: 4px; min-width: 100px; }
+  .totals-table .lprefix { color: var(--ink); }
+  .totals-table .trow .tlabel { color: var(--tlabel-grey); font-size: 7pt; }
+  .totals-table .trow.grand { border-bottom: 2px solid var(--invoice-blue); margin-top: 6px; padding-top: 8px; padding-bottom: 8px; font-weight: 700; font-size: 10pt; }
+  .totals-table .trow.grand .tlabel { font-size: 7pt; font-weight: 700; color: var(--ink); }
+  .totals-table .trow .lcode { font-weight: 600; margin-right: 4px; }
+
+  /* ---- exemption references ---- */
+  .exempt-refs { display: grid; grid-template-columns: max-content 1fr; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 6pt; width: 100%; border: 1px solid #dde1e5; }
+  .exempt-refs .erow { display: contents; }
+  .exempt-refs .elabel { padding: 5px 8px; color: #333; border-bottom: 1px solid #dde1e5; white-space: nowrap; }
+  .exempt-refs .evalue { padding: 5px 8px; border-left: 1px solid #dde1e5; border-bottom: 1px solid #dde1e5; }
+  .exempt-refs .erow:last-child .elabel, .exempt-refs .erow:last-child .evalue { border-bottom: none; }
+  .exempt-refs .evalue input { border: none; background: transparent; font-family: inherit; font-size: 6pt; width: 100%; }
+
+  /* ---- footer ---- */
+  .foot-lines { font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; line-height: 1.7; }
+  .foot-lines .flabel { font-weight: 300; }
+  .foot-lines .flabel-bold { font-weight: 700; }
+  .foot-tagline { text-align: center; font-family: 'Ubuntu', sans-serif; font-weight: 300; font-size: 8pt; color: #333; }
+  .toggle-gravado { margin-top: 6px; font-size: 11px; }
+  .toggle-gravado label { cursor: pointer; }
+
+  @page { size: letter; margin: 0.5in; }
+
+  @media print {
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+    body { background: #fff; }
+    .toolbar { display: none !important; }
+    .sheet-wrap { margin: 0; max-width: 100%; }
+    .sheet { box-shadow: none; padding: 20px 30px; display: flex; flex-direction: column; min-height: 10in; }
+    .bottom-block { break-inside: avoid; page-break-inside: avoid; }
+    input { pointer-events: none; }
+    textarea.descripcion { height: auto !important; overflow: visible !important; white-space: pre-wrap; word-wrap: break-word; }
+    .remove-line-btn, .add-line-row, .toggle-gravado { display: none !important; }
+    .min-rows-spacer { height: auto !important; }
+  }
+
+  .client-suggest, .line-suggest {
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 20; background: #fff;
+    border: 1px solid #dde1e5; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+    max-height: 180px; overflow-y: auto; margin-top: 2px; font-family: sans-serif;
+  }
+  .client-suggest .cs-item, .line-suggest .cs-item { padding: 7px 10px; font-size: 12px; cursor: pointer; color: #16232f; }
+  .client-suggest .cs-item:hover, .line-suggest .cs-item:hover { background: #eaf2fa; }
+  .client-suggest .cs-item .cs-sub, .line-suggest .cs-item .cs-sub { color: #8a94a0; font-size: 10.5px; }
+  .client-suggest .cs-empty, .line-suggest .cs-empty { padding: 8px 10px; font-size: 11.5px; color: #8a94a0; }
+  textarea.descripcion {
+    border: none; background: transparent; font-family: inherit; font-size: inherit; width: 100%;
+    resize: none; overflow: hidden; padding: 4px 0; line-height: 1.4; display: block;
+  }
+</style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <a href="/facturacion/">← Facturación</a>
+      <span class="status" id="statusMsg"></span>
+    </div>
+    <div class="toolbar-left">
+      <button class="btn btn-primary" id="btnGuardar">Guardar Proforma</button>
+      <button class="btn btn-ghost" id="btnImprimir">🖨 Imprimir / PDF</button>
+      <button class="btn btn-ghost" id="btnConvertir" style="display:none">✓ Convertir a Factura</button>
+      <button class="btn btn-danger" id="btnEliminar" style="display:none">Eliminar</button>
+    </div>
+  </div>
+
+  <div class="sheet-wrap">
+    <div class="sheet" id="sheet">
+
+      <div class="fhead">
+        <div class="fhead-left">
+          <img class="fhead-logo" id="fheadLogo" src="" alt="" style="display:none">
+          <div class="contact-list" id="contactList"></div>
+        </div>
+        <div class="fhead-right">
+          <div class="factura-title">FACTURA</div>
+          <div class="proforma-label">PROFORMA</div>
+        </div>
+      </div>
+
+      <div class="info-labels-row">
+        <div class="info-label">Cliente</div>
+        <div class="info-label" style="text-align:right">Fecha</div>
+      </div>
+      <hr class="info-rule">
+      <div class="info-values-row">
+        <div>
+          <div class="client-search-wrap" style="position:relative">
+            <input class="cliente-nombre-input" id="cliente_nombre" placeholder="Nombre del cliente" autocomplete="off">
+            <div class="client-suggest no-print" id="clienteSuggestBox" hidden></div>
+          </div>
+          <div class="cliente-rtn-row" style="position:relative">RTN: <input id="cliente_rtn" placeholder="00000000000000" autocomplete="off">
+            <div class="client-suggest no-print" id="rtnSuggestBox" hidden></div>
+          </div>
+        </div>
+        <div>
+          <div class="fecha-value"><input id="fecha" type="date"></div>
+        </div>
+      </div>
+
+      <div class="term-row">
+        <span class="term-title">Término de Pago</span>
+        <label><input type="radio" name="termino_pago" value="credito" id="term-credito"> Crédito</label>
+        <label><input type="radio" name="termino_pago" value="contado" id="term-contado"> Contado</label>
+      </div>
+
+      <hr class="term-cai-divider">
+
+      <div class="cai-row">C.A.I. <span class="cai-value" id="caiValue">—</span></div>
+
+      <table class="items-table">
+        <thead><tr>
+          <th style="width:80px">Cantidad</th><th>Descripción</th>
+          <th class="num" style="width:130px">Precio Unitario</th><th class="num" style="width:120px">Total</th>
+          <th class="no-print" style="width:24px"></th>
+        </tr></thead>
+        <tbody id="linesBody"></tbody>
+        <tbody><tr class="min-rows-spacer"><td></td><td></td><td class="num"></td><td class="num"></td><td class="no-print"></td></tr></tbody>
+      </table>
+      <div class="add-line-row"><button type="button" id="btnAddLine">+ Agregar línea</button></div>
+
+      <div class="bottom-block">
+      <hr class="pre-totals-rule">
+
+      <div class="totals-section">
+        <div class="totals-left-col">
+          <div class="letras-box">
+            <div class="letras-label">Total<br>(en letras)</div>
+            <div class="letras-value" id="totalEnLetras">—</div>
+          </div>
+          <div class="exempt-refs">
+            <div class="erow"><div class="elabel">No. Correlativo de Orden de Compra Exenta</div><div class="evalue"><input id="orden_compra_exenta"></div></div>
+            <div class="erow"><div class="elabel">No. Correlativo de Constancia de Registro Exonerado</div><div class="evalue"><input id="constancia_registro_exonerado"></div></div>
+            <div class="erow"><div class="elabel">No. de Registro de la SAG</div><div class="evalue"><input id="registro_sag"></div></div>
+          </div>
+        </div>
+        <div class="totals-table">
+          <div class="trow"><span class="tlabel">Sub-Total</span><span class="tvalue-wrap"><span class="lprefix">L.</span><span id="t_subtotal">0.00</span></span></div>
+          <div class="trow editable"><span class="tlabel">Descuentos y Rebajas</span><span class="tprefix"><span>L.</span><input id="descuentos" type="number" step="0.01" value="0.00"></span></div>
+          <div class="trow editable"><span class="tlabel">Importe Exonerado</span><span class="tprefix"><span>L.</span><input id="importe_exonerado" type="number" step="0.01" value="0.00"></span></div>
+          <div class="trow editable"><span class="tlabel">Importe Exento</span><span class="tprefix"><span>L.</span><input id="importe_exento" type="number" step="0.01" value="0.00"></span></div>
+          <div class="trow"><span class="tlabel">Importe Gravado 15%</span><span class="tvalue-wrap"><span class="lprefix">L.</span><span id="t_gravado15">0.00</span></span></div>
+          <div class="trow"><span class="tlabel">Importe Gravado 18%</span><span class="tvalue-wrap"><span class="lprefix">L.</span><span id="t_gravado18">0.00</span></span></div>
+          <div class="trow"><span class="tlabel">I.S.V. 15%</span><span class="tvalue-wrap"><span class="lprefix">L.</span><span id="t_isv15">0.00</span></span></div>
+          <div class="trow"><span class="tlabel">I.S.V. 18%</span><span class="tvalue-wrap"><span class="lprefix">L.</span><span id="t_isv18">0.00</span></span></div>
+          <div class="trow grand"><span>Total a Pagar</span><span class="tvalue-wrap"><span class="lprefix">L.</span><span id="t_total">0.00</span></span></div>
+          <input type="hidden" id="gravado_18_pct">
+        </div>
+      </div>
+
+      </div>
+
+    </div>
+  </div>
+
+<script>
+window.GLOBE_ICON_SVG = `<svg viewBox="0 0 100 100" width="13" height="13" style="display:block">
+  <g fill="none" stroke="#fff" stroke-width="7">
+    <circle cx="50" cy="50" r="45"/>
+    <line x1="6" y1="38" x2="94" y2="38"/>
+    <line x1="6" y1="66" x2="94" y2="66"/>
+    <path d="M50,5 C25,25 25,75 50,95" />
+    <path d="M50,5 C75,25 75,75 50,95" />
+  </g>
+  <text x="50" y="58" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="800" fill="#fff">WWW</text>
+</svg>`;
+</script>
+<script src="/proforma/proforma-common.js"></script>
+</body>
+</html>

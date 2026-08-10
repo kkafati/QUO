@@ -166,6 +166,7 @@ async function selectClient(id) {
   renderDetail(cliente);
   loadClientInvoices(id);
   loadClientCotizaciones(id);
+  loadClientProformas(id);
 }
 
 function renderDetail(cliente) {
@@ -201,6 +202,11 @@ function renderDetail(cliente) {
         <table>
           <thead><tr><th>Número</th><th>Fecha</th><th class="num">Total</th></tr></thead>
           <tbody id="clientCotizacionesBody"><tr><td colspan="3" style="color:var(--ink-soft)">Cargando…</td></tr></tbody>
+        </table>
+        <div class="section-title">Facturas Proforma de este cliente</div>
+        <table>
+          <thead><tr><th>Fecha</th><th class="num">Total</th></tr></thead>
+          <tbody id="clientProformasBody"><tr><td colspan="2" style="color:var(--ink-soft)">Cargando…</td></tr></tbody>
         </table>
       ` : ""}
     </div>
@@ -300,6 +306,24 @@ async function loadClientCotizaciones(clienteId) {
   body.querySelectorAll("tr[data-id]").forEach(tr => {
     tr.addEventListener("click", () => {
       window.open(`/cotizacion-clasica/ver/?id=${tr.dataset.id}`, "_blank");
+    });
+  });
+}
+
+async function loadClientProformas(clienteId) {
+  const pfs = await fetch(`/api/clientes/${clienteId}/proformas`).then(r => r.json());
+  const body = document.getElementById("clientProformasBody");
+  if (!body) return;
+  body.innerHTML = pfs.map(pf => `
+    <tr class="clickable" data-id="${pf.id}">
+      <td>${esc(pf.fecha)}</td>
+      <td class="num">${fmt(pf.total_a_pagar)}</td>
+    </tr>
+  `).join("") || '<tr><td colspan="2" style="color:var(--ink-soft)">Sin proformas todavía.</td></tr>';
+
+  body.querySelectorAll("tr[data-id]").forEach(tr => {
+    tr.addEventListener("click", () => {
+      window.open(`/proforma/ver/?id=${tr.dataset.id}`, "_blank");
     });
   });
 }

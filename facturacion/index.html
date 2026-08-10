@@ -54,6 +54,18 @@
   .modal h2 { margin: 0 0 16px; font-size: 16px; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 
+  .app-shell { display: flex; }
+  .sidebar { width: 220px; flex-shrink: 0; background: #fff; border-right: 1px solid #e7e9ec; min-height: calc(100vh - 61px); padding: 24px 0; }
+  .nav { display: flex; flex-direction: column; gap: 2px; }
+  .nav-item { display: flex; align-items: baseline; gap: 8px; text-align: left; background: none; border: none; padding: 11px 24px;
+              font-family: 'Poppins', sans-serif; font-size: 13.5px; font-weight: 600; color: var(--ink-soft); cursor: pointer; }
+  .nav-item:hover { background: #f7f9fb; color: var(--ink); }
+  .nav-item.active { color: var(--blue); background: #eaf2fa; border-right: 3px solid var(--blue); }
+  .nav-code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft); }
+  .content { flex: 1; min-width: 0; }
+  .view { display: none; }
+  .view.active { display: block; }
+
 
 </style>
 </head>
@@ -67,20 +79,55 @@
     </div>
   </div>
 
-  <div class="wrap">
-    <div class="head-row">
-      <h1>Facturación</h1>
-      <div class="toolbar">
-        <button class="btn btn-ghost" id="btn-trash">🗑 Papelera</button>
-        <button class="btn btn-primary" id="btnNuevaFactura">+ Nueva Factura</button>
-      </div>
-    </div>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <nav class="nav">
+        <button class="nav-item active" data-view="facturas">
+          <span class="nav-code">01</span> Factura
+        </button>
+        <button class="nav-item" data-view="proformas">
+          <span class="nav-code">02</span> Factura Proforma
+        </button>
+      </nav>
+    </aside>
 
-    <table>
-      <thead><tr><th>Número</th><th>Cliente</th><th>Fecha</th><th>Término</th><th>Estado</th><th class="num">Total</th><th></th></tr></thead>
-      <tbody id="invoicesBody"></tbody>
-    </table>
-    <div class="empty-state" id="emptyState" hidden>Aún no hay facturas. Crea la primera.</div>
+    <div class="content">
+      <section id="view-facturas" class="view active">
+        <div class="wrap">
+          <div class="head-row">
+            <h1>Facturación</h1>
+            <div class="toolbar">
+              <button class="btn btn-ghost" id="btn-trash">🗑 Papelera</button>
+              <button class="btn btn-primary" id="btnNuevaFactura">+ Nueva Factura</button>
+            </div>
+          </div>
+
+          <table>
+            <thead><tr><th>Número</th><th>Cliente</th><th>Fecha</th><th>Término</th><th>Estado</th><th class="num">Total</th><th></th></tr></thead>
+            <tbody id="invoicesBody"></tbody>
+          </table>
+          <div class="empty-state" id="emptyState" hidden>Aún no hay facturas. Crea la primera.</div>
+        </div>
+      </section>
+
+      <section id="view-proformas" class="view">
+        <div class="wrap">
+          <div class="head-row">
+            <h1>Factura Proforma</h1>
+            <div class="toolbar">
+              <button class="btn btn-ghost" id="btn-trash-proforma">🗑 Papelera</button>
+              <button class="btn btn-primary" id="btnNuevaProforma">+ Nueva Proforma</button>
+            </div>
+          </div>
+
+          <table>
+            <thead><tr><th>Cliente</th><th>Fecha</th><th>Término</th><th class="num">Total</th><th></th></tr></thead>
+            <tbody id="proformasBody"></tbody>
+          </table>
+          <div class="empty-state" id="proformasEmptyState" hidden>Aún no hay proformas. Crea la primera.</div>
+        </div>
+      </section>
+    </div>
   </div>
 
   <div class="modal-backdrop" id="trashModal" hidden>
@@ -88,6 +135,14 @@
       <h2>Papelera — Facturas</h2>
       <table id="trashTable"><thead><tr><th>Número</th><th>Cliente</th><th></th></tr></thead><tbody id="trashBody"></tbody></table>
       <div class="modal-actions"><button class="btn btn-ghost" id="closeTrash">Cerrar</button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="trashModalProforma" hidden>
+    <div class="modal">
+      <h2>Papelera — Facturas Proforma</h2>
+      <table id="trashTableProforma"><thead><tr><th>Cliente</th><th>Fecha</th><th></th></tr></thead><tbody id="trashBodyProforma"></tbody></table>
+      <div class="modal-actions"><button class="btn btn-ghost" id="closeTrashProforma">Cerrar</button></div>
     </div>
   </div>
 
@@ -148,6 +203,70 @@ async function permanentDeleteInvoice(id) {
 document.getElementById("btnNuevaFactura").addEventListener("click", () => {
   window.location.href = "/facturacion/ver/";
 });
+
+document.getElementById("btnNuevaProforma").addEventListener("click", () => {
+  window.location.href = "/proforma/ver/";
+});
+
+document.querySelectorAll(".nav-item").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const view = btn.dataset.view;
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+    document.getElementById("view-" + view).classList.add("active");
+    if (view === "facturas") loadInvoices();
+    if (view === "proformas") loadProformas();
+  });
+});
+
+async function loadProformas() {
+  const proformas = await fetch("/api/proformas").then(r => r.json());
+  document.getElementById("proformasEmptyState").hidden = proformas.length > 0;
+  document.getElementById("proformasBody").innerHTML = proformas.map(pf => `
+    <tr class="clickable" onclick="window.location.href='/proforma/ver/?id=${pf.id}'">
+      <td>${esc(pf.cliente_nombre)}</td>
+      <td>${esc(pf.fecha)}</td>
+      <td><span class="pill ${pf.termino_pago}">${pf.termino_pago === "contado" ? "Contado" : "Crédito"}</span></td>
+      <td class="num">${fmt(pf.total_a_pagar)}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteProforma(${pf.id})">×</button></td>
+    </tr>
+  `).join("");
+}
+
+async function deleteProforma(id) {
+  if (!confirm("¿Mover esta proforma a la papelera? Podrás restaurarla después desde 🗑 Papelera.")) return;
+  await fetch(`/api/proformas/${id}`, { method: "DELETE" });
+  loadProformas();
+}
+
+document.getElementById("btn-trash-proforma").addEventListener("click", async () => {
+  const items = await fetch("/api/proformas/trash").then(r => r.json());
+  document.getElementById("trashBodyProforma").innerHTML = items.map(pf => `
+    <tr>
+      <td>${esc(pf.cliente_nombre)}</td>
+      <td>${esc(pf.fecha)}</td>
+      <td>
+        <button class="btn btn-sm btn-primary" onclick="restoreProforma(${pf.id})">Restaurar</button>
+        <button class="btn btn-sm btn-danger" onclick="permanentDeleteProforma(${pf.id})">Eliminar</button>
+      </td>
+    </tr>
+  `).join("") || '<tr><td colspan="3" style="color:var(--ink-soft)">La papelera está vacía.</td></tr>';
+  document.getElementById("trashModalProforma").hidden = false;
+});
+document.getElementById("closeTrashProforma").addEventListener("click", () => {
+  document.getElementById("trashModalProforma").hidden = true;
+  loadProformas();
+});
+async function restoreProforma(id) {
+  await fetch(`/api/proformas/${id}/restore`, { method: "POST" });
+  document.getElementById("btn-trash-proforma").click();
+}
+async function permanentDeleteProforma(id) {
+  if (!confirm("¿Eliminar PERMANENTEMENTE? No se puede deshacer.")) return;
+  await fetch(`/api/proformas/${id}/permanent`, { method: "DELETE" });
+  document.getElementById("btn-trash-proforma").click();
+}
 
 fetch("/api/me").then(r => r.json()).then(me => {
   if (me.authenticated && me.company_name) document.getElementById("topbarClient").textContent = "Facturación — " + me.company_name;

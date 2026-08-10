@@ -575,7 +575,7 @@ function renderCostCardGrid(filter) {
   const tbody = document.getElementById("costcard-tbody");
   document.getElementById("costcard-empty").hidden = items.length > 0;
   tbody.innerHTML = items.map(c => `
-    <tr>
+    <tr class="clickable" data-open="${c.id}">
       <td class="mono">${esc(c.code)}</td>
       <td>${esc(c.name)}</td>
       <td class="desc-cell" title="${esc(c.description || "")}">${esc(c.description || "—")}</td>
@@ -583,7 +583,6 @@ function renderCostCardGrid(filter) {
       <td class="num">${fmt(c.total_cost)}</td>
       <td title="Creado: ${esc(c.created_at || "—")}">${esc(c.updated_at || "—")}</td>
       <td class="col-actions">
-        <button class="btn btn-sm btn-ghost" data-open="${c.id}">Abrir</button>
         <button class="btn btn-sm btn-danger" data-del-card="${c.id}">×</button>
       </td>
     </tr>
@@ -1213,4 +1212,4 @@ async function loadAccountInfo() {
 // ============================================================================
 
 loadAccountInfo();
-loadQuoteList();
+loadQuotesClasicaList();
