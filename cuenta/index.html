@@ -209,6 +209,18 @@
           <input type="hidden" id="next_invoice_number">
         </div>
 
+        <div class="field" style="margin-bottom:18px; max-width:320px">
+          <label>Próximo Número de Cotización</label>
+          <div style="display:flex; align-items:center; gap:12px">
+            <div class="readonly-value mono" id="next_cotizacion_number_display">—</div>
+            <button type="button" class="btn-inline-link" id="btn-set-next-cotizacion">Establecer número inicial</button>
+          </div>
+          <div style="font-size:11.5px; color:var(--ink-soft); margin-top:6px">
+            Se usa en las Cotizaciones Clásica (6 dígitos, independiente de la numeración de facturas).
+          </div>
+          <input type="hidden" id="next_cotizacion_number">
+        </div>
+
         <div class="field" style="margin-bottom:18px">
           <label>Código de Autorización de Impresión (C.A.I.)</label>
           <div class="seg-group" id="seg-cai" data-sep="-">
@@ -365,6 +377,24 @@ document.getElementById("btn-set-next-invoice").addEventListener("click", () => 
   setNextInvoiceNumber(lastNum + 1);
 });
 
+function setNextCotizacionNumber(value) {
+  document.getElementById("next_cotizacion_number").value = value;
+  document.getElementById("next_cotizacion_number_display").textContent = String(value).padStart(6, "0");
+  document.getElementById("btn-set-next-cotizacion").textContent =
+    (value && value > 1) ? "Cambiar número inicial" : "Establecer número inicial";
+}
+
+document.getElementById("btn-set-next-cotizacion").addEventListener("click", () => {
+  const last = prompt("¿Cuál fue el último número de cotización usado? (se guardará el siguiente número, +1)");
+  if (last === null) return; // cancelled
+  const lastNum = parseInt(last, 10);
+  if (isNaN(lastNum) || lastNum < 0) {
+    alert("Ingresa un número válido.");
+    return;
+  }
+  setNextCotizacionNumber(lastNum + 1);
+});
+
 async function loadProfile() {
   const res = await fetch("/api/account");
   const p = await res.json();
@@ -379,6 +409,7 @@ async function loadProfile() {
   setSegmentedValue("seg-invoice_prefix", p.invoice_prefix);
   document.getElementById("default_invoice_template").value = p.default_invoice_template || "clasica";
   setNextInvoiceNumber(p.next_invoice_number || 1);
+  setNextCotizacionNumber(p.next_cotizacion_number || 1);
   setSegmentedValue("seg-cai", p.cai);
   setSegmentedValue("seg-cai_fecha_limite", p.cai_fecha_limite);
   setSegmentedValue("seg-rango_autorizado_desde", p.rango_autorizado_desde);
@@ -434,6 +465,7 @@ document.getElementById("settingsForm").addEventListener("submit", async (e) => 
     invoice_prefix: getSegmentedValue("seg-invoice_prefix"),
     default_invoice_template: document.getElementById("default_invoice_template").value,
     next_invoice_number: document.getElementById("next_invoice_number").value,
+    next_cotizacion_number: document.getElementById("next_cotizacion_number").value,
     cai: getSegmentedValue("seg-cai"),
     cai_fecha_limite: getSegmentedValue("seg-cai_fecha_limite"),
     rango_autorizado_desde: getSegmentedValue("seg-rango_autorizado_desde"),

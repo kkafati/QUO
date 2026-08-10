@@ -913,6 +913,9 @@ let quotesCache = [];
 let editingQuote = null;
 
 document.getElementById("btn-new-quote").addEventListener("click", () => openQuoteEditor(null));
+document.getElementById("btn-new-quote-clasica").addEventListener("click", () => {
+  window.location.href = "/cotizacion-clasica/ver/";
+});
 document.getElementById("btn-quote-trash").addEventListener("click", () => openTrashModal("quote"));
 
 async function loadQuoteList() {

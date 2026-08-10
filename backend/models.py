@@ -24,6 +24,7 @@ class Account(db.Model):
     invoice_prefix = db.Column(db.String(24), default="")   # e.g. 000-001-01-00000000
     default_invoice_template = db.Column(db.String(32), default="clasica")
     next_invoice_number = db.Column(db.Integer, default=1)
+    next_cotizacion_number = db.Column(db.Integer, default=1)  # plain 6-digit sequential, no prefix needed
     cai = db.Column(db.String(40))                          # Código de Autorización de Impresión
     cai_fecha_limite = db.Column(db.String(10))              # DD/MM/AAAA
     rango_autorizado_desde = db.Column(db.String(24))
@@ -278,6 +279,46 @@ class InvoiceLine(db.Model):
     __tablename__ = "invoice_lines"
     id = db.Column(db.Integer, primary_key=True)
     invoice_id = db.Column(db.Integer, db.ForeignKey("invoices.id"), nullable=False)
+    cantidad = db.Column(db.Float, nullable=False, default=1)
+    descripcion = db.Column(db.String(500), nullable=False)
+    precio_unitario = db.Column(db.Float, nullable=False, default=0)
+
+
+class Cotizacion(db.Model):
+    """A Cotización Clásica - same visual format as a Factura, but for
+    quotes rather than tax invoices. No CAI, no Rango Autorizado, no
+    exempt-purchase correlativo numbers - those are invoice-specific SAR
+    requirements. numero is a plain sequential integer (6 digits, zero
+    padded at render time), not the long SAR invoice format."""
+    __tablename__ = "cotizaciones_clasica"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    numero = db.Column(db.Integer, nullable=False)
+
+    cliente_nombre = db.Column(db.String(255), nullable=False)
+    cliente_rtn = db.Column(db.String(32))
+    cliente_id = db.Column(db.Integer, db.ForeignKey("clientes.id"))  # optional link to a saved Cliente
+    fecha = db.Column(db.String(16), nullable=False)
+    termino_pago = db.Column(db.String(16), nullable=False, default="contado")  # contado | credito
+
+    nota = db.Column(db.Text)
+
+    descuentos = db.Column(db.Float, default=0)
+    importe_exonerado = db.Column(db.Float, default=0)
+    importe_exento = db.Column(db.Float, default=0)
+    gravado_18_pct = db.Column(db.Boolean, default=False)
+
+    created_at = db.Column(db.String(16))
+    updated_at = db.Column(db.String(16))
+    deleted_at = db.Column(db.String(16))
+
+    lines = db.relationship("CotizacionLine", backref="cotizacion", cascade="all, delete-orphan")
+
+
+class CotizacionLine(db.Model):
+    __tablename__ = "cotizacion_clasica_lines"
+    id = db.Column(db.Integer, primary_key=True)
+    cotizacion_id = db.Column(db.Integer, db.ForeignKey("cotizaciones_clasica.id"), nullable=False)
     cantidad = db.Column(db.Float, nullable=False, default=1)
     descripcion = db.Column(db.String(500), nullable=False)
     precio_unitario = db.Column(db.Float, nullable=False, default=0)

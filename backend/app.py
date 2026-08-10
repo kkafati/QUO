@@ -6,9 +6,10 @@ from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
 from werkzeug.security import check_password_hash, generate_password_hash
-from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente
+from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine
 from numero_a_letras import numero_a_letras
 from pdf_render import render_invoice_pdf
+from pdf_render_cotizacion import render_cotizacion_pdf
 
 # On some Windows machines, a corrupted registry entry makes Python think
 # .html/.js/.css are text/plain, causing browsers to show raw source instead
@@ -27,6 +28,7 @@ PANEL_DIR = os.path.join(os.path.dirname(BASE_DIR), "panel")
 CUENTA_DIR = os.path.join(os.path.dirname(BASE_DIR), "cuenta")
 ADMIN_DIR = os.path.join(os.path.dirname(BASE_DIR), "admin")
 FACTURACION_DIR = os.path.join(os.path.dirname(BASE_DIR), "facturacion")
+COTIZACION_CLASICA_DIR = os.path.join(os.path.dirname(BASE_DIR), "cotizacion-clasica")
 CLIENTES_DIR = os.path.join(os.path.dirname(BASE_DIR), "clientes")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/cotizaciones")
@@ -45,6 +47,17 @@ db.init_app(app)
 
 with app.app_context():
     db.create_all()
+    # db.create_all() only creates missing TABLES, not new COLUMNS on tables
+    # that already exist - which is exactly the case for accounts.next_cotizacion_number
+    # on any database that predates this feature. Self-heal it here so a normal
+    # "pull the new code, restart" deploy just works, no manual SQL required.
+    try:
+        cols = [row[1] for row in db.session.execute(db.text("PRAGMA table_info(accounts)")).fetchall()]
+        if "next_cotizacion_number" not in cols:
+            db.session.execute(db.text("ALTER TABLE accounts ADD COLUMN next_cotizacion_number INTEGER DEFAULT 1"))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()  # non-SQLite DBs or unexpected schema - don't block startup over this
 
 CATEGORY_MODELS = {"material": Material, "labor": Labor, "tool": Tool, "transport": Transport, "gasto": Gasto}
 
@@ -167,6 +180,7 @@ def account_profile_dict(account):
         "logo_data_url": account.logo_data_url,
         "invoice_prefix": account.invoice_prefix,
         "next_invoice_number": account.next_invoice_number,
+        "next_cotizacion_number": account.next_cotizacion_number,
         "cai": account.cai,
         "cai_fecha_limite": account.cai_fecha_limite,
         "rango_autorizado_desde": account.rango_autorizado_desde,
@@ -202,6 +216,10 @@ def update_account_profile():
     account.invoice_prefix = (data.get("invoice_prefix", account.invoice_prefix) or "").strip()
     try:
         account.next_invoice_number = int(data.get("next_invoice_number", account.next_invoice_number) or 1)
+    except (TypeError, ValueError):
+        pass
+    try:
+        account.next_cotizacion_number = int(data.get("next_cotizacion_number", account.next_cotizacion_number) or 1)
     except (TypeError, ValueError):
         pass
     account.cai = (data.get("cai", account.cai) or "").strip().upper()
@@ -1194,6 +1212,23 @@ def factura_ver():
 
 
 # ---------------------------------------------------------------------------
+# Cotización Clásica (quote in the same visual format as Factura Clásica)
+# ---------------------------------------------------------------------------
+
+@app.route("/cotizacion-clasica/ver/")
+@login_required
+def cotizacion_clasica_ver():
+    log_page_view("/cotizacion-clasica/ver/")
+    return send_from_directory(COTIZACION_CLASICA_DIR, "ver.html")
+
+
+@app.route("/cotizacion-clasica/cotizacion-common.js")
+@login_required
+def cotizacion_clasica_common_js():
+    return send_from_directory(COTIZACION_CLASICA_DIR, "cotizacion-common.js", mimetype="application/javascript")
+
+
+# ---------------------------------------------------------------------------
 # Clientes (customer records)
 # ---------------------------------------------------------------------------
 
@@ -1622,6 +1657,238 @@ def permanent_delete_invoice(invoice_id):
     invoice = Invoice.query.filter(Invoice.id == invoice_id, Invoice.account_id == current_account_id(),
                                     Invoice.deleted_at.isnot(None)).first_or_404()
     db.session.delete(invoice)
+    db.session.commit()
+    return "", 204
+
+
+# ---------------------------------------------------------------------------
+# Cotización Clásica API
+# ---------------------------------------------------------------------------
+
+def compute_cotizacion_totals(cot):
+    lines = []
+    subtotal = 0.0
+    for ln in cot.lines:
+        total = round((ln.cantidad or 0) * (ln.precio_unitario or 0), 2)
+        subtotal += total
+        lines.append({
+            "id": ln.id, "cantidad": ln.cantidad,
+            "descripcion": ln.descripcion, "precio_unitario": ln.precio_unitario,
+            "total": total,
+        })
+    subtotal = round(subtotal, 2)
+
+    descuentos = cot.descuentos or 0
+    importe_exonerado = cot.importe_exonerado or 0
+    importe_exento = cot.importe_exento or 0
+    base_gravable = max(0.0, round(subtotal - descuentos - importe_exonerado - importe_exento, 2))
+
+    if cot.gravado_18_pct:
+        importe_gravado_15, importe_gravado_18 = 0.0, base_gravable
+        isv_15, isv_18 = 0.0, round(base_gravable * 0.18, 2)
+    else:
+        importe_gravado_15, importe_gravado_18 = base_gravable, 0.0
+        isv_15, isv_18 = round(base_gravable * 0.15, 2), 0.0
+
+    total_a_pagar = round(subtotal - descuentos + isv_15 + isv_18, 2)
+
+    return {
+        "id": cot.id,
+        "numero": cot.numero,
+        "cliente_nombre": cot.cliente_nombre,
+        "cliente_rtn": cot.cliente_rtn,
+        "cliente_id": cot.cliente_id,
+        "fecha": cot.fecha,
+        "termino_pago": cot.termino_pago,
+        "nota": cot.nota,
+        "lines": lines,
+        "subtotal": subtotal,
+        "descuentos": descuentos,
+        "importe_exonerado": importe_exonerado,
+        "importe_exento": importe_exento,
+        "importe_gravado_15": importe_gravado_15,
+        "importe_gravado_18": importe_gravado_18,
+        "isv_15": isv_15,
+        "isv_18": isv_18,
+        "total_a_pagar": total_a_pagar,
+        "created_at": cot.created_at,
+        "updated_at": cot.updated_at,
+    }
+
+
+def _sync_cotizacion_lines(cot, lines_data):
+    for ln in list(cot.lines):
+        db.session.delete(ln)
+    db.session.flush()
+    for ln in lines_data:
+        db.session.add(CotizacionLine(
+            cotizacion_id=cot.id,
+            cantidad=float(ln.get("cantidad", 1) or 0),
+            descripcion=(ln.get("descripcion") or "").strip(),
+            precio_unitario=float(ln.get("precio_unitario", 0) or 0),
+        ))
+    db.session.commit()
+
+
+def _build_cotizacion_pdf_filename(cot):
+    """Cotizacion_{numero}_{ClienteName}_{DD-MM-YYYY}.pdf - sanitized since
+    the client name is free-text and could contain characters invalid in
+    Windows/Unix filenames."""
+    def _safe(s):
+        s = re.sub(r'[\\/:*?"<>|]', '', s or '')
+        s = re.sub(r'\s+', '_', s.strip())
+        return s or "SinNombre"
+
+    cliente_part = _safe(cot.cliente_nombre)
+    numero_part = "{:06d}".format(cot.numero)
+
+    raw_fecha = cot.fecha or ""
+    try:
+        y, m, d = raw_fecha.split("-")
+        fecha_part = f"{d}-{m}-{y}"
+    except (ValueError, AttributeError):
+        fecha_part = _safe(raw_fecha)
+
+    return f"Cotizacion_{numero_part}_{cliente_part}_{fecha_part}.pdf"
+
+
+@app.route("/api/cotizaciones-clasica", methods=["GET"])
+@login_required
+def list_cotizaciones_clasica():
+    cots = (Cotizacion.query.filter_by(account_id=current_account_id(), deleted_at=None)
+            .order_by(Cotizacion.id.desc()).all())
+    return jsonify([compute_cotizacion_totals(c) for c in cots])
+
+
+@app.route("/api/cotizaciones-clasica/trash", methods=["GET"])
+@login_required
+def list_cotizaciones_clasica_trash():
+    cots = (Cotizacion.query.filter(Cotizacion.account_id == current_account_id(), Cotizacion.deleted_at.isnot(None))
+            .order_by(Cotizacion.deleted_at.desc()).all())
+    return jsonify([compute_cotizacion_totals(c) for c in cots])
+
+
+@app.route("/api/cotizaciones-clasica/<int:cot_id>", methods=["GET"])
+@login_required
+def get_cotizacion_clasica(cot_id):
+    cot = Cotizacion.query.filter_by(id=cot_id, account_id=current_account_id()).first_or_404()
+    return jsonify(compute_cotizacion_totals(cot))
+
+
+@app.route("/api/cotizaciones-clasica/<int:cot_id>/pdf", methods=["GET"])
+@login_required
+def get_cotizacion_clasica_pdf(cot_id):
+    cot = Cotizacion.query.filter_by(id=cot_id, account_id=current_account_id()).first_or_404()
+    account = Account.query.get_or_404(current_account_id())
+    cot_dict = compute_cotizacion_totals(cot)
+    try:
+        pdf_bytes = render_cotizacion_pdf(cot_dict, account)
+    except Exception as e:
+        return jsonify({"error": f"No se pudo generar el PDF: {e}"}), 500
+    filename = _build_cotizacion_pdf_filename(cot)
+    return pdf_bytes, 200, {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": f'inline; filename="{filename}"',
+    }
+
+
+@app.route("/api/cotizaciones-clasica", methods=["POST"])
+@login_required
+def create_cotizacion_clasica():
+    account = Account.query.get_or_404(current_account_id())
+    data = request.json or {}
+    cliente_nombre = (data.get("cliente_nombre") or "").strip()
+    if not cliente_nombre:
+        return jsonify({"error": "El nombre del cliente es requerido."}), 400
+
+    numero = account.next_cotizacion_number or 1
+    cliente_rtn = (data.get("cliente_rtn") or "").strip()
+    resolved_cliente_id = _resolve_cliente_id(account.id, data.get("cliente_id"), cliente_nombre, cliente_rtn)
+
+    cot = Cotizacion(
+        account_id=account.id,
+        numero=numero,
+        cliente_nombre=cliente_nombre,
+        cliente_rtn=cliente_rtn,
+        cliente_id=resolved_cliente_id,
+        fecha=data.get("fecha") or datetime.utcnow().strftime("%Y-%m-%d"),
+        termino_pago=data.get("termino_pago") or "contado",
+        nota=(data.get("nota") or "").strip(),
+        descuentos=float(data.get("descuentos", 0) or 0),
+        importe_exonerado=float(data.get("importe_exonerado", 0) or 0),
+        importe_exento=float(data.get("importe_exento", 0) or 0),
+        gravado_18_pct=bool(data.get("gravado_18_pct", False)),
+        created_at=datetime.utcnow().strftime("%Y-%m-%d"),
+        updated_at=datetime.utcnow().strftime("%Y-%m-%d"),
+    )
+    db.session.add(cot)
+    db.session.commit()
+    _sync_cotizacion_lines(cot, data.get("lines", []))
+
+    account.next_cotizacion_number = numero + 1
+    db.session.commit()
+
+    return jsonify(compute_cotizacion_totals(cot)), 201
+
+
+@app.route("/api/cotizaciones-clasica/<int:cot_id>", methods=["PUT"])
+@login_required
+def update_cotizacion_clasica(cot_id):
+    cot = Cotizacion.query.filter_by(id=cot_id, account_id=current_account_id()).first_or_404()
+    data = request.json or {}
+
+    cliente_nombre = (data.get("cliente_nombre") or cot.cliente_nombre).strip()
+    if not cliente_nombre:
+        return jsonify({"error": "El nombre del cliente es requerido."}), 400
+    cot.cliente_nombre = cliente_nombre
+    cot.cliente_rtn = (data.get("cliente_rtn", cot.cliente_rtn) or "").strip()
+    cot.cliente_id = _resolve_cliente_id(cot.account_id, data.get("cliente_id", cot.cliente_id),
+                                          cot.cliente_nombre, cot.cliente_rtn)
+    cot.fecha = data.get("fecha", cot.fecha)
+    cot.termino_pago = data.get("termino_pago", cot.termino_pago)
+    if "nota" in data:
+        cot.nota = (data.get("nota") or "").strip()
+    if "descuentos" in data:
+        cot.descuentos = float(data.get("descuentos") or 0)
+    if "importe_exonerado" in data:
+        cot.importe_exonerado = float(data.get("importe_exonerado") or 0)
+    if "importe_exento" in data:
+        cot.importe_exento = float(data.get("importe_exento") or 0)
+    if "gravado_18_pct" in data:
+        cot.gravado_18_pct = bool(data.get("gravado_18_pct"))
+    cot.updated_at = datetime.utcnow().strftime("%Y-%m-%d")
+
+    if "lines" in data:
+        _sync_cotizacion_lines(cot, data["lines"])
+    db.session.commit()
+    return jsonify(compute_cotizacion_totals(cot))
+
+
+@app.route("/api/cotizaciones-clasica/<int:cot_id>", methods=["DELETE"])
+@login_required
+def delete_cotizacion_clasica(cot_id):
+    cot = Cotizacion.query.filter_by(id=cot_id, account_id=current_account_id(), deleted_at=None).first_or_404()
+    cot.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    db.session.commit()
+    return "", 204
+
+
+@app.route("/api/cotizaciones-clasica/<int:cot_id>/restore", methods=["POST"])
+@login_required
+def restore_cotizacion_clasica(cot_id):
+    cot = Cotizacion.query.filter(Cotizacion.id == cot_id, Cotizacion.account_id == current_account_id(),
+                                   Cotizacion.deleted_at.isnot(None)).first_or_404()
+    cot.deleted_at = None
+    db.session.commit()
+    return jsonify(compute_cotizacion_totals(cot))
+
+
+@app.route("/api/cotizaciones-clasica/<int:cot_id>/permanent", methods=["DELETE"])
+@login_required
+def permanent_delete_cotizacion_clasica(cot_id):
+    cot = Cotizacion.query.filter(Cotizacion.id == cot_id, Cotizacion.account_id == current_account_id(),
+                                   Cotizacion.deleted_at.isnot(None)).first_or_404()
+    db.session.delete(cot)
     db.session.commit()
     return "", 204
 
