@@ -95,11 +95,11 @@
   .letras-label { background: var(--invoice-blue); color: #fff; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 8pt; text-align: center; padding: 14px 10px; width: 90px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
   .letras-value { padding: 10px 14px; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 8pt; color: #333; line-height: 1.5; }
 
-  .totals-table { width: 230px; flex-shrink: 0; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 10pt; }
+  .totals-table { width: 260px; flex-shrink: 0; font-family: 'Ubuntu', sans-serif; font-weight: 400; font-size: 10pt; }
   .totals-table .trow { display: flex; justify-content: space-between; padding: 3px 0; }
-  .totals-table .trow.editable input { border: none; background: transparent; font-family: inherit; font-size: 10pt; text-align: right; width: 78px; }
-  .totals-table .tprefix { display: flex; align-items: center; gap: 4px; }
-  .totals-table .tvalue-wrap { display: flex; justify-content: space-between; width: 76px; }
+  .totals-table .trow.editable input { border: none; background: transparent; font-family: inherit; font-size: 10pt; text-align: right; width: 100px; }
+  .totals-table .tprefix { display: flex; align-items: baseline; gap: 4px; }
+  .totals-table .tvalue-wrap { display: flex; justify-content: flex-end; align-items: baseline; gap: 4px; min-width: 100px; }
   .totals-table .lprefix { color: var(--ink); }
   .totals-table .trow .tlabel { color: var(--tlabel-grey); font-size: 7pt; }
   .totals-table .trow.grand { border-bottom: 2px solid var(--invoice-blue); margin-top: 6px; padding-top: 8px; padding-bottom: 8px; font-weight: 700; font-size: 10pt; }

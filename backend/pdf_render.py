@@ -93,18 +93,19 @@ INVOICE_PDF_TEMPLATE = """
   .cai-row { text-align: right; font-size: 8pt; font-family: 'Ubuntu', sans-serif; font-weight: 200; }
   .term-cai-divider { border: none; border-top: 2px solid #065dac; width: 50%; margin: 4px 0 4px auto; }
 
-  .items-wrapper { flex: 1; display: flex; flex-direction: column; margin-top: 6px;
-                    border-left: 1px solid #e3e5e8; border-right: 1px solid #e3e5e8; }
+  .items-wrapper { flex: 1; display: flex; flex-direction: column; margin-top: 6px; }
   table.items { width: 100%; border-collapse: collapse; font-size: 9pt; table-layout: fixed; }
   table.items thead th { background: #4e5152; color: #fff; font-size: 7pt; text-transform: uppercase;
                           padding: 8px 10px; text-align: center; white-space: nowrap; border-right: 1px solid rgba(255,255,255,0.25); }
   table.items thead th:last-child { border-right: none; }
   table.items td { padding: 6px 10px; border-right: 1px solid #e3e5e8; vertical-align: top; color: #000; }
-  table.items td:last-child { border-right: none; }
-  table.items td.num { text-align: right; }
+  table.items td:first-child { border-left: 1px solid #e3e5e8; }
+  table.items td:last-child { border-right: 1px solid #e3e5e8; }
+  table.items td.num { text-align: right; white-space: nowrap; }
   .items-spacer { flex: 1; display: flex; }
   .items-spacer .sp-col { border-right: 1px solid #e3e5e8; }
-  .items-spacer .sp-col:last-child { border-right: none; }
+  .items-spacer .sp-col:first-child { border-left: 1px solid #e3e5e8; }
+  .items-spacer .sp-col:last-child { border-right: 1px solid #e3e5e8; }
 
   .pre-totals-rule { border: none; border-top: 4px solid #4e5152; margin: 2px 0 0; }
   .totals-section { display: flex; justify-content: space-between; margin-top: 14px; gap: 20px; }
@@ -115,17 +116,17 @@ INVOICE_PDF_TEMPLATE = """
 
   .exempt-refs { display: grid; grid-template-columns: max-content 1fr; align-items: center; font-size: 6.5pt; border: 1px solid #dde1e5; margin-bottom: 12px; line-height: 1.5; }
   .exempt-refs .elabel { padding: 5px 8px; border-bottom: 1px solid #dde1e5; text-align: center; white-space: nowrap; }
-  .exempt-refs .evalue { padding: 5px 8px; border-left: 1px solid #dde1e5; border-bottom: 1px solid #dde1e5; }
+  .exempt-refs .evalue { padding: 5px 8px; min-height: 1.5em; border-left: 1px solid #dde1e5; border-bottom: 1px solid #dde1e5; }
   .exempt-refs .erow-last .elabel, .exempt-refs .erow-last .evalue { border-bottom: none; }
 
   .foot-lines { font-size: 9pt; font-weight: 300; line-height: 1.7; }
   .foot-lines .bold { font-weight: 700; }
   .foot-tagline { text-align: center; font-size: 9pt; margin-top: 10px; }
 
-  .totals-table { width: 220px; flex-shrink: 0; font-size: 10pt; }
+  .totals-table { width: 280px; flex-shrink: 0; font-size: 10pt; }
   .trow { display: flex; justify-content: flex-end; align-items: baseline; padding: 5px 0; gap: 10px; }
   .trow .tlabel { color: #6D7075; font-size: 7pt; text-align: right; flex: 1; }
-  .trow .tvalue-wrap { display: flex; justify-content: space-between; width: 76px; color: #000; }
+  .trow .tvalue-wrap { display: flex; justify-content: flex-end; align-items: baseline; gap: 4px; min-width: 90px; color: #000; }
   .trow.grand { border-bottom: 2px solid #065dac; margin-top: 6px; padding-bottom: 8px; font-weight: 700; }
 </style>
 </head>
@@ -169,8 +170,8 @@ INVOICE_PDF_TEMPLATE = """
   <div class="items-wrapper">
     <table class="items">
       <thead><tr>
-        <th style="width:60px">Cantidad</th><th>Descripción</th>
-        <th class="num" style="width:100px">Precio Unitario</th><th class="num" style="width:90px">Total</th>
+        <th style="width:55px">Cantidad</th><th>Descripción</th>
+        <th class="num" style="width:125px">Precio Unitario</th><th class="num" style="width:115px">Total</th>
       </tr></thead>
       <tbody>
         {% for line in invoice.lines %}
@@ -184,10 +185,10 @@ INVOICE_PDF_TEMPLATE = """
       </tbody>
     </table>
     <div class="items-spacer">
-      <div class="sp-col" style="width:60px"></div>
+      <div class="sp-col" style="width:55px"></div>
       <div class="sp-col" style="flex:1"></div>
-      <div class="sp-col" style="width:100px"></div>
-      <div class="sp-col" style="width:90px"></div>
+      <div class="sp-col" style="width:125px"></div>
+      <div class="sp-col" style="width:115px"></div>
     </div>
   </div>
 
@@ -200,9 +201,9 @@ INVOICE_PDF_TEMPLATE = """
         <div class="letras-value">{{ invoice.total_en_letras }}</div>
       </div>
       <div class="exempt-refs">
-        <div class="elabel">No. Correlativo de Orden de Compra Exenta</div><div class="evalue">{{ invoice.orden_compra_exenta or "" }}</div>
-        <div class="elabel">No. Correlativo de Constancia de Registro Exonerado</div><div class="evalue">{{ invoice.constancia_registro_exonerado or "" }}</div>
-        <div class="elabel erow-last">No. de Registro de la SAG</div><div class="evalue erow-last">{{ invoice.registro_sag or "" }}</div>
+        <div class="elabel">No. Correlativo de Orden de Compra Exenta</div><div class="evalue">{{ invoice.orden_compra_exenta or "&nbsp;" | safe }}</div>
+        <div class="elabel">No. Correlativo de Constancia de Registro Exonerado</div><div class="evalue">{{ invoice.constancia_registro_exonerado or "&nbsp;" | safe }}</div>
+        <div class="elabel erow-last">No. de Registro de la SAG</div><div class="evalue erow-last">{{ invoice.registro_sag or "&nbsp;" | safe }}</div>
       </div>
       <div class="foot-lines">
         <div><span class="bold">RTN</span> {{ account.tax_id or "—" }}</div>
