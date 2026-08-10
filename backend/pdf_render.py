@@ -90,7 +90,7 @@ INVOICE_PDF_TEMPLATE = """
   .tp-check { display: inline-block; width: 15px; height: 15px; border: 1.5px solid #065dac; border-radius: 4px;
               text-align: center; line-height: 9px; font-size: 12px; font-weight: 800; color: #000; margin: 0 3px 0 8px; vertical-align: middle; }
 
-  .cai-row { text-align: right; font-size: 8pt; font-family: 'Ubuntu', sans-serif; font-weight: 250; }
+  .cai-row { text-align: right; font-size: 8pt; font-family: 'Ubuntu', sans-serif; font-weight: 200; }
   .term-cai-divider { border: none; border-top: 2px solid #065dac; width: 50%; margin: 4px 0 4px auto; }
 
   .items-wrapper { flex: 1; display: flex; flex-direction: column; margin-top: 6px;
