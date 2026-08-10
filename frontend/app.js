@@ -50,6 +50,7 @@ document.querySelectorAll(".nav-item").forEach(btn => {
     if (view === "catalogs") loadCatalog();
     if (view === "costcards") loadCostCardList();
     if (view === "quotes") loadQuoteList();
+    if (view === "quotes-clasica") loadQuotesClasicaList();
   });
 });
 
@@ -925,13 +926,12 @@ async function loadQuoteList() {
   const tbody = document.getElementById("quote-tbody");
   document.getElementById("quote-empty").hidden = quotesCache.length > 0;
   tbody.innerHTML = quotesCache.map(q => `
-    <tr>
+    <tr class="clickable" data-open="${q.id}">
       <td>${esc(q.name)}</td>
       <td>${esc(q.client || "—")}</td>
       <td>${esc(q.date || "—")}</td>
       <td class="num">${fmt(q.grand_total)}</td>
       <td class="col-actions">
-        <button class="btn btn-sm btn-ghost" data-open="${q.id}">Abrir</button>
         <button class="btn btn-sm btn-danger" data-del-quote="${q.id}">×</button>
       </td>
     </tr>
@@ -949,6 +949,70 @@ async function loadQuoteList() {
     loadQuoteList();
   }));
 }
+
+let quotesClasicaCache = [];
+
+async function loadQuotesClasicaList() {
+  quotesClasicaCache = await api.get("/api/cotizaciones-clasica");
+  const tbody = document.getElementById("quote-clasica-tbody");
+  document.getElementById("quote-clasica-empty").hidden = quotesClasicaCache.length > 0;
+  tbody.innerHTML = quotesClasicaCache.map(c => `
+    <tr class="clickable" data-open="${c.id}">
+      <td class="mono">${String(c.numero).padStart(6, "0")}</td>
+      <td>${esc(c.cliente_nombre)}</td>
+      <td>${esc(c.fecha)}</td>
+      <td><span class="pill ${c.termino_pago}">${c.termino_pago === "contado" ? "Contado" : "Crédito"}</span></td>
+      <td class="num">${fmt(c.total_a_pagar)}</td>
+      <td class="col-actions">
+        <button class="btn btn-sm btn-danger" data-del-cot="${c.id}">×</button>
+      </td>
+    </tr>
+  `).join("");
+  tbody.querySelectorAll("[data-open]").forEach(el => el.addEventListener("click", () => {
+    window.location.href = `/cotizacion-clasica/ver/?id=${el.dataset.open}`;
+  }));
+  tbody.querySelectorAll("[data-del-cot]").forEach(btn => btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const cot = quotesClasicaCache.find(x => x.id == btn.dataset.delCot);
+    const label = cot ? String(cot.numero).padStart(6, "0") : "esta cotización";
+    if (!confirm(`¿Mover la cotización "${label}" a la papelera? Podrás restaurarla después desde 🗑 Papelera.`)) return;
+    await api.del(`/api/cotizaciones-clasica/${btn.dataset.delCot}`);
+    loadQuotesClasicaList();
+  }));
+}
+
+document.getElementById("btn-quote-clasica-trash").addEventListener("click", async () => {
+  const items = await api.get("/api/cotizaciones-clasica/trash");
+  const rows = items.map(c => `
+    <tr>
+      <td class="mono">${String(c.numero).padStart(6, "0")}</td>
+      <td>${esc(c.cliente_nombre)}</td>
+      <td>
+        <button class="btn btn-sm btn-primary" data-restore-cot="${c.id}">Restaurar</button>
+        <button class="btn btn-sm btn-danger" data-perm-del-cot="${c.id}">Eliminar</button>
+      </td>
+    </tr>
+  `).join("") || '<tr><td colspan="3" style="color:var(--ink-soft)">La papelera está vacía.</td></tr>';
+  showModal(`
+    <h2>Papelera — Cotización Clásica</h2>
+    <table id="cotClasicaTrashTable"><thead><tr><th>Número</th><th>Cliente</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    <div class="modal-actions"><button class="btn btn-ghost" id="closeCotClasicaTrash">Cerrar</button></div>
+  `);
+  document.querySelectorAll("[data-restore-cot]").forEach(btn => btn.addEventListener("click", async () => {
+    await api.post(`/api/cotizaciones-clasica/${btn.dataset.restoreCot}/restore`, {});
+    document.getElementById("btn-quote-clasica-trash").click();
+  }));
+  document.querySelectorAll("[data-perm-del-cot]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("¿Eliminar PERMANENTEMENTE? No se puede deshacer.")) return;
+    await api.del(`/api/cotizaciones-clasica/${btn.dataset.permDelCot}/permanent`);
+    document.getElementById("btn-quote-clasica-trash").click();
+  }));
+  document.getElementById("closeCotClasicaTrash").addEventListener("click", () => {
+    hideModal();
+    loadQuotesClasicaList();
+  });
+});
 
 function openQuoteEditor(quote) {
   editingQuote = quote ? JSON.parse(JSON.stringify(quote)) : {

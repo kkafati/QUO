@@ -148,6 +148,7 @@ async function loadCotizacion() {
   renderLines();
   updateTotals();
   document.getElementById("btnEliminar").style.display = "inline-block";
+  document.getElementById("btnConvertir").style.display = "inline-block";
 }
 
 // ---- Cliente search/autocomplete (both name and RTN fields search the same client list) ----
@@ -335,6 +336,24 @@ document.getElementById("btnEliminar").addEventListener("click", async () => {
   if (!confirm(`¿Mover la cotización "${numero}" a la papelera?`)) return;
   await fetch(`/api/cotizaciones-clasica/${cotizacionId}`, { method: "DELETE" });
   window.location.href = "/cotizaciones/";
+});
+
+document.getElementById("btnConvertir").addEventListener("click", async () => {
+  if (!cotizacionId) return;
+  if (!confirm("¿Convertir esta cotización en una factura? Se creará una nueva factura con estos mismos datos.")) return;
+  const statusMsg = document.getElementById("statusMsg");
+  try {
+    const res = await fetch(`/api/cotizaciones-clasica/${cotizacionId}/convertir-a-factura`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = data.error || "No se pudo convertir a factura.";
+      statusMsg.className = "status error";
+      return;
+    }
+    window.location.href = `/facturacion/ver/?id=${data.id}`;
+  } catch (err) {
+    statusMsg.textContent = "Error de conexión."; statusMsg.className = "status error";
+  }
 });
 
 (async () => {

@@ -165,6 +165,7 @@ async function selectClient(id) {
   const cliente = await fetch(`/api/clientes/${id}`).then(r => r.json());
   renderDetail(cliente);
   loadClientInvoices(id);
+  loadClientCotizaciones(id);
 }
 
 function renderDetail(cliente) {
@@ -195,6 +196,11 @@ function renderDetail(cliente) {
         <table>
           <thead><tr><th>Número</th><th>Fecha</th><th>Estado</th><th class="num">Total</th></tr></thead>
           <tbody id="clientInvoicesBody"><tr><td colspan="4" style="color:var(--ink-soft)">Cargando…</td></tr></tbody>
+        </table>
+        <div class="section-title">Cotizaciones (Clásica) de este cliente</div>
+        <table>
+          <thead><tr><th>Número</th><th>Fecha</th><th class="num">Total</th></tr></thead>
+          <tbody id="clientCotizacionesBody"><tr><td colspan="3" style="color:var(--ink-soft)">Cargando…</td></tr></tbody>
         </table>
       ` : ""}
     </div>
@@ -275,6 +281,25 @@ async function loadClientInvoices(clienteId) {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ estado: sel.value }),
       });
+    });
+  });
+}
+
+async function loadClientCotizaciones(clienteId) {
+  const cots = await fetch(`/api/clientes/${clienteId}/cotizaciones-clasica`).then(r => r.json());
+  const body = document.getElementById("clientCotizacionesBody");
+  if (!body) return;
+  body.innerHTML = cots.map(c => `
+    <tr class="clickable" data-id="${c.id}">
+      <td class="mono">${String(c.numero).padStart(6, "0")}</td>
+      <td>${esc(c.fecha)}</td>
+      <td class="num">${fmt(c.total_a_pagar)}</td>
+    </tr>
+  `).join("") || '<tr><td colspan="3" style="color:var(--ink-soft)">Sin cotizaciones todavía.</td></tr>';
+
+  body.querySelectorAll("tr[data-id]").forEach(tr => {
+    tr.addEventListener("click", () => {
+      window.open(`/cotizacion-clasica/ver/?id=${tr.dataset.id}`, "_blank");
     });
   });
 }

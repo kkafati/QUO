@@ -28,13 +28,16 @@
     </div>
     <nav class="nav">
       <button class="nav-item active" data-view="quotes">
-        <span class="nav-code">01</span> Cotizaciones
+        <span class="nav-code">01</span> Cotización Proyecto
+      </button>
+      <button class="nav-item" data-view="quotes-clasica">
+        <span class="nav-code">02</span> Cotización Clásica
       </button>
       <button class="nav-item" data-view="costcards">
-        <span class="nav-code">02</span> Fichas de Costo
+        <span class="nav-code">03</span> Fichas de Costo
       </button>
       <button class="nav-item" data-view="catalogs">
-        <span class="nav-code">03</span> Catálogos
+        <span class="nav-code">04</span> Catálogos
       </button>
     </nav>
     <div class="sidebar-foot">
@@ -105,17 +108,16 @@
       </div>
     </section>
 
-    <!-- ============ QUOTES VIEW ============ -->
+    <!-- ============ QUOTES VIEW (Proyecto) ============ -->
     <section id="view-quotes" class="view active">
       <header class="view-header">
-        <h1>Cotizaciones</h1>
+        <h1>Cotización Proyecto</h1>
       </header>
 
       <div class="panel" id="quotes-list-panel">
         <div class="panel-toolbar">
           <button class="btn btn-ghost" id="btn-quote-trash">🗑 Papelera</button>
-          <button class="btn btn-primary" id="btn-new-quote">+ Nueva Cotización (Proyecto)</button>
-          <button class="btn btn-primary" id="btn-new-quote-clasica">+ Nueva Cotización Clásica</button>
+          <button class="btn btn-primary" id="btn-new-quote">+ Nueva Cotización</button>
         </div>
         <table class="data-table" id="quote-table">
           <thead><tr>
@@ -132,6 +134,32 @@
 
       <div class="panel hidden" id="quote-editor-panel">
         <div class="quote-editor" id="quote-editor"></div>
+      </div>
+    </section>
+
+    <!-- ============ QUOTES VIEW (Clásica) ============ -->
+    <section id="view-quotes-clasica" class="view">
+      <header class="view-header">
+        <h1>Cotización Clásica</h1>
+      </header>
+
+      <div class="panel">
+        <div class="panel-toolbar">
+          <button class="btn btn-ghost" id="btn-quote-clasica-trash">🗑 Papelera</button>
+          <button class="btn btn-primary" id="btn-new-quote-clasica">+ Nueva Cotización Clásica</button>
+        </div>
+        <table class="data-table" id="quote-clasica-table">
+          <thead><tr>
+            <th>Número</th>
+            <th>Cliente</th>
+            <th class="col-date">Fecha</th>
+            <th>Término</th>
+            <th class="col-num">Total</th>
+            <th class="col-actions"></th>
+          </tr></thead>
+          <tbody id="quote-clasica-tbody"></tbody>
+        </table>
+        <div class="empty-state" id="quote-clasica-empty" hidden>Aún no hay cotizaciones clásica. Crea la primera.</div>
       </div>
     </section>
 

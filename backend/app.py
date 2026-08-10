@@ -1287,6 +1287,16 @@ def get_cliente_invoices(cliente_id):
     return jsonify([compute_invoice_totals(i) for i in invoices])
 
 
+@app.route("/api/clientes/<int:cliente_id>/cotizaciones-clasica", methods=["GET"])
+@login_required
+def get_cliente_cotizaciones_clasica(cliente_id):
+    cliente = Cliente.query.filter_by(id=cliente_id, account_id=current_account_id()).first_or_404()
+    cots = (Cotizacion.query.filter_by(account_id=current_account_id(), deleted_at=None)
+            .filter(db.or_(Cotizacion.cliente_id == cliente_id, Cotizacion.cliente_nombre == cliente.nombre))
+            .order_by(Cotizacion.fecha.desc()).all())
+    return jsonify([compute_cotizacion_totals(c) for c in cots])
+
+
 @app.route("/api/clientes", methods=["POST"])
 @login_required
 def create_cliente():
@@ -1891,6 +1901,56 @@ def permanent_delete_cotizacion_clasica(cot_id):
     db.session.delete(cot)
     db.session.commit()
     return "", 204
+
+
+@app.route("/api/cotizaciones-clasica/<int:cot_id>/convertir-a-factura", methods=["POST"])
+@login_required
+def convertir_cotizacion_a_factura(cot_id):
+    cot = Cotizacion.query.filter_by(id=cot_id, account_id=current_account_id(), deleted_at=None).first_or_404()
+    account = Account.query.get_or_404(current_account_id())
+
+    numero = _next_invoice_numero(account)
+    if not numero:
+        return jsonify({"error": "Configura el Prefijo de Factura en Configuración de la Cuenta antes de convertir cotizaciones en facturas."}), 400
+
+    fecha = datetime.utcnow().strftime("%Y-%m-%d")  # the invoice is issued today, not backdated to the quote's date
+    date_error = _validate_invoice_date(account.id, fecha)
+    if date_error:
+        return jsonify({"error": date_error}), 400
+
+    invoice = Invoice(
+        account_id=account.id,
+        numero=numero,
+        template=account.default_invoice_template or "clasica",
+        cliente_nombre=cot.cliente_nombre,
+        cliente_rtn=cot.cliente_rtn,
+        cliente_id=cot.cliente_id,
+        estado="Falta Pago",
+        fecha=fecha,
+        termino_pago=cot.termino_pago,
+        descuentos=cot.descuentos,
+        importe_exonerado=cot.importe_exonerado,
+        importe_exento=cot.importe_exento,
+        gravado_18_pct=cot.gravado_18_pct,
+        created_at=fecha,
+        updated_at=fecha,
+    )
+    db.session.add(invoice)
+    db.session.commit()
+
+    for ln in cot.lines:
+        db.session.add(InvoiceLine(
+            invoice_id=invoice.id,
+            cantidad=ln.cantidad,
+            descripcion=ln.descripcion,
+            precio_unitario=ln.precio_unitario,
+        ))
+    db.session.commit()
+
+    account.next_invoice_number = (account.next_invoice_number or 1) + 1
+    db.session.commit()
+
+    return jsonify(compute_invoice_totals(invoice)), 201
 
 
 if __name__ == "__main__":

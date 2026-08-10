@@ -343,6 +343,12 @@ button, input { font-family: inherit; }
 }
 
 .data-table tr:hover td { background: #fbf9f3; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: #fbf9f3; }
+
+.pill { font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: 600; }
+.pill.contado { background: rgba(107,191,138,0.15); color: #3f8f6a; }
+.pill.credito { background: rgba(6,93,172,0.1); color: #065dac; }
 
 .col-code { font-family: var(--font-display); width: 110px; }
 .col-unit { width: 90px; }
