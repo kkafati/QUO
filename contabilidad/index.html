@@ -57,7 +57,7 @@
 
   .modal-backdrop { position: fixed; inset: 0; background: rgba(15,41,66,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
   .modal-backdrop[hidden] { display: none; }
-  .modal { background: #fff; border-radius: 12px; padding: 24px; width: 620px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
+  .modal { background: #fff; border-radius: 12px; padding: 24px; width: 720px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
   .modal h2 { margin: 0 0 16px; font-size: 16px; }
   .modal .field { margin-bottom: 14px; }
   .modal .field label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-soft); margin-bottom: 5px; }
@@ -67,14 +67,14 @@
   .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
   .modal-error { color: var(--danger); font-size: 12.5px; margin-top: 6px; min-height: 16px; }
 
-  .items-table { border: 1.5px solid #dde1e5; border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
-  table.items { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  table.items th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); padding: 7px 8px; background: #fafbfc; border-bottom: 1px solid #e7e9ec; }
+  .items-table { border: 1.5px solid #dde1e5; border-radius: 8px; overflow-x: auto; margin-bottom: 8px; }
+  table.items { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 12.5px; }
+  table.items th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); padding: 7px 8px; background: #fafbfc; border-bottom: 1px solid #e7e9ec; white-space: nowrap; }
   table.items td { padding: 5px 6px; border-bottom: 1px solid #f0f1f3; vertical-align: middle; }
   table.items tr:last-child td { border-bottom: none; }
   table.items input { width: 100%; border: 1.5px solid #dde1e5; border-radius: 6px; padding: 6px 8px; font-size: 13px; font-family: inherit; }
   table.items .item-desc { min-width: 140px; }
-  table.items .item-num { width: 78px; }
+  table.items .item-num { width: 66px; }
   table.items .item-subtotal { width: 90px; text-align: right; font-family: 'IBM Plex Mono', monospace; padding-right: 8px; white-space: nowrap; }
   table.items .item-del { width: 32px; text-align: center; }
   .btn-remove-row { border: none; background: none; color: var(--danger); font-size: 16px; cursor: pointer; line-height: 1; padding: 4px; }
@@ -225,23 +225,12 @@
         <div class="items-table">
           <table class="items">
             <thead><tr>
-              <th class="item-desc">Descripción</th><th class="item-num">Cant.</th><th class="item-num">Precio unit.</th><th class="item-subtotal">Subtotal</th><th class="item-del"></th>
+              <th class="item-desc">Descripción</th><th class="item-num">Cant.</th><th class="item-num">Precio unit.</th><th class="item-num">Descuento</th><th class="item-num">ISV %</th><th class="item-subtotal">Total</th><th class="item-del"></th>
             </tr></thead>
             <tbody id="itemsBody"></tbody>
           </table>
         </div>
         <button type="button" class="btn btn-ghost btn-sm" id="btnAddItem">+ Agregar línea</button>
-      </div>
-
-      <div class="field-row">
-        <div class="field">
-          <label>Descuento (L.)</label>
-          <input type="number" id="f_descuento" step="0.01" min="0" value="0">
-        </div>
-        <div class="field">
-          <label>ISV (%)</label>
-          <input type="number" id="f_isv_pct" step="0.01" min="0" value="15">
-        </div>
       </div>
 
       <div class="totals-summary">
@@ -334,18 +323,25 @@ async function loadGastos() {
 
 let itemRows = [];
 
-function emptyItemRow() { return { descripcion: "", cantidad: 1, precio_unitario: 0 }; }
+function emptyItemRow() { return { descripcion: "", cantidad: 1, precio_unitario: 0, descuento: 0, isv_pct: 15 }; }
 
 function renderItemRows() {
-  document.getElementById("itemsBody").innerHTML = itemRows.map((row, i) => `
+  document.getElementById("itemsBody").innerHTML = itemRows.map((row, i) => {
+    const lineSubtotal = (Number(row.cantidad) || 0) * (Number(row.precio_unitario) || 0);
+    const lineNeto = Math.max(lineSubtotal - (Number(row.descuento) || 0), 0);
+    const lineTotal = lineNeto + lineNeto * (Number(row.isv_pct) || 0) / 100;
+    return `
     <tr data-idx="${i}">
       <td><input type="text" class="item-desc" data-field="descripcion" value="${esc(row.descripcion)}" placeholder="Ej: Cemento 42.5kg"></td>
       <td><input type="number" class="item-num" data-field="cantidad" step="0.01" min="0" value="${row.cantidad}"></td>
       <td><input type="number" class="item-num" data-field="precio_unitario" step="0.01" min="0" value="${row.precio_unitario}"></td>
-      <td class="item-subtotal">${fmt((Number(row.cantidad) || 0) * (Number(row.precio_unitario) || 0))}</td>
+      <td><input type="number" class="item-num" data-field="descuento" step="0.01" min="0" value="${row.descuento}"></td>
+      <td><input type="number" class="item-num" data-field="isv_pct" step="0.01" min="0" value="${row.isv_pct}"></td>
+      <td class="item-subtotal">${fmt(lineTotal)}</td>
       <td class="item-del">${itemRows.length > 1 ? `<button type="button" class="btn-remove-row" data-remove="${i}">×</button>` : ""}</td>
     </tr>
-  `).join("");
+  `;
+  }).join("");
 
   document.querySelectorAll("#itemsBody input").forEach(input => {
     input.addEventListener("input", (e) => {
@@ -366,10 +362,15 @@ function renderItemRows() {
 }
 
 function recalcTotals() {
-  const subtotal = itemRows.reduce((s, r) => s + (Number(r.cantidad) || 0) * (Number(r.precio_unitario) || 0), 0);
-  const descuento = Number(document.getElementById("f_descuento").value) || 0;
-  const isvPct = Number(document.getElementById("f_isv_pct").value) || 0;
-  const isv = Math.max(subtotal - descuento, 0) * isvPct / 100;
+  let subtotal = 0, descuento = 0, isv = 0;
+  itemRows.forEach(r => {
+    const lineSubtotal = (Number(r.cantidad) || 0) * (Number(r.precio_unitario) || 0);
+    const lineDescuento = Number(r.descuento) || 0;
+    const lineNeto = Math.max(lineSubtotal - lineDescuento, 0);
+    subtotal += lineSubtotal;
+    descuento += lineDescuento;
+    isv += lineNeto * (Number(r.isv_pct) || 0) / 100;
+  });
   const total = subtotal - descuento + isv;
   document.getElementById("calcSubtotal").textContent = fmt(subtotal);
   document.getElementById("calcDescuento").textContent = fmt(descuento);
@@ -382,8 +383,6 @@ document.getElementById("btnAddItem").addEventListener("click", () => {
   renderItemRows();
   recalcTotals();
 });
-document.getElementById("f_descuento").addEventListener("input", recalcTotals);
-document.getElementById("f_isv_pct").addEventListener("input", recalcTotals);
 
 function openModal(gasto) {
   document.getElementById("modalError").textContent = "";
@@ -395,11 +394,9 @@ function openModal(gasto) {
     document.getElementById("f_categoria").value = gasto.categoria;
     document.getElementById("f_descripcion").value = gasto.descripcion;
     document.getElementById("f_proveedor").value = gasto.proveedor || "";
-    document.getElementById("f_descuento").value = gasto.descuento || 0;
-    document.getElementById("f_isv_pct").value = gasto.isv_pct ?? 15;
     itemRows = (gasto.items && gasto.items.length)
-      ? gasto.items.map(it => ({ descripcion: it.descripcion, cantidad: it.cantidad, precio_unitario: it.precio_unitario }))
-      : [{ descripcion: gasto.descripcion, cantidad: 1, precio_unitario: gasto.subtotal || gasto.monto || 0 }];
+      ? gasto.items.map(it => ({ descripcion: it.descripcion, cantidad: it.cantidad, precio_unitario: it.precio_unitario, descuento: it.descuento || 0, isv_pct: it.isv_pct ?? 15 }))
+      : [{ descripcion: gasto.descripcion, cantidad: 1, precio_unitario: gasto.subtotal || gasto.monto || 0, descuento: gasto.descuento || 0, isv_pct: 15 }];
   } else {
     document.getElementById("modalTitle").textContent = "Nuevo Gasto";
     document.getElementById("gastoId").value = "";
@@ -408,8 +405,6 @@ function openModal(gasto) {
     document.getElementById("f_categoria").value = categorias[0] || "Otros";
     document.getElementById("f_descripcion").value = "";
     document.getElementById("f_proveedor").value = "";
-    document.getElementById("f_descuento").value = 0;
-    document.getElementById("f_isv_pct").value = 15;
     itemRows = [emptyItemRow()];
   }
   renderItemRows();
@@ -429,8 +424,6 @@ document.getElementById("btnSaveGasto").addEventListener("click", async () => {
     descripcion: document.getElementById("f_descripcion").value,
     proveedor: document.getElementById("f_proveedor").value,
     items: itemRows,
-    descuento: document.getElementById("f_descuento").value,
-    isv_pct: document.getElementById("f_isv_pct").value,
   };
   const url = id ? `/api/gastos/${id}` : "/api/gastos";
   const method = id ? "PUT" : "POST";

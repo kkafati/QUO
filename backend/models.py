@@ -377,8 +377,10 @@ class GastoOperativo(db.Model):
     pricing quotes/fichas, not an actual company expense.
 
     Modeled after a real supplier invoice: a set of line items (qty x unit
-    price) plus discount and ISV, so `monto` is derived (subtotal - descuento
-    + isv) rather than typed in directly."""
+    price, each with its own discount and ISV, since not every line on a real
+    invoice is taxed or discounted the same way). subtotal/descuento/isv/monto
+    here are just the sum of those per-line figures, kept denormalized on the
+    header row so listing/summary queries don't need to join+aggregate items."""
     __tablename__ = "gastos_operativos"
     id = db.Column(db.Integer, primary_key=True)
     account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
@@ -389,7 +391,6 @@ class GastoOperativo(db.Model):
     proveedor = db.Column(db.String(255))
     subtotal = db.Column(db.Float, nullable=False, default=0)
     descuento = db.Column(db.Float, nullable=False, default=0)
-    isv_pct = db.Column(db.Float, nullable=False, default=15)
     isv = db.Column(db.Float, nullable=False, default=0)
     monto = db.Column(db.Float, nullable=False, default=0)
     created_at = db.Column(db.String(16))
@@ -400,11 +401,15 @@ class GastoOperativo(db.Model):
 
 
 class GastoOperativoItem(db.Model):
-    """One invoice line (description, qty, unit price) making up a GastoOperativo."""
+    """One invoice line making up a GastoOperativo: qty x unit price, with its
+    own discount (amount) and ISV (%) - a real invoice can mix taxed/untaxed
+    or discounted/full-price lines, so these live per-line, not on the header."""
     __tablename__ = "gastos_operativos_items"
     id = db.Column(db.Integer, primary_key=True)
     gasto_id = db.Column(db.Integer, db.ForeignKey("gastos_operativos.id"), nullable=False)
     descripcion = db.Column(db.String(255), nullable=False)
     cantidad = db.Column(db.Float, nullable=False, default=1)
     precio_unitario = db.Column(db.Float, nullable=False, default=0)
+    descuento = db.Column(db.Float, nullable=False, default=0)
+    isv_pct = db.Column(db.Float, nullable=False, default=15)
 

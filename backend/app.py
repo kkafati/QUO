@@ -68,7 +68,6 @@ with app.app_context():
             "numero_factura": "ALTER TABLE gastos_operativos ADD COLUMN numero_factura VARCHAR(64)",
             "subtotal": "ALTER TABLE gastos_operativos ADD COLUMN subtotal FLOAT DEFAULT 0",
             "descuento": "ALTER TABLE gastos_operativos ADD COLUMN descuento FLOAT DEFAULT 0",
-            "isv_pct": "ALTER TABLE gastos_operativos ADD COLUMN isv_pct FLOAT DEFAULT 15",
             "isv": "ALTER TABLE gastos_operativos ADD COLUMN isv FLOAT DEFAULT 0",
         }
         for col, ddl in gasto_migrations.items():
@@ -80,6 +79,19 @@ with app.app_context():
         db.session.execute(db.text(
             "UPDATE gastos_operativos SET subtotal = monto WHERE subtotal = 0 AND monto != 0"
         ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        item_cols = [row[1] for row in db.session.execute(db.text("PRAGMA table_info(gastos_operativos_items)")).fetchall()]
+        item_migrations = {
+            "descuento": "ALTER TABLE gastos_operativos_items ADD COLUMN descuento FLOAT DEFAULT 0",
+            "isv_pct": "ALTER TABLE gastos_operativos_items ADD COLUMN isv_pct FLOAT DEFAULT 15",
+        }
+        for col, ddl in item_migrations.items():
+            if col not in item_cols:
+                db.session.execute(db.text(ddl))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -2321,7 +2333,6 @@ def _gasto_to_dict(g):
         "proveedor": g.proveedor,
         "subtotal": g.subtotal,
         "descuento": g.descuento,
-        "isv_pct": g.isv_pct,
         "isv": g.isv,
         "monto": g.monto,
         "created_at": g.created_at,
@@ -2332,6 +2343,8 @@ def _gasto_to_dict(g):
                 "descripcion": it.descripcion,
                 "cantidad": it.cantidad,
                 "precio_unitario": it.precio_unitario,
+                "descuento": it.descuento,
+                "isv_pct": it.isv_pct,
                 "subtotal": round(it.cantidad * it.precio_unitario, 2),
             }
             for it in g.items
@@ -2340,10 +2353,14 @@ def _gasto_to_dict(g):
 
 
 def _parse_gasto_items(raw_items):
-    """Validate+normalize the incoming line items and return (items, subtotal, error)."""
+    """Validate+normalize the incoming line items and return (items, totals, error),
+    where each item carries its own descuento/isv_pct (real invoices can mix
+    taxed/untaxed or discounted/full-price lines) and totals aggregates them
+    for the header row: {subtotal, descuento, isv, monto}."""
     if not isinstance(raw_items, list) or not raw_items:
         return None, None, "Agrega al menos una línea de detalle."
     parsed = []
+    subtotal = descuento_total = isv_total = 0.0
     for raw in raw_items:
         descripcion = (raw.get("descripcion") or "").strip()
         if not descripcion:
@@ -2351,15 +2368,32 @@ def _parse_gasto_items(raw_items):
         try:
             cantidad = float(raw.get("cantidad", 0) or 0)
             precio_unitario = float(raw.get("precio_unitario", 0) or 0)
+            descuento = float(raw.get("descuento", 0) or 0)
+            isv_pct = float(raw.get("isv_pct", 0) or 0)
         except (TypeError, ValueError):
-            return None, None, "Cantidad y precio unitario deben ser números."
+            return None, None, "Cantidad, precio, descuento e ISV deben ser números."
         if cantidad <= 0:
             return None, None, "La cantidad debe ser mayor a cero."
         if precio_unitario < 0:
             return None, None, "El precio unitario no puede ser negativo."
-        parsed.append({"descripcion": descripcion, "cantidad": cantidad, "precio_unitario": precio_unitario})
-    subtotal = round(sum(it["cantidad"] * it["precio_unitario"] for it in parsed), 2)
-    return parsed, subtotal, None
+        line_subtotal = cantidad * precio_unitario
+        if descuento < 0:
+            return None, None, "El descuento no puede ser negativo."
+        if descuento > line_subtotal:
+            return None, None, "El descuento de una línea no puede ser mayor a su subtotal."
+        line_isv = round((line_subtotal - descuento) * isv_pct / 100, 2)
+        parsed.append({
+            "descripcion": descripcion, "cantidad": cantidad, "precio_unitario": precio_unitario,
+            "descuento": descuento, "isv_pct": isv_pct,
+        })
+        subtotal += line_subtotal
+        descuento_total += descuento
+        isv_total += line_isv
+    subtotal = round(subtotal, 2)
+    descuento_total = round(descuento_total, 2)
+    isv_total = round(isv_total, 2)
+    monto = round(subtotal - descuento_total + isv_total, 2)
+    return parsed, {"subtotal": subtotal, "descuento": descuento_total, "isv": isv_total, "monto": monto}, None
 
 
 @app.route("/api/gastos/categorias", methods=["GET"])
@@ -2427,20 +2461,9 @@ def create_gasto():
     if not descripcion:
         return jsonify({"error": "La descripción es requerida."}), 400
 
-    items, subtotal, err = _parse_gasto_items(data.get("items"))
+    items, totals, err = _parse_gasto_items(data.get("items"))
     if err:
         return jsonify({"error": err}), 400
-    try:
-        descuento = float(data.get("descuento", 0) or 0)
-        isv_pct = float(data.get("isv_pct", 15) or 0)
-    except (TypeError, ValueError):
-        return jsonify({"error": "Descuento e ISV deben ser números."}), 400
-    if descuento < 0:
-        return jsonify({"error": "El descuento no puede ser negativo."}), 400
-    if descuento > subtotal:
-        return jsonify({"error": "El descuento no puede ser mayor al subtotal."}), 400
-    isv = round((subtotal - descuento) * isv_pct / 100, 2)
-    monto = round(subtotal - descuento + isv, 2)
 
     now = datetime.utcnow().strftime("%Y-%m-%d")
     g = GastoOperativo(
@@ -2450,11 +2473,10 @@ def create_gasto():
         categoria=data.get("categoria") or "Otros",
         descripcion=descripcion,
         proveedor=(data.get("proveedor") or "").strip(),
-        subtotal=subtotal,
-        descuento=descuento,
-        isv_pct=isv_pct,
-        isv=isv,
-        monto=monto,
+        subtotal=totals["subtotal"],
+        descuento=totals["descuento"],
+        isv=totals["isv"],
+        monto=totals["monto"],
         created_at=now,
         updated_at=now,
     )
@@ -2477,24 +2499,14 @@ def update_gasto(gasto_id):
         g.descripcion = descripcion
 
     if "items" in data:
-        items, subtotal, err = _parse_gasto_items(data.get("items"))
+        items, totals, err = _parse_gasto_items(data.get("items"))
         if err:
             return jsonify({"error": err}), 400
-        try:
-            descuento = float(data.get("descuento", g.descuento) or 0)
-            isv_pct = float(data.get("isv_pct", g.isv_pct) or 0)
-        except (TypeError, ValueError):
-            return jsonify({"error": "Descuento e ISV deben ser números."}), 400
-        if descuento < 0:
-            return jsonify({"error": "El descuento no puede ser negativo."}), 400
-        if descuento > subtotal:
-            return jsonify({"error": "El descuento no puede ser mayor al subtotal."}), 400
         g.items = [GastoOperativoItem(**it) for it in items]
-        g.subtotal = subtotal
-        g.descuento = descuento
-        g.isv_pct = isv_pct
-        g.isv = round((subtotal - descuento) * isv_pct / 100, 2)
-        g.monto = round(subtotal - descuento + g.isv, 2)
+        g.subtotal = totals["subtotal"]
+        g.descuento = totals["descuento"]
+        g.isv = totals["isv"]
+        g.monto = totals["monto"]
 
     g.fecha = data.get("fecha", g.fecha)
     g.numero_factura = (data.get("numero_factura", g.numero_factura) or "").strip()
