@@ -582,10 +582,26 @@ tr.clickable:hover td { background: #f7f9fb; }
   margin-top: 18px;
 }
 
-@media (max-width: 800px) {
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; }
+.table-scroll .data-table { border-radius: 0; }
+
+@media screen and (max-width: 800px) {
   .app-shell { grid-template-columns: 1fr; }
-  .sidebar { position: static; height: auto; }
-  .content { padding: 24px; }
+  .sidebar {
+    position: static; height: auto; border-right: none; border-bottom: 1px solid var(--blueprint-line);
+    padding: 8px 4px;
+  }
+  .nav { flex-direction: row; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 4px; }
+  .nav-item {
+    flex-shrink: 0; padding: 10px 14px; border-right: none !important; border-radius: 8px; white-space: nowrap;
+  }
+  .content { padding: 16px; }
+  .panel-toolbar { flex-wrap: wrap; }
+  .btn { padding: 11px 16px; }
+  .data-table { font-size: 12.5px; }
+  .data-table th, .data-table td { padding: 9px; }
+  .modal { width: 100%; max-width: 100vw; border-radius: 12px 12px 0 0; position: fixed; bottom: 0; left: 0; right: 0; margin: 0; max-height: 80vh; }
+  .modal-backdrop { align-items: flex-end; }
 }
 
 .print-head {

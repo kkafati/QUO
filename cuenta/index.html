@@ -34,6 +34,12 @@
   .topbar-links a { color: var(--blue); text-decoration: none; font-weight: 600; font-size: 13px; }
   .topbar-links a:hover { text-decoration: underline; }
 
+  @media screen and (max-width: 800px) {
+    .topbar { padding: 14px 16px; flex-wrap: wrap; gap: 8px; }
+    .wrap { padding: 20px 14px 60px; }
+    .field { min-width: 100%; } /* one field per row on narrow screens - the 200px min-width above still leaves cramped, easy-to-mistype fields side by side on a phone */
+  }
+
   .wrap { max-width: 920px; margin: 0 auto; padding: 40px 24px 80px; }
   h1 { font-size: 22px; font-weight: 700; margin: 0 0 6px; }
   p.sub { color: var(--ink-soft); font-size: 14px; margin: 0 0 32px; }

@@ -125,6 +125,20 @@
 
   @page { size: letter; margin: 0.5in; }
 
+  @media screen and (max-width: 800px) {
+    .toolbar { flex-wrap: wrap; gap: 10px; padding: 12px 14px; }
+    .toolbar-left { flex-wrap: wrap; gap: 8px; }
+    .btn { padding: 10px 14px; font-size: 12.5px; }
+    .status { margin-left: 0; width: 100%; }
+
+    /* This is a dense, print-styled business document - shrinking its
+       typography to actually fit a phone screen would make the numbers
+       illegible. Instead, let it scroll horizontally at a readable
+       minimum width, same as viewing a document you'd otherwise print. */
+    .sheet-wrap { margin: 12px auto 40px; padding: 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .sheet { min-width: 650px; padding: 24px; }
+  }
+
   @media print {
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
     body { background: #fff; }
