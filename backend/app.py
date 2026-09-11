@@ -1502,8 +1502,14 @@ def compute_invoice_totals(invoice):
 @app.route("/api/invoices", methods=["GET"])
 @login_required
 def list_invoices():
-    invoices = (Invoice.query.filter_by(account_id=current_account_id(), deleted_at=None)
-                .order_by(Invoice.id.desc()).all())
+    q = Invoice.query.filter_by(account_id=current_account_id(), deleted_at=None)
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    if desde:
+        q = q.filter(Invoice.fecha >= desde)
+    if hasta:
+        q = q.filter(Invoice.fecha <= hasta)
+    invoices = q.order_by(Invoice.id.desc()).all()
     return jsonify([compute_invoice_totals(i) for i in invoices])
 
 

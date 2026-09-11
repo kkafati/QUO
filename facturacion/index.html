@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
-  :root { --blue: #065dac; --lime: #cddc28; --ink: #16232f; --ink-soft: #5a6570; }
+  :root { --blue: #065dac; --lime: #cddc28; --ink: #16232f; --ink-soft: #5a6570; --good: #3f8f6a; --danger: #b5453b; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; min-height: 100vh; font-family: 'Poppins', sans-serif; background: #fafbfc; color: var(--ink); }
   .mono { font-family: 'IBM Plex Mono', monospace; }
@@ -47,6 +47,19 @@
   .estado-FaltaPago { background: rgba(181,69,59,0.12); color: #b5453b; }
   .estado-EnProceso { background: rgba(6,93,172,0.1); color: var(--blue); }
   .empty-state { text-align: center; padding: 50px 20px; color: var(--ink-soft); font-size: 14px; }
+
+  .summary-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+  .summary-card { background: #fff; border: 1px solid #e7e9ec; border-radius: 12px; padding: 16px 20px; min-width: 180px; flex: 1; }
+  .summary-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); margin-bottom: 6px; }
+  .summary-card .value { font-size: 22px; font-weight: 700; }
+  .summary-card.total .value { color: var(--danger); }
+
+  .filter-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
+  .filter-field { display: flex; flex-direction: column; gap: 4px; }
+  .filter-field label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); }
+  .filter-field select { border: 1.5px solid #dde1e5; border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; }
+
+  .text-danger { color: var(--danger); font-weight: 700; }
 
   .modal-backdrop { position: fixed; inset: 0; background: rgba(15,41,66,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
   .modal-backdrop[hidden] { display: none; }
@@ -114,6 +127,9 @@
         <button class="nav-item" data-view="proformas">
           <span class="nav-code">02</span> Factura Proforma
         </button>
+        <button class="nav-item" data-view="cobrar">
+          <span class="nav-code">03</span> Cuentas por Cobrar
+        </button>
       </nav>
     </aside>
 
@@ -151,6 +167,42 @@
             <tbody id="proformasBody"></tbody>
           </table></div>
           <div class="empty-state" id="proformasEmptyState" hidden>Aún no hay proformas. Crea la primera.</div>
+        </div>
+      </section>
+
+      <section id="view-cobrar" class="view">
+        <div class="wrap">
+          <div class="head-row">
+            <h1>Cuentas por Cobrar</h1>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-card total">
+              <div class="label">Total por cobrar</div>
+              <div class="value mono" id="cobrarSummaryTotal">L 0.00</div>
+            </div>
+            <div class="summary-card">
+              <div class="label">Facturas pendientes</div>
+              <div class="value mono" id="cobrarSummaryCount">0</div>
+            </div>
+          </div>
+
+          <div class="filter-row">
+            <div class="filter-field">
+              <label>Estado</label>
+              <select id="cobrarFilterEstado">
+                <option value="">Falta Pago + En Proceso</option>
+                <option value="Falta Pago">Falta Pago</option>
+                <option value="En Proceso">En Proceso</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="table-scroll"><table>
+            <thead><tr><th>Número</th><th>Cliente</th><th>Fecha</th><th class="num">Días</th><th>Estado</th><th class="num">Total</th></tr></thead>
+            <tbody id="cobrarBody"></tbody>
+          </table></div>
+          <div class="empty-state" id="cobrarEmptyState" hidden>No hay cuentas por cobrar pendientes.</div>
         </div>
       </section>
     </div>
@@ -243,8 +295,45 @@ document.querySelectorAll(".nav-item").forEach(btn => {
     document.getElementById("view-" + view).classList.add("active");
     if (view === "facturas") loadInvoices();
     if (view === "proformas") loadProformas();
+    if (view === "cobrar") loadCuentasPorCobrar();
   });
 });
+
+// ---- Cuentas por Cobrar: a filtered slice of the same invoices above ----
+
+function diasDesde(fecha) {
+  const ms = new Date().setHours(0, 0, 0, 0) - new Date(fecha + "T00:00:00").setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round(ms / 86400000));
+}
+
+async function loadCuentasPorCobrar() {
+  const estadoFilter = document.getElementById("cobrarFilterEstado").value;
+  const invoices = await fetch("/api/invoices").then(r => r.json());
+  const pendientes = invoices
+    .filter(inv => estadoFilter ? inv.estado === estadoFilter : (inv.estado === "Falta Pago" || inv.estado === "En Proceso"))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha)); // oldest first - most overdue on top
+
+  const total = pendientes.reduce((s, inv) => s + (inv.total_a_pagar || 0), 0);
+  document.getElementById("cobrarSummaryTotal").textContent = fmt(total);
+  document.getElementById("cobrarSummaryCount").textContent = pendientes.length;
+
+  document.getElementById("cobrarEmptyState").hidden = pendientes.length > 0;
+  document.getElementById("cobrarBody").innerHTML = pendientes.map(inv => {
+    const dias = diasDesde(inv.fecha);
+    return `
+    <tr class="clickable" onclick="window.location.href='/facturacion/ver/?id=${inv.id}'">
+      <td class="mono">${esc(inv.numero)}</td>
+      <td>${esc(inv.cliente_nombre)}</td>
+      <td>${esc(inv.fecha)}</td>
+      <td class="num ${dias > 30 ? "text-danger" : ""}">${dias}</td>
+      <td><span class="estado-badge estado-${(inv.estado || "").replace(/\s+/g, "")}">${esc(inv.estado || "Falta Pago")}</span></td>
+      <td class="num">${fmt(inv.total_a_pagar)}</td>
+    </tr>
+  `;
+  }).join("");
+}
+
+document.getElementById("cobrarFilterEstado").addEventListener("change", loadCuentasPorCobrar);
 
 async function loadProformas() {
   const proformas = await fetch("/api/proformas").then(r => r.json());
