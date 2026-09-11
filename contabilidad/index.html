@@ -57,13 +57,32 @@
 
   .modal-backdrop { position: fixed; inset: 0; background: rgba(15,41,66,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
   .modal-backdrop[hidden] { display: none; }
-  .modal { background: #fff; border-radius: 12px; padding: 24px; width: 440px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
+  .modal { background: #fff; border-radius: 12px; padding: 24px; width: 620px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
   .modal h2 { margin: 0 0 16px; font-size: 16px; }
   .modal .field { margin-bottom: 14px; }
   .modal .field label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-soft); margin-bottom: 5px; }
   .modal .field input, .modal .field select { width: 100%; border: 1.5px solid #dde1e5; border-radius: 8px; padding: 9px 11px; font-size: 14px; font-family: inherit; }
+  .modal .field-row { display: flex; gap: 12px; }
+  .modal .field-row .field { flex: 1; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
   .modal-error { color: var(--danger); font-size: 12.5px; margin-top: 6px; min-height: 16px; }
+
+  .items-table { border: 1.5px solid #dde1e5; border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+  table.items { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.items th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); padding: 7px 8px; background: #fafbfc; border-bottom: 1px solid #e7e9ec; }
+  table.items td { padding: 5px 6px; border-bottom: 1px solid #f0f1f3; vertical-align: middle; }
+  table.items tr:last-child td { border-bottom: none; }
+  table.items input { width: 100%; border: 1.5px solid #dde1e5; border-radius: 6px; padding: 6px 8px; font-size: 13px; font-family: inherit; }
+  table.items .item-desc { min-width: 140px; }
+  table.items .item-num { width: 78px; }
+  table.items .item-subtotal { width: 90px; text-align: right; font-family: 'IBM Plex Mono', monospace; padding-right: 8px; white-space: nowrap; }
+  table.items .item-del { width: 32px; text-align: center; }
+  .btn-remove-row { border: none; background: none; color: var(--danger); font-size: 16px; cursor: pointer; line-height: 1; padding: 4px; }
+
+  .totals-summary { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; padding: 12px 14px; background: #fafbfc; border: 1px solid #e7e9ec; border-radius: 8px; font-size: 13px; }
+  .totals-summary .row { display: flex; justify-content: space-between; }
+  .totals-summary .row.grand { border-top: 1px solid #e7e9ec; margin-top: 4px; padding-top: 6px; font-size: 14.5px; font-weight: 700; }
+  .totals-summary .row span:last-child { font-family: 'IBM Plex Mono', monospace; }
 
   .app-shell { display: flex; }
   .sidebar { width: 220px; flex-shrink: 0; background: #fff; border-right: 1px solid #e7e9ec; min-height: calc(100vh - 61px); padding: 24px 0; }
@@ -164,7 +183,7 @@
 
           <div class="table-scroll"><table>
             <thead><tr>
-              <th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Proveedor</th><th class="num">Monto</th><th></th>
+              <th>Fecha</th><th>Factura #</th><th>Categoría</th><th>Descripción</th><th>Proveedor</th><th class="num">Monto</th><th></th>
             </tr></thead>
             <tbody id="gastosBody"></tbody>
           </table></div>
@@ -178,9 +197,15 @@
     <div class="modal">
       <h2 id="modalTitle">Nuevo Gasto</h2>
       <input type="hidden" id="gastoId">
-      <div class="field">
-        <label>Fecha</label>
-        <input type="date" id="f_fecha">
+      <div class="field-row">
+        <div class="field">
+          <label>Fecha</label>
+          <input type="date" id="f_fecha">
+        </div>
+        <div class="field">
+          <label>Número de factura</label>
+          <input type="text" id="f_numero_factura" placeholder="Ej: 001-001-01-00012345">
+        </div>
       </div>
       <div class="field">
         <label>Categoría</label>
@@ -194,10 +219,38 @@
         <label>Proveedor (opcional)</label>
         <input type="text" id="f_proveedor" placeholder="Ej: Ferretería Ramos">
       </div>
+
       <div class="field">
-        <label>Monto (L.)</label>
-        <input type="number" id="f_monto" step="0.01" min="0" placeholder="0.00">
+        <label>Detalle de la factura</label>
+        <div class="items-table">
+          <table class="items">
+            <thead><tr>
+              <th class="item-desc">Descripción</th><th class="item-num">Cant.</th><th class="item-num">Precio unit.</th><th class="item-subtotal">Subtotal</th><th class="item-del"></th>
+            </tr></thead>
+            <tbody id="itemsBody"></tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnAddItem">+ Agregar línea</button>
       </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Descuento (L.)</label>
+          <input type="number" id="f_descuento" step="0.01" min="0" value="0">
+        </div>
+        <div class="field">
+          <label>ISV (%)</label>
+          <input type="number" id="f_isv_pct" step="0.01" min="0" value="15">
+        </div>
+      </div>
+
+      <div class="totals-summary">
+        <div class="row"><span>Subtotal</span><span id="calcSubtotal">L. 0.00</span></div>
+        <div class="row"><span>Descuento</span><span id="calcDescuento">L. 0.00</span></div>
+        <div class="row"><span>ISV</span><span id="calcIsv">L. 0.00</span></div>
+        <div class="row grand"><span>Total</span><span id="calcTotal">L. 0.00</span></div>
+      </div>
+
       <div class="modal-error" id="modalError"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" id="btnCancelModal">Cancelar</button>
@@ -257,6 +310,7 @@ async function loadGastos() {
   document.getElementById("gastosBody").innerHTML = gastosCache.map(g => `
     <tr class="clickable" data-id="${g.id}">
       <td>${esc(g.fecha)}</td>
+      <td class="mono">${esc(g.numero_factura || "—")}</td>
       <td><span class="pill">${esc(g.categoria)}</span></td>
       <td>${esc(g.descripcion)}</td>
       <td>${esc(g.proveedor || "—")}</td>
@@ -278,25 +332,88 @@ async function loadGastos() {
   });
 }
 
+let itemRows = [];
+
+function emptyItemRow() { return { descripcion: "", cantidad: 1, precio_unitario: 0 }; }
+
+function renderItemRows() {
+  document.getElementById("itemsBody").innerHTML = itemRows.map((row, i) => `
+    <tr data-idx="${i}">
+      <td><input type="text" class="item-desc" data-field="descripcion" value="${esc(row.descripcion)}" placeholder="Ej: Cemento 42.5kg"></td>
+      <td><input type="number" class="item-num" data-field="cantidad" step="0.01" min="0" value="${row.cantidad}"></td>
+      <td><input type="number" class="item-num" data-field="precio_unitario" step="0.01" min="0" value="${row.precio_unitario}"></td>
+      <td class="item-subtotal">${fmt((Number(row.cantidad) || 0) * (Number(row.precio_unitario) || 0))}</td>
+      <td class="item-del">${itemRows.length > 1 ? `<button type="button" class="btn-remove-row" data-remove="${i}">×</button>` : ""}</td>
+    </tr>
+  `).join("");
+
+  document.querySelectorAll("#itemsBody input").forEach(input => {
+    input.addEventListener("input", (e) => {
+      const idx = Number(e.target.closest("tr").dataset.idx);
+      const field = e.target.dataset.field;
+      itemRows[idx][field] = field === "descripcion" ? e.target.value : (e.target.value === "" ? 0 : Number(e.target.value));
+      renderItemRows();
+      recalcTotals();
+    });
+  });
+  document.querySelectorAll("#itemsBody [data-remove]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      itemRows.splice(Number(btn.dataset.remove), 1);
+      renderItemRows();
+      recalcTotals();
+    });
+  });
+}
+
+function recalcTotals() {
+  const subtotal = itemRows.reduce((s, r) => s + (Number(r.cantidad) || 0) * (Number(r.precio_unitario) || 0), 0);
+  const descuento = Number(document.getElementById("f_descuento").value) || 0;
+  const isvPct = Number(document.getElementById("f_isv_pct").value) || 0;
+  const isv = Math.max(subtotal - descuento, 0) * isvPct / 100;
+  const total = subtotal - descuento + isv;
+  document.getElementById("calcSubtotal").textContent = fmt(subtotal);
+  document.getElementById("calcDescuento").textContent = fmt(descuento);
+  document.getElementById("calcIsv").textContent = fmt(isv);
+  document.getElementById("calcTotal").textContent = fmt(total);
+}
+
+document.getElementById("btnAddItem").addEventListener("click", () => {
+  itemRows.push(emptyItemRow());
+  renderItemRows();
+  recalcTotals();
+});
+document.getElementById("f_descuento").addEventListener("input", recalcTotals);
+document.getElementById("f_isv_pct").addEventListener("input", recalcTotals);
+
 function openModal(gasto) {
   document.getElementById("modalError").textContent = "";
   if (gasto) {
     document.getElementById("modalTitle").textContent = "Editar Gasto";
     document.getElementById("gastoId").value = gasto.id;
     document.getElementById("f_fecha").value = gasto.fecha;
+    document.getElementById("f_numero_factura").value = gasto.numero_factura || "";
     document.getElementById("f_categoria").value = gasto.categoria;
     document.getElementById("f_descripcion").value = gasto.descripcion;
     document.getElementById("f_proveedor").value = gasto.proveedor || "";
-    document.getElementById("f_monto").value = gasto.monto;
+    document.getElementById("f_descuento").value = gasto.descuento || 0;
+    document.getElementById("f_isv_pct").value = gasto.isv_pct ?? 15;
+    itemRows = (gasto.items && gasto.items.length)
+      ? gasto.items.map(it => ({ descripcion: it.descripcion, cantidad: it.cantidad, precio_unitario: it.precio_unitario }))
+      : [{ descripcion: gasto.descripcion, cantidad: 1, precio_unitario: gasto.subtotal || gasto.monto || 0 }];
   } else {
     document.getElementById("modalTitle").textContent = "Nuevo Gasto";
     document.getElementById("gastoId").value = "";
     document.getElementById("f_fecha").value = new Date().toISOString().slice(0, 10);
+    document.getElementById("f_numero_factura").value = "";
     document.getElementById("f_categoria").value = categorias[0] || "Otros";
     document.getElementById("f_descripcion").value = "";
     document.getElementById("f_proveedor").value = "";
-    document.getElementById("f_monto").value = "";
+    document.getElementById("f_descuento").value = 0;
+    document.getElementById("f_isv_pct").value = 15;
+    itemRows = [emptyItemRow()];
   }
+  renderItemRows();
+  recalcTotals();
   document.getElementById("gastoModal").hidden = false;
 }
 
@@ -307,10 +424,13 @@ document.getElementById("btnSaveGasto").addEventListener("click", async () => {
   const id = document.getElementById("gastoId").value;
   const body = {
     fecha: document.getElementById("f_fecha").value,
+    numero_factura: document.getElementById("f_numero_factura").value,
     categoria: document.getElementById("f_categoria").value,
     descripcion: document.getElementById("f_descripcion").value,
     proveedor: document.getElementById("f_proveedor").value,
-    monto: document.getElementById("f_monto").value,
+    items: itemRows,
+    descuento: document.getElementById("f_descuento").value,
+    isv_pct: document.getElementById("f_isv_pct").value,
   };
   const url = id ? `/api/gastos/${id}` : "/api/gastos";
   const method = id ? "PUT" : "POST";

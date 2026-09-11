@@ -6,7 +6,7 @@ from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
 from werkzeug.security import check_password_hash, generate_password_hash
-from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GASTO_CATEGORIAS
+from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GastoOperativoItem, GASTO_CATEGORIAS
 from numero_a_letras import numero_a_letras
 from pdf_render import render_invoice_pdf
 from pdf_render_cotizacion import render_cotizacion_pdf
@@ -61,6 +61,28 @@ with app.app_context():
             db.session.commit()
     except Exception:
         db.session.rollback()  # non-SQLite DBs or unexpected schema - don't block startup over this
+
+    try:
+        cols = [row[1] for row in db.session.execute(db.text("PRAGMA table_info(gastos_operativos)")).fetchall()]
+        gasto_migrations = {
+            "numero_factura": "ALTER TABLE gastos_operativos ADD COLUMN numero_factura VARCHAR(64)",
+            "subtotal": "ALTER TABLE gastos_operativos ADD COLUMN subtotal FLOAT DEFAULT 0",
+            "descuento": "ALTER TABLE gastos_operativos ADD COLUMN descuento FLOAT DEFAULT 0",
+            "isv_pct": "ALTER TABLE gastos_operativos ADD COLUMN isv_pct FLOAT DEFAULT 15",
+            "isv": "ALTER TABLE gastos_operativos ADD COLUMN isv FLOAT DEFAULT 0",
+        }
+        for col, ddl in gasto_migrations.items():
+            if col not in cols:
+                db.session.execute(db.text(ddl))
+        db.session.commit()
+        # Backfill: existing rows have monto but subtotal=0 - treat the old
+        # monto as the subtotal (no items, no discount/isv) so totals stay correct.
+        db.session.execute(db.text(
+            "UPDATE gastos_operativos SET subtotal = monto WHERE subtotal = 0 AND monto != 0"
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 CATEGORY_MODELS = {"material": Material, "labor": Labor, "tool": Tool, "transport": Transport, "gasto": Gasto}
 
@@ -2293,13 +2315,51 @@ def _gasto_to_dict(g):
     return {
         "id": g.id,
         "fecha": g.fecha,
+        "numero_factura": g.numero_factura,
         "categoria": g.categoria,
         "descripcion": g.descripcion,
         "proveedor": g.proveedor,
+        "subtotal": g.subtotal,
+        "descuento": g.descuento,
+        "isv_pct": g.isv_pct,
+        "isv": g.isv,
         "monto": g.monto,
         "created_at": g.created_at,
         "updated_at": g.updated_at,
+        "items": [
+            {
+                "id": it.id,
+                "descripcion": it.descripcion,
+                "cantidad": it.cantidad,
+                "precio_unitario": it.precio_unitario,
+                "subtotal": round(it.cantidad * it.precio_unitario, 2),
+            }
+            for it in g.items
+        ],
     }
+
+
+def _parse_gasto_items(raw_items):
+    """Validate+normalize the incoming line items and return (items, subtotal, error)."""
+    if not isinstance(raw_items, list) or not raw_items:
+        return None, None, "Agrega al menos una línea de detalle."
+    parsed = []
+    for raw in raw_items:
+        descripcion = (raw.get("descripcion") or "").strip()
+        if not descripcion:
+            return None, None, "Cada línea necesita una descripción."
+        try:
+            cantidad = float(raw.get("cantidad", 0) or 0)
+            precio_unitario = float(raw.get("precio_unitario", 0) or 0)
+        except (TypeError, ValueError):
+            return None, None, "Cantidad y precio unitario deben ser números."
+        if cantidad <= 0:
+            return None, None, "La cantidad debe ser mayor a cero."
+        if precio_unitario < 0:
+            return None, None, "El precio unitario no puede ser negativo."
+        parsed.append({"descripcion": descripcion, "cantidad": cantidad, "precio_unitario": precio_unitario})
+    subtotal = round(sum(it["cantidad"] * it["precio_unitario"] for it in parsed), 2)
+    return parsed, subtotal, None
 
 
 @app.route("/api/gastos/categorias", methods=["GET"])
@@ -2366,24 +2426,39 @@ def create_gasto():
     descripcion = (data.get("descripcion") or "").strip()
     if not descripcion:
         return jsonify({"error": "La descripción es requerida."}), 400
+
+    items, subtotal, err = _parse_gasto_items(data.get("items"))
+    if err:
+        return jsonify({"error": err}), 400
     try:
-        monto = float(data.get("monto", 0) or 0)
+        descuento = float(data.get("descuento", 0) or 0)
+        isv_pct = float(data.get("isv_pct", 15) or 0)
     except (TypeError, ValueError):
-        return jsonify({"error": "El monto debe ser un número."}), 400
-    if monto <= 0:
-        return jsonify({"error": "El monto debe ser mayor a cero."}), 400
+        return jsonify({"error": "Descuento e ISV deben ser números."}), 400
+    if descuento < 0:
+        return jsonify({"error": "El descuento no puede ser negativo."}), 400
+    if descuento > subtotal:
+        return jsonify({"error": "El descuento no puede ser mayor al subtotal."}), 400
+    isv = round((subtotal - descuento) * isv_pct / 100, 2)
+    monto = round(subtotal - descuento + isv, 2)
 
     now = datetime.utcnow().strftime("%Y-%m-%d")
     g = GastoOperativo(
         account_id=current_account_id(),
         fecha=data.get("fecha") or now,
+        numero_factura=(data.get("numero_factura") or "").strip(),
         categoria=data.get("categoria") or "Otros",
         descripcion=descripcion,
         proveedor=(data.get("proveedor") or "").strip(),
+        subtotal=subtotal,
+        descuento=descuento,
+        isv_pct=isv_pct,
+        isv=isv,
         monto=monto,
         created_at=now,
         updated_at=now,
     )
+    g.items = [GastoOperativoItem(**it) for it in items]
     db.session.add(g)
     db.session.commit()
     return jsonify(_gasto_to_dict(g)), 201
@@ -2400,15 +2475,29 @@ def update_gasto(gasto_id):
         if not descripcion:
             return jsonify({"error": "La descripción es requerida."}), 400
         g.descripcion = descripcion
-    if "monto" in data:
+
+    if "items" in data:
+        items, subtotal, err = _parse_gasto_items(data.get("items"))
+        if err:
+            return jsonify({"error": err}), 400
         try:
-            monto = float(data.get("monto") or 0)
+            descuento = float(data.get("descuento", g.descuento) or 0)
+            isv_pct = float(data.get("isv_pct", g.isv_pct) or 0)
         except (TypeError, ValueError):
-            return jsonify({"error": "El monto debe ser un número."}), 400
-        if monto <= 0:
-            return jsonify({"error": "El monto debe ser mayor a cero."}), 400
-        g.monto = monto
+            return jsonify({"error": "Descuento e ISV deben ser números."}), 400
+        if descuento < 0:
+            return jsonify({"error": "El descuento no puede ser negativo."}), 400
+        if descuento > subtotal:
+            return jsonify({"error": "El descuento no puede ser mayor al subtotal."}), 400
+        g.items = [GastoOperativoItem(**it) for it in items]
+        g.subtotal = subtotal
+        g.descuento = descuento
+        g.isv_pct = isv_pct
+        g.isv = round((subtotal - descuento) * isv_pct / 100, 2)
+        g.monto = round(subtotal - descuento + g.isv, 2)
+
     g.fecha = data.get("fecha", g.fecha)
+    g.numero_factura = (data.get("numero_factura", g.numero_factura) or "").strip()
     g.categoria = data.get("categoria", g.categoria)
     g.proveedor = (data.get("proveedor", g.proveedor) or "").strip()
     g.updated_at = datetime.utcnow().strftime("%Y-%m-%d")

@@ -374,16 +374,37 @@ class GastoOperativo(db.Model):
     """A real business operating expense (rent, payroll, fuel, utilities...) -
     this is the Contabilidad module's expense ledger. Not to be confused with
     the `Gasto` model above, which is a cost-catalog line item used only for
-    pricing quotes/fichas, not an actual company expense."""
+    pricing quotes/fichas, not an actual company expense.
+
+    Modeled after a real supplier invoice: a set of line items (qty x unit
+    price) plus discount and ISV, so `monto` is derived (subtotal - descuento
+    + isv) rather than typed in directly."""
     __tablename__ = "gastos_operativos"
     id = db.Column(db.Integer, primary_key=True)
     account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
     fecha = db.Column(db.String(16), nullable=False)
+    numero_factura = db.Column(db.String(64))
     categoria = db.Column(db.String(64), nullable=False, default="Otros")
     descripcion = db.Column(db.String(255), nullable=False)
     proveedor = db.Column(db.String(255))
+    subtotal = db.Column(db.Float, nullable=False, default=0)
+    descuento = db.Column(db.Float, nullable=False, default=0)
+    isv_pct = db.Column(db.Float, nullable=False, default=15)
+    isv = db.Column(db.Float, nullable=False, default=0)
     monto = db.Column(db.Float, nullable=False, default=0)
     created_at = db.Column(db.String(16))
     updated_at = db.Column(db.String(16))
     deleted_at = db.Column(db.String(16))
+
+    items = db.relationship("GastoOperativoItem", backref="gasto", cascade="all, delete-orphan")
+
+
+class GastoOperativoItem(db.Model):
+    """One invoice line (description, qty, unit price) making up a GastoOperativo."""
+    __tablename__ = "gastos_operativos_items"
+    id = db.Column(db.Integer, primary_key=True)
+    gasto_id = db.Column(db.Integer, db.ForeignKey("gastos_operativos.id"), nullable=False)
+    descripcion = db.Column(db.String(255), nullable=False)
+    cantidad = db.Column(db.Float, nullable=False, default=1)
+    precio_unitario = db.Column(db.Float, nullable=False, default=0)
 
