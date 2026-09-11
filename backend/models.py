@@ -40,11 +40,13 @@ class Material(db.Model):
     description = db.Column(db.String(255), nullable=False)
     unit = db.Column(db.String(32), nullable=False)
     unit_price = db.Column(db.Float, nullable=False, default=0)
+    minimo_stock = db.Column(db.Float, nullable=False, default=0)  # reorder-point alert threshold
     created_at = db.Column(db.String(16))  # set once, when the material is first added
     updated_at = db.Column(db.String(16))  # refreshed on every edit
     deleted_at = db.Column(db.String(16))  # set when moved to trash; None = active
 
     suppliers = db.relationship("SupplierPrice", backref="material", cascade="all, delete-orphan")
+    movimientos = db.relationship("StockMovimiento", backref="material", cascade="all, delete-orphan")
 
 
 class SupplierPrice(db.Model):
@@ -60,6 +62,23 @@ class SupplierPrice(db.Model):
     unit = db.Column(db.String(32))
     price = db.Column(db.Float, nullable=False, default=0)
     date = db.Column(db.String(16))
+
+
+class StockMovimiento(db.Model):
+    """One entry in a Material's stock ledger. Stock on hand is never stored
+    as a mutable number - it's always the computed sum of these movements
+    (entrada and positive ajuste add, salida and negative ajuste subtract),
+    so there's always an audit trail and no number that can drift out of
+    sync with its history."""
+    __tablename__ = "stock_movimientos"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    material_id = db.Column(db.Integer, db.ForeignKey("materials.id"), nullable=False)
+    tipo = db.Column(db.String(16), nullable=False)  # entrada | salida | ajuste
+    cantidad = db.Column(db.Float, nullable=False, default=0)
+    fecha = db.Column(db.String(16), nullable=False)
+    referencia = db.Column(db.String(255))
+    created_at = db.Column(db.String(16))
 
 
 class Labor(db.Model):

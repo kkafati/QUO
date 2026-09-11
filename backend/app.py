@@ -6,7 +6,7 @@ from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
 from werkzeug.security import check_password_hash, generate_password_hash
-from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GastoOperativoItem, GASTO_CATEGORIAS
+from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GastoOperativoItem, GASTO_CATEGORIAS, StockMovimiento
 from numero_a_letras import numero_a_letras
 from pdf_render import render_invoice_pdf
 from pdf_render_cotizacion import render_cotizacion_pdf
@@ -33,6 +33,7 @@ COTIZACION_CLASICA_DIR = os.path.join(os.path.dirname(BASE_DIR), "cotizacion-cla
 PROFORMA_DIR = os.path.join(os.path.dirname(BASE_DIR), "proforma")
 CONTABILIDAD_DIR = os.path.join(os.path.dirname(BASE_DIR), "contabilidad")
 CLIENTES_DIR = os.path.join(os.path.dirname(BASE_DIR), "clientes")
+INVENTARIO_DIR = os.path.join(os.path.dirname(BASE_DIR), "inventario")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/cotizaciones")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(BASE_DIR, "quoting.db")
@@ -93,6 +94,14 @@ with app.app_context():
             if col not in item_cols:
                 db.session.execute(db.text(ddl))
         db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        cols = [row[1] for row in db.session.execute(db.text("PRAGMA table_info(materials)")).fetchall()]
+        if "minimo_stock" not in cols:
+            db.session.execute(db.text("ALTER TABLE materials ADD COLUMN minimo_stock FLOAT DEFAULT 0"))
+            db.session.commit()
     except Exception:
         db.session.rollback()
 
@@ -491,6 +500,7 @@ def compute_material_auto_price(suppliers):
 def material_to_dict(item):
     base = catalog_to_dict(item)
     base["created_at"] = item.created_at
+    base["minimo_stock"] = item.minimo_stock
     suppliers = item.suppliers
     auto_price = compute_material_auto_price(suppliers)
     if auto_price is not None:
@@ -552,6 +562,7 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
         )
         if category == "material":
             kwargs["created_at"] = datetime.utcnow().strftime("%Y-%m-%d")
+            kwargs["minimo_stock"] = float(data.get("minimo_stock", 0) or 0)
         item = Model(**kwargs)
         db.session.add(item)
         db.session.commit()
@@ -569,6 +580,8 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
         item.description = data.get("description", item.description).strip()
         item.unit = data.get("unit", item.unit).strip()
         item.unit_price = float(data.get("unit_price", item.unit_price) or 0)
+        if category == "material":
+            item.minimo_stock = float(data.get("minimo_stock", item.minimo_stock) or 0)
         item.updated_at = datetime.utcnow().strftime("%Y-%m-%d")
         db.session.commit()
         return jsonify(to_dict(item))
@@ -1291,6 +1304,17 @@ def proforma_common_js():
 def contabilidad():
     log_page_view("/contabilidad/")
     return send_from_directory(CONTABILIDAD_DIR, "index.html")
+
+
+# ---------------------------------------------------------------------------
+# Inventario
+# ---------------------------------------------------------------------------
+
+@app.route("/inventario/")
+@login_required
+def inventario():
+    log_page_view("/inventario/")
+    return send_from_directory(INVENTARIO_DIR, "index.html")
 
 
 # ---------------------------------------------------------------------------
@@ -2551,6 +2575,136 @@ def permanent_delete_gasto(gasto_id):
     db.session.delete(g)
     db.session.commit()
     return "", 204
+
+
+# ---------------------------------------------------------------------------
+# Inventario - stock levels (computed from a movement ledger), low-stock
+# alerts, and valuation. v1 scope: no auto-linking to quotes/invoices yet.
+# ---------------------------------------------------------------------------
+
+def compute_material_stock(material_id):
+    """Stock on hand is never stored directly - it's always this sum, so
+    there's an audit trail and no number that can drift from its history."""
+    movimientos = StockMovimiento.query.filter_by(material_id=material_id).all()
+    total = 0.0
+    for m in movimientos:
+        total += m.cantidad if m.tipo in ("entrada", "ajuste") else -m.cantidad
+    return round(total, 4)
+
+
+def movimiento_to_dict(m):
+    return {
+        "id": m.id,
+        "material_id": m.material_id,
+        "material_code": m.material.code if m.material else None,
+        "material_description": m.material.description if m.material else None,
+        "tipo": m.tipo,
+        "cantidad": m.cantidad,
+        "fecha": m.fecha,
+        "referencia": m.referencia,
+        "created_at": m.created_at,
+    }
+
+
+@app.route("/api/materiales/<int:material_id>/stock", methods=["GET"])
+@login_required
+def get_material_stock(material_id):
+    material = Material.query.filter_by(id=material_id, account_id=current_account_id()).first_or_404()
+    return jsonify({"material_id": material.id, "stock": compute_material_stock(material.id)})
+
+
+@app.route("/api/inventario", methods=["GET"])
+@login_required
+def list_inventario():
+    materials = Material.query.filter_by(account_id=current_account_id(), deleted_at=None).order_by(Material.code).all()
+    result = []
+    for m in materials:
+        stock = compute_material_stock(m.id)
+        minimo = m.minimo_stock or 0
+        result.append({
+            "id": m.id,
+            "code": m.code,
+            "description": m.description,
+            "unit": m.unit,
+            "unit_price": m.unit_price,
+            "stock": stock,
+            "minimo_stock": minimo,
+            "bajo_stock": stock < minimo,
+            "valor": round(stock * m.unit_price, 2),
+        })
+    return jsonify(result)
+
+
+@app.route("/api/inventario/resumen", methods=["GET"])
+@login_required
+def inventario_resumen():
+    """Mirrors /api/gastos/summary's style - powers the summary cards above
+    the Existencias table."""
+    materials = Material.query.filter_by(account_id=current_account_id(), deleted_at=None).all()
+    valor_total = 0.0
+    materiales_bajo_stock = 0
+    for m in materials:
+        stock = compute_material_stock(m.id)
+        valor_total += stock * m.unit_price
+        if stock < (m.minimo_stock or 0):
+            materiales_bajo_stock += 1
+    return jsonify({
+        "valor_total": round(valor_total, 2),
+        "materiales_bajo_stock": materiales_bajo_stock,
+        "total_materiales": len(materials),
+    })
+
+
+@app.route("/api/inventario/movimientos", methods=["GET"])
+@login_required
+def list_movimientos():
+    q = StockMovimiento.query.filter_by(account_id=current_account_id())
+    material_id = request.args.get("material_id")
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    if material_id:
+        q = q.filter(StockMovimiento.material_id == material_id)
+    if desde:
+        q = q.filter(StockMovimiento.fecha >= desde)
+    if hasta:
+        q = q.filter(StockMovimiento.fecha <= hasta)
+    movimientos = q.order_by(StockMovimiento.fecha.desc(), StockMovimiento.id.desc()).all()
+    return jsonify([movimiento_to_dict(m) for m in movimientos])
+
+
+@app.route("/api/inventario/movimientos", methods=["POST"])
+@login_required
+def create_movimiento():
+    data = request.json or {}
+    tipo = (data.get("tipo") or "").strip()
+    if tipo not in ("entrada", "salida", "ajuste"):
+        return jsonify({"error": "El tipo debe ser entrada, salida o ajuste."}), 400
+
+    material = Material.query.filter_by(id=data.get("material_id"), account_id=current_account_id()).first()
+    if not material:
+        return jsonify({"error": "Material no encontrado."}), 400
+
+    try:
+        cantidad = float(data.get("cantidad", 0) or 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "La cantidad debe ser un número."}), 400
+    if cantidad == 0:
+        return jsonify({"error": "La cantidad no puede ser cero."}), 400
+    if tipo in ("entrada", "salida") and cantidad < 0:
+        return jsonify({"error": "La cantidad debe ser positiva para entrada o salida."}), 400
+
+    m = StockMovimiento(
+        account_id=current_account_id(),
+        material_id=material.id,
+        tipo=tipo,
+        cantidad=cantidad,
+        fecha=data.get("fecha") or datetime.utcnow().strftime("%Y-%m-%d"),
+        referencia=(data.get("referencia") or "").strip(),
+        created_at=datetime.utcnow().strftime("%Y-%m-%d"),
+    )
+    db.session.add(m)
+    db.session.commit()
+    return jsonify(movimiento_to_dict(m)), 201
 
 
 if __name__ == "__main__":
