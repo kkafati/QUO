@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contabilidad — Grupo Liquidámbar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --blue: #065dac; --lime: #cddc28; --ink: #16232f; --ink-soft: #5a6570; --good: #3f8f6a; --danger: #b5453b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; min-height: 100vh; font-family: 'Poppins', sans-serif; background: #fafbfc; color: var(--ink); }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  .topbar { display: flex; justify-content: space-between; align-items: center; padding: 18px 32px; background: #fff; border-bottom: 1px solid #e7e9ec; }
+  .topbar-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; }
+  .topbar-links { display: flex; gap: 20px; align-items: center; }
+  .topbar-links a { color: var(--blue); text-decoration: none; font-weight: 600; font-size: 13px; }
+  .topbar-links a:hover { text-decoration: underline; }
+
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
+  .head-row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 22px; }
+  h1 { font-size: 22px; font-weight: 700; margin: 0; }
+
+  .btn { border: 1.5px solid var(--ink); background: #fff; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 8px; }
+  .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn-primary:hover { background: #054a87; }
+  .btn-ghost { border-color: #dde1e5; color: var(--ink-soft); }
+  .btn-ghost:hover { border-color: var(--ink); color: var(--ink); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-danger { border-color: var(--danger); color: var(--danger); }
+  .btn-danger:hover { background: var(--danger); color: #fff; }
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  /* ---- summary cards ---- */
+  .summary-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+  .summary-card { background: #fff; border: 1px solid #e7e9ec; border-radius: 12px; padding: 16px 20px; min-width: 180px; flex: 1; }
+  .summary-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); margin-bottom: 6px; }
+  .summary-card .value { font-size: 22px; font-weight: 700; }
+  .summary-card.total .value { color: var(--danger); }
+
+  .filter-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
+  .filter-field { display: flex; flex-direction: column; gap: 4px; }
+  .filter-field label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); }
+  .filter-field input, .filter-field select { border: 1.5px solid #dde1e5; border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; }
+
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border: 1px solid #e7e9ec; border-radius: 10px; overflow: hidden; }
+  th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); padding: 10px 14px; border-bottom: 1px solid #e7e9ec; background: #fafbfc; }
+  td { padding: 12px 14px; border-bottom: 1px solid #f0f1f3; }
+  tr:last-child td { border-bottom: none; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: #f7f9fb; }
+  .num { text-align: right; }
+  .pill { font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: 600; background: #eaf2fa; color: var(--blue); }
+  .empty-state { text-align: center; padding: 50px 20px; color: var(--ink-soft); font-size: 14px; }
+
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(15,41,66,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .modal-backdrop[hidden] { display: none; }
+  .modal { background: #fff; border-radius: 12px; padding: 24px; width: 440px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
+  .modal h2 { margin: 0 0 16px; font-size: 16px; }
+  .modal .field { margin-bottom: 14px; }
+  .modal .field label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-soft); margin-bottom: 5px; }
+  .modal .field input, .modal .field select { width: 100%; border: 1.5px solid #dde1e5; border-radius: 8px; padding: 9px 11px; font-size: 14px; font-family: inherit; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+  .modal-error { color: var(--danger); font-size: 12.5px; margin-top: 6px; min-height: 16px; }
+
+  .app-shell { display: flex; }
+  .sidebar { width: 220px; flex-shrink: 0; background: #fff; border-right: 1px solid #e7e9ec; min-height: calc(100vh - 61px); padding: 24px 0; }
+  .nav { display: flex; flex-direction: column; gap: 2px; }
+  .nav-item { display: flex; align-items: baseline; gap: 8px; text-align: left; background: none; border: none; padding: 11px 24px;
+              font-family: 'Poppins', sans-serif; font-size: 13.5px; font-weight: 600; color: var(--ink-soft); cursor: pointer; }
+  .nav-item:hover { background: #f7f9fb; color: var(--ink); }
+  .nav-item.active { color: var(--blue); background: #eaf2fa; border-right: 3px solid var(--blue); }
+  .nav-item.disabled { color: #c3c9cf; cursor: default; }
+  .nav-item.disabled:hover { background: none; color: #c3c9cf; }
+  .nav-code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft); }
+  .content { flex: 1; min-width: 0; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  @media screen and (max-width: 800px) {
+    .topbar { padding: 14px 16px; flex-wrap: wrap; gap: 8px; }
+    .app-shell { flex-direction: column; }
+    .sidebar {
+      width: 100%; min-height: auto; border-right: none; border-bottom: 1px solid #e7e9ec;
+      padding: 8px 4px; position: sticky; top: 0; z-index: 10;
+    }
+    .nav { flex-direction: row; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 4px; }
+    .nav-item { flex-shrink: 0; padding: 10px 14px; border-right: none !important; border-radius: 8px; white-space: nowrap; }
+    .wrap { padding: 20px 14px 60px; }
+    .head-row { flex-direction: column; align-items: stretch; gap: 12px; }
+    .toolbar { flex-wrap: wrap; }
+    .btn { padding: 11px 16px; }
+    table { font-size: 12.5px; }
+    th, td { padding: 10px; }
+    .modal { width: 100%; max-width: 100vw; border-radius: 12px 12px 0 0; position: fixed; bottom: 0; left: 0; right: 0; margin: 0; max-height: 80vh; }
+    .modal-backdrop { align-items: flex-end; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-brand"><span id="topbarClient">Contabilidad</span></div>
+    <div class="topbar-links">
+      <a href="/panel/">← Panel</a>
+      <a href="/logout">Cerrar sesión</a>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <nav class="nav">
+        <button class="nav-item active" data-view="gastos">
+          <span class="nav-code">01</span> Gastos
+        </button>
+        <button class="nav-item disabled" disabled title="Próximamente">
+          <span class="nav-code">02</span> Ingresos
+        </button>
+        <button class="nav-item disabled" disabled title="Próximamente">
+          <span class="nav-code">03</span> Reportes
+        </button>
+      </nav>
+    </aside>
+
+    <div class="content">
+      <section id="view-gastos" class="view active">
+        <div class="wrap">
+          <div class="head-row">
+            <h1>Gastos</h1>
+            <div class="toolbar">
+              <button class="btn btn-ghost" id="btn-trash">🗑 Papelera</button>
+              <button class="btn btn-primary" id="btnNuevoGasto">+ Nuevo Gasto</button>
+            </div>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-card total">
+              <div class="label">Total en el período</div>
+              <div class="value mono" id="summaryTotal">L. 0.00</div>
+            </div>
+            <div class="summary-card">
+              <div class="label">Cantidad de gastos</div>
+              <div class="value mono" id="summaryCount">0</div>
+            </div>
+          </div>
+
+          <div class="filter-row">
+            <div class="filter-field">
+              <label>Desde</label>
+              <input type="date" id="filterDesde">
+            </div>
+            <div class="filter-field">
+              <label>Hasta</label>
+              <input type="date" id="filterHasta">
+            </div>
+            <div class="filter-field">
+              <label>Categoría</label>
+              <select id="filterCategoria"><option value="">Todas</option></select>
+            </div>
+            <button class="btn btn-ghost" id="btnClearFilter">Limpiar filtro</button>
+          </div>
+
+          <div class="table-scroll"><table>
+            <thead><tr>
+              <th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Proveedor</th><th class="num">Monto</th><th></th>
+            </tr></thead>
+            <tbody id="gastosBody"></tbody>
+          </table></div>
+          <div class="empty-state" id="emptyState" hidden>Aún no hay gastos registrados. Crea el primero.</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="gastoModal" hidden>
+    <div class="modal">
+      <h2 id="modalTitle">Nuevo Gasto</h2>
+      <input type="hidden" id="gastoId">
+      <div class="field">
+        <label>Fecha</label>
+        <input type="date" id="f_fecha">
+      </div>
+      <div class="field">
+        <label>Categoría</label>
+        <select id="f_categoria"></select>
+      </div>
+      <div class="field">
+        <label>Descripción</label>
+        <input type="text" id="f_descripcion" placeholder="Ej: Compra de cemento para proyecto X">
+      </div>
+      <div class="field">
+        <label>Proveedor (opcional)</label>
+        <input type="text" id="f_proveedor" placeholder="Ej: Ferretería Ramos">
+      </div>
+      <div class="field">
+        <label>Monto (L.)</label>
+        <input type="number" id="f_monto" step="0.01" min="0" placeholder="0.00">
+      </div>
+      <div class="modal-error" id="modalError"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="btnCancelModal">Cancelar</button>
+        <button class="btn btn-primary" id="btnSaveGasto">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="trashModal" hidden>
+    <div class="modal">
+      <h2>Papelera — Gastos</h2>
+      <table><thead><tr><th>Fecha</th><th>Descripción</th><th></th></tr></thead><tbody id="trashBody"></tbody></table>
+      <div class="modal-actions"><button class="btn btn-ghost" id="closeTrash">Cerrar</button></div>
+    </div>
+  </div>
+
+<script>
+function esc(s) { return (s ?? "").toString().replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+function fmt(n) { return "L. " + (Number(n) || 0).toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+let categorias = [];
+let gastosCache = [];
+
+async function loadCategorias() {
+  categorias = await fetch("/api/gastos/categorias").then(r => r.json());
+  const filterSel = document.getElementById("filterCategoria");
+  const formSel = document.getElementById("f_categoria");
+  filterSel.innerHTML = '<option value="">Todas</option>' + categorias.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  formSel.innerHTML = categorias.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+}
+
+function currentFilterParams() {
+  const params = new URLSearchParams();
+  const desde = document.getElementById("filterDesde").value;
+  const hasta = document.getElementById("filterHasta").value;
+  if (desde) params.set("desde", desde);
+  if (hasta) params.set("hasta", hasta);
+  return params;
+}
+
+async function loadGastos() {
+  const params = currentFilterParams();
+  const categoria = document.getElementById("filterCategoria").value;
+
+  const [gastos, summary] = await Promise.all([
+    fetch(`/api/gastos?${params.toString()}`).then(r => r.json()),
+    fetch(`/api/gastos/summary?${params.toString()}`).then(r => r.json()),
+  ]);
+
+  gastosCache = categoria ? gastos.filter(g => g.categoria === categoria) : gastos;
+
+  const total = categoria ? gastosCache.reduce((s, g) => s + (g.monto || 0), 0) : summary.total;
+  document.getElementById("summaryTotal").textContent = fmt(total);
+  document.getElementById("summaryCount").textContent = gastosCache.length;
+
+  document.getElementById("emptyState").hidden = gastosCache.length > 0;
+  document.getElementById("gastosBody").innerHTML = gastosCache.map(g => `
+    <tr class="clickable" data-id="${g.id}">
+      <td>${esc(g.fecha)}</td>
+      <td><span class="pill">${esc(g.categoria)}</span></td>
+      <td>${esc(g.descripcion)}</td>
+      <td>${esc(g.proveedor || "—")}</td>
+      <td class="num mono">${fmt(g.monto)}</td>
+      <td><button class="btn btn-sm btn-danger" data-del="${g.id}">×</button></td>
+    </tr>
+  `).join("");
+
+  document.querySelectorAll("#gastosBody tr[data-id]").forEach(tr => {
+    tr.addEventListener("click", () => openModal(gastosCache.find(g => g.id == tr.dataset.id)));
+  });
+  document.querySelectorAll("#gastosBody [data-del]").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm("¿Mover este gasto a la papelera?")) return;
+      await fetch(`/api/gastos/${btn.dataset.del}`, { method: "DELETE" });
+      loadGastos();
+    });
+  });
+}
+
+function openModal(gasto) {
+  document.getElementById("modalError").textContent = "";
+  if (gasto) {
+    document.getElementById("modalTitle").textContent = "Editar Gasto";
+    document.getElementById("gastoId").value = gasto.id;
+    document.getElementById("f_fecha").value = gasto.fecha;
+    document.getElementById("f_categoria").value = gasto.categoria;
+    document.getElementById("f_descripcion").value = gasto.descripcion;
+    document.getElementById("f_proveedor").value = gasto.proveedor || "";
+    document.getElementById("f_monto").value = gasto.monto;
+  } else {
+    document.getElementById("modalTitle").textContent = "Nuevo Gasto";
+    document.getElementById("gastoId").value = "";
+    document.getElementById("f_fecha").value = new Date().toISOString().slice(0, 10);
+    document.getElementById("f_categoria").value = categorias[0] || "Otros";
+    document.getElementById("f_descripcion").value = "";
+    document.getElementById("f_proveedor").value = "";
+    document.getElementById("f_monto").value = "";
+  }
+  document.getElementById("gastoModal").hidden = false;
+}
+
+document.getElementById("btnNuevoGasto").addEventListener("click", () => openModal(null));
+document.getElementById("btnCancelModal").addEventListener("click", () => { document.getElementById("gastoModal").hidden = true; });
+
+document.getElementById("btnSaveGasto").addEventListener("click", async () => {
+  const id = document.getElementById("gastoId").value;
+  const body = {
+    fecha: document.getElementById("f_fecha").value,
+    categoria: document.getElementById("f_categoria").value,
+    descripcion: document.getElementById("f_descripcion").value,
+    proveedor: document.getElementById("f_proveedor").value,
+    monto: document.getElementById("f_monto").value,
+  };
+  const url = id ? `/api/gastos/${id}` : "/api/gastos";
+  const method = id ? "PUT" : "POST";
+  const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok) {
+    document.getElementById("modalError").textContent = data.error || "Error al guardar.";
+    return;
+  }
+  document.getElementById("gastoModal").hidden = true;
+  loadGastos();
+});
+
+document.getElementById("filterDesde").addEventListener("change", loadGastos);
+document.getElementById("filterHasta").addEventListener("change", loadGastos);
+document.getElementById("filterCategoria").addEventListener("change", loadGastos);
+document.getElementById("btnClearFilter").addEventListener("click", () => {
+  document.getElementById("filterDesde").value = "";
+  document.getElementById("filterHasta").value = "";
+  document.getElementById("filterCategoria").value = "";
+  loadGastos();
+});
+
+document.getElementById("btn-trash").addEventListener("click", async () => {
+  const items = await fetch("/api/gastos/trash").then(r => r.json());
+  document.getElementById("trashBody").innerHTML = items.map(g => `
+    <tr>
+      <td>${esc(g.fecha)}</td>
+      <td>${esc(g.descripcion)}</td>
+      <td>
+        <button class="btn btn-sm btn-primary" data-restore="${g.id}">Restaurar</button>
+        <button class="btn btn-sm btn-danger" data-perm-del="${g.id}">Eliminar</button>
+      </td>
+    </tr>
+  `).join("") || '<tr><td colspan="3" style="color:var(--ink-soft)">La papelera está vacía.</td></tr>';
+  document.getElementById("trashModal").hidden = false;
+
+  document.querySelectorAll("[data-restore]").forEach(btn => btn.addEventListener("click", async () => {
+    await fetch(`/api/gastos/${btn.dataset.restore}/restore`, { method: "POST" });
+    document.getElementById("btn-trash").click();
+  }));
+  document.querySelectorAll("[data-perm-del]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("¿Eliminar PERMANENTEMENTE? No se puede deshacer.")) return;
+    await fetch(`/api/gastos/${btn.dataset.permDel}/permanent`, { method: "DELETE" });
+    document.getElementById("btn-trash").click();
+  }));
+});
+document.getElementById("closeTrash").addEventListener("click", () => {
+  document.getElementById("trashModal").hidden = true;
+  loadGastos();
+});
+
+fetch("/api/me").then(r => r.json()).then(me => {
+  if (me.authenticated && me.company_name) document.getElementById("topbarClient").textContent = "Contabilidad — " + me.company_name;
+});
+
+(async () => {
+  await loadCategorias();
+  await loadGastos();
+})();
+</script>
+</body>
+</html>

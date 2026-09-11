@@ -6,7 +6,7 @@ from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
 from werkzeug.security import check_password_hash, generate_password_hash
-from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine
+from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GASTO_CATEGORIAS
 from numero_a_letras import numero_a_letras
 from pdf_render import render_invoice_pdf
 from pdf_render_cotizacion import render_cotizacion_pdf
@@ -31,6 +31,7 @@ ADMIN_DIR = os.path.join(os.path.dirname(BASE_DIR), "admin")
 FACTURACION_DIR = os.path.join(os.path.dirname(BASE_DIR), "facturacion")
 COTIZACION_CLASICA_DIR = os.path.join(os.path.dirname(BASE_DIR), "cotizacion-clasica")
 PROFORMA_DIR = os.path.join(os.path.dirname(BASE_DIR), "proforma")
+CONTABILIDAD_DIR = os.path.join(os.path.dirname(BASE_DIR), "contabilidad")
 CLIENTES_DIR = os.path.join(os.path.dirname(BASE_DIR), "clientes")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/cotizaciones")
@@ -1248,6 +1249,17 @@ def proforma_common_js():
 
 
 # ---------------------------------------------------------------------------
+# Contabilidad
+# ---------------------------------------------------------------------------
+
+@app.route("/contabilidad/")
+@login_required
+def contabilidad():
+    log_page_view("/contabilidad/")
+    return send_from_directory(CONTABILIDAD_DIR, "index.html")
+
+
+# ---------------------------------------------------------------------------
 # Clientes (customer records)
 # ---------------------------------------------------------------------------
 
@@ -2271,6 +2283,167 @@ def convertir_proforma_a_factura(pf_id):
     db.session.commit()
 
     return jsonify(compute_invoice_totals(invoice)), 201
+
+
+# ---------------------------------------------------------------------------
+# Contabilidad - Gastos (operating expenses)
+# ---------------------------------------------------------------------------
+
+def _gasto_to_dict(g):
+    return {
+        "id": g.id,
+        "fecha": g.fecha,
+        "categoria": g.categoria,
+        "descripcion": g.descripcion,
+        "proveedor": g.proveedor,
+        "monto": g.monto,
+        "created_at": g.created_at,
+        "updated_at": g.updated_at,
+    }
+
+
+@app.route("/api/gastos/categorias", methods=["GET"])
+@login_required
+def list_gasto_categorias():
+    return jsonify(GASTO_CATEGORIAS)
+
+
+@app.route("/api/gastos", methods=["GET"])
+@login_required
+def list_gastos():
+    q = GastoOperativo.query.filter_by(account_id=current_account_id(), deleted_at=None)
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    if desde:
+        q = q.filter(GastoOperativo.fecha >= desde)
+    if hasta:
+        q = q.filter(GastoOperativo.fecha <= hasta)
+    gastos = q.order_by(GastoOperativo.fecha.desc(), GastoOperativo.id.desc()).all()
+    return jsonify([_gasto_to_dict(g) for g in gastos])
+
+
+@app.route("/api/gastos/summary", methods=["GET"])
+@login_required
+def gastos_summary():
+    """Total and per-category breakdown, honoring the same desde/hasta
+    filters as the list endpoint - the list and its total should always
+    agree on what date range they're describing."""
+    q = GastoOperativo.query.filter_by(account_id=current_account_id(), deleted_at=None)
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    if desde:
+        q = q.filter(GastoOperativo.fecha >= desde)
+    if hasta:
+        q = q.filter(GastoOperativo.fecha <= hasta)
+    gastos = q.all()
+    total = round(sum(g.monto or 0 for g in gastos), 2)
+    por_categoria = {}
+    for g in gastos:
+        por_categoria[g.categoria] = round(por_categoria.get(g.categoria, 0) + (g.monto or 0), 2)
+    return jsonify({"total": total, "por_categoria": por_categoria, "count": len(gastos)})
+
+
+@app.route("/api/gastos/trash", methods=["GET"])
+@login_required
+def list_gastos_trash():
+    gastos = (GastoOperativo.query.filter(GastoOperativo.account_id == current_account_id(),
+                                           GastoOperativo.deleted_at.isnot(None))
+              .order_by(GastoOperativo.deleted_at.desc()).all())
+    return jsonify([_gasto_to_dict(g) for g in gastos])
+
+
+@app.route("/api/gastos/<int:gasto_id>", methods=["GET"])
+@login_required
+def get_gasto(gasto_id):
+    g = GastoOperativo.query.filter_by(id=gasto_id, account_id=current_account_id()).first_or_404()
+    return jsonify(_gasto_to_dict(g))
+
+
+@app.route("/api/gastos", methods=["POST"])
+@login_required
+def create_gasto():
+    data = request.json or {}
+    descripcion = (data.get("descripcion") or "").strip()
+    if not descripcion:
+        return jsonify({"error": "La descripción es requerida."}), 400
+    try:
+        monto = float(data.get("monto", 0) or 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "El monto debe ser un número."}), 400
+    if monto <= 0:
+        return jsonify({"error": "El monto debe ser mayor a cero."}), 400
+
+    now = datetime.utcnow().strftime("%Y-%m-%d")
+    g = GastoOperativo(
+        account_id=current_account_id(),
+        fecha=data.get("fecha") or now,
+        categoria=data.get("categoria") or "Otros",
+        descripcion=descripcion,
+        proveedor=(data.get("proveedor") or "").strip(),
+        monto=monto,
+        created_at=now,
+        updated_at=now,
+    )
+    db.session.add(g)
+    db.session.commit()
+    return jsonify(_gasto_to_dict(g)), 201
+
+
+@app.route("/api/gastos/<int:gasto_id>", methods=["PUT"])
+@login_required
+def update_gasto(gasto_id):
+    g = GastoOperativo.query.filter_by(id=gasto_id, account_id=current_account_id()).first_or_404()
+    data = request.json or {}
+
+    if "descripcion" in data:
+        descripcion = (data.get("descripcion") or "").strip()
+        if not descripcion:
+            return jsonify({"error": "La descripción es requerida."}), 400
+        g.descripcion = descripcion
+    if "monto" in data:
+        try:
+            monto = float(data.get("monto") or 0)
+        except (TypeError, ValueError):
+            return jsonify({"error": "El monto debe ser un número."}), 400
+        if monto <= 0:
+            return jsonify({"error": "El monto debe ser mayor a cero."}), 400
+        g.monto = monto
+    g.fecha = data.get("fecha", g.fecha)
+    g.categoria = data.get("categoria", g.categoria)
+    g.proveedor = (data.get("proveedor", g.proveedor) or "").strip()
+    g.updated_at = datetime.utcnow().strftime("%Y-%m-%d")
+
+    db.session.commit()
+    return jsonify(_gasto_to_dict(g))
+
+
+@app.route("/api/gastos/<int:gasto_id>", methods=["DELETE"])
+@login_required
+def delete_gasto(gasto_id):
+    g = GastoOperativo.query.filter_by(id=gasto_id, account_id=current_account_id(), deleted_at=None).first_or_404()
+    g.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    db.session.commit()
+    return "", 204
+
+
+@app.route("/api/gastos/<int:gasto_id>/restore", methods=["POST"])
+@login_required
+def restore_gasto(gasto_id):
+    g = GastoOperativo.query.filter(GastoOperativo.id == gasto_id, GastoOperativo.account_id == current_account_id(),
+                                     GastoOperativo.deleted_at.isnot(None)).first_or_404()
+    g.deleted_at = None
+    db.session.commit()
+    return jsonify(_gasto_to_dict(g))
+
+
+@app.route("/api/gastos/<int:gasto_id>/permanent", methods=["DELETE"])
+@login_required
+def permanent_delete_gasto(gasto_id):
+    g = GastoOperativo.query.filter(GastoOperativo.id == gasto_id, GastoOperativo.account_id == current_account_id(),
+                                     GastoOperativo.deleted_at.isnot(None)).first_or_404()
+    db.session.delete(g)
+    db.session.commit()
+    return "", 204
 
 
 if __name__ == "__main__":

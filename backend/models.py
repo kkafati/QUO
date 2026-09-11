@@ -363,3 +363,27 @@ class ProformaLine(db.Model):
     descripcion = db.Column(db.String(500), nullable=False)
     precio_unitario = db.Column(db.Float, nullable=False, default=0)
 
+
+GASTO_CATEGORIAS = [
+    "Materiales", "Mano de Obra / Nómina", "Transporte", "Servicios (agua, luz, internet)",
+    "Alquiler", "Impuestos", "Herramientas / Equipo", "Otros",
+]
+
+
+class GastoOperativo(db.Model):
+    """A real business operating expense (rent, payroll, fuel, utilities...) -
+    this is the Contabilidad module's expense ledger. Not to be confused with
+    the `Gasto` model above, which is a cost-catalog line item used only for
+    pricing quotes/fichas, not an actual company expense."""
+    __tablename__ = "gastos_operativos"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    fecha = db.Column(db.String(16), nullable=False)
+    categoria = db.Column(db.String(64), nullable=False, default="Otros")
+    descripcion = db.Column(db.String(255), nullable=False)
+    proveedor = db.Column(db.String(255))
+    monto = db.Column(db.Float, nullable=False, default=0)
+    created_at = db.Column(db.String(16))
+    updated_at = db.Column(db.String(16))
+    deleted_at = db.Column(db.String(16))
+
