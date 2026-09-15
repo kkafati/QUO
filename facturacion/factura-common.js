@@ -212,6 +212,7 @@ async function loadInvoice() {
   renderLines();
   updateTotals();
   document.getElementById("btnEliminar").style.display = "inline-block";
+  await loadPagos();
 }
 
 // ---- Cliente search/autocomplete (both name and RTN fields search the same client list) ----
@@ -381,6 +382,7 @@ document.getElementById("btnGuardar").addEventListener("click", async () => {
       setMoneyDisplay("t_isv18", data.isv_18);
       setMoneyDisplay("t_total", data.total_a_pagar);
       document.getElementById("totalEnLetras").textContent = data.total_en_letras;
+      await loadPagos(); // editing lines/descuentos can change total_a_pagar, so refresh saldo too
     }
   } catch (err) {
     statusMsg.textContent = "Error de conexión."; statusMsg.className = "status error";
@@ -419,5 +421,73 @@ if (estadoSwitcher) {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ estado: estadoSwitcher.value }),
     });
+  });
+}
+
+// ---- Pagos (payments) - only present on templates that include the
+// #pagosWrap markup (currently just ver.html), so every function here
+// guards on the element existing before touching it. ----
+let pagosCache = [];
+
+async function loadPagos() {
+  const pagosWrap = document.getElementById("pagosWrap");
+  if (!pagosWrap || !invoiceId) return;
+  pagosWrap.style.display = "block";
+  const [pagos, inv] = await Promise.all([
+    fetch(`/api/invoices/${invoiceId}/pagos`).then(r => r.json()),
+    fetch(`/api/invoices/${invoiceId}`).then(r => r.json()),
+  ]);
+  pagosCache = pagos;
+  renderPagos(inv);
+}
+
+function renderPagos(inv) {
+  document.getElementById("pagosSaldo").textContent = `Saldo: ${fmt(inv.saldo)}`;
+  document.getElementById("pagosDiscrepancy").hidden = !inv.estado_discrepancia;
+  document.getElementById("pagosEmpty").hidden = pagosCache.length > 0;
+  document.getElementById("pagosBody").innerHTML = pagosCache.map(p => `
+    <tr>
+      <td>${esc(p.fecha)}</td>
+      <td>${esc(p.metodo || "—")}</td>
+      <td>${esc(p.referencia || "—")}</td>
+      <td class="num">${fmt(p.monto)}</td>
+      <td><button type="button" class="remove-line-btn" data-del="${p.id}">×</button></td>
+    </tr>
+  `).join("");
+  document.querySelectorAll("#pagosBody [data-del]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("¿Eliminar este pago?")) return;
+      await fetch(`/api/pagos/${btn.dataset.del}`, { method: "DELETE" });
+      await loadPagos();
+    });
+  });
+  // Once payments fully cover the balance the server auto-sets estado to
+  // "Pagado" - keep the dropdown in sync without a page reload.
+  if (estadoSwitcher) estadoSwitcher.value = inv.estado || estadoSwitcher.value;
+}
+
+const btnAddPago = document.getElementById("btnAddPago");
+if (btnAddPago) {
+  document.getElementById("pagoFecha").value = new Date().toISOString().slice(0, 10);
+  btnAddPago.addEventListener("click", async () => {
+    const errorEl = document.getElementById("pagosError");
+    errorEl.textContent = "";
+    const body = {
+      monto: document.getElementById("pagoMonto").value,
+      fecha: document.getElementById("pagoFecha").value,
+      metodo: document.getElementById("pagoMetodo").value,
+      referencia: document.getElementById("pagoReferencia").value,
+    };
+    const res = await fetch(`/api/invoices/${invoiceId}/pagos`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errorEl.textContent = data.error || "Error al guardar el pago.";
+      return;
+    }
+    document.getElementById("pagoMonto").value = "";
+    document.getElementById("pagoReferencia").value = "";
+    await loadPagos();
   });
 }

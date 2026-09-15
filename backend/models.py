@@ -292,6 +292,7 @@ class Invoice(db.Model):
     deleted_at = db.Column(db.String(16))
 
     lines = db.relationship("InvoiceLine", backref="invoice", cascade="all, delete-orphan")
+    pagos = db.relationship("Pago", backref="invoice", cascade="all, delete-orphan")
 
 
 class InvoiceLine(db.Model):
@@ -301,6 +302,23 @@ class InvoiceLine(db.Model):
     cantidad = db.Column(db.Float, nullable=False, default=1)
     descripcion = db.Column(db.String(500), nullable=False)
     precio_unitario = db.Column(db.Float, nullable=False, default=0)
+
+
+class Pago(db.Model):
+    """A payment recorded against an Invoice - partial or full. Invoice.estado
+    stays a manually-settable field (the dropdown on the invoice page), but
+    once payments exist, a payment that fully covers total_a_pagar auto-sets
+    estado to "Pagado" (see create_pago in app.py). A payment's monto is
+    validated on create to never push the running total above total_a_pagar."""
+    __tablename__ = "pagos"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    invoice_id = db.Column(db.Integer, db.ForeignKey("invoices.id"), nullable=False)
+    monto = db.Column(db.Float, nullable=False, default=0)
+    fecha = db.Column(db.String(16), nullable=False)
+    metodo = db.Column(db.String(32))  # efectivo | transferencia | cheque | tarjeta
+    referencia = db.Column(db.String(255))
+    created_at = db.Column(db.String(16))
 
 
 class Cotizacion(db.Model):

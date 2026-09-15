@@ -123,6 +123,31 @@
   .toggle-gravado { margin-top: 6px; font-size: 11px; }
   .toggle-gravado label { cursor: pointer; }
 
+  /* ---- Pagos (payments) - a working tool, not part of the printed invoice ---- */
+  .pagos-wrap { max-width: 900px; margin: 0 auto 60px; }
+  .pagos-card { background: #fff; border-radius: 10px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); padding: 24px 28px; }
+  .pagos-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+  .pagos-head h2 { font-size: 15px; font-weight: 700; margin: 0; }
+  .pagos-saldo { font-family: 'Ubuntu', sans-serif; font-size: 13px; font-weight: 700; color: var(--ink); }
+  .pagos-discrepancy { background: rgba(181,69,59,0.1); color: #b5453b; border-radius: 6px; padding: 9px 12px; font-size: 12.5px; margin-bottom: 12px; }
+  .pagos-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 14px; }
+  .pagos-table th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); padding: 8px 10px; border-bottom: 1px solid #e7e9ec; }
+  .pagos-table th.num, .pagos-table td.num { text-align: right; }
+  .pagos-table td { padding: 8px 10px; border-bottom: 1px solid #f0f1f3; }
+  .pagos-empty { color: var(--ink-soft); font-size: 13px; padding: 10px 0; }
+  .pagos-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .pagos-form input, .pagos-form select { border: 1.5px solid #dde1e5; border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; }
+  .pagos-form input[type="number"] { width: 110px; }
+  .pagos-form input[type="date"] { width: 140px; }
+  .pagos-error { color: #b5453b; font-size: 12.5px; margin-top: 8px; min-height: 16px; }
+
+  @media screen and (max-width: 800px) {
+    .pagos-wrap { margin: 0 auto 40px; padding: 0 8px; }
+    .pagos-card { padding: 18px; }
+    .pagos-form { flex-direction: column; align-items: stretch; }
+    .pagos-form input, .pagos-form select { width: 100%; }
+  }
+
   @page { size: letter; margin: 0.5in; }
 
   @media screen and (max-width: 800px) {
@@ -150,6 +175,7 @@
     textarea.descripcion { height: auto !important; overflow: visible !important; white-space: pre-wrap; word-wrap: break-word; }
     .remove-line-btn, .add-line-row, .toggle-gravado { display: none !important; }
     .min-rows-spacer { height: auto !important; }
+    .pagos-wrap { display: none !important; }
   }
 
   .client-suggest, .line-suggest {
@@ -279,6 +305,37 @@
       <div class="foot-tagline">La factura es beneficio de todos "Exíjala"</div>
       </div>
 
+    </div>
+  </div>
+
+  <div class="pagos-wrap" id="pagosWrap" style="display:none">
+    <div class="pagos-card">
+      <div class="pagos-head">
+        <h2>Pagos</h2>
+        <div class="pagos-saldo" id="pagosSaldo">Saldo: L. 0.00</div>
+      </div>
+      <div class="pagos-discrepancy" id="pagosDiscrepancy" hidden>
+        ⚠ Esta factura está marcada como "Pagado" pero el saldo no es cero. Revisa los pagos registrados.
+      </div>
+      <table class="pagos-table">
+        <thead><tr><th>Fecha</th><th>Método</th><th>Referencia</th><th class="num">Monto</th><th></th></tr></thead>
+        <tbody id="pagosBody"></tbody>
+      </table>
+      <div class="pagos-empty" id="pagosEmpty" hidden>Aún no hay pagos registrados.</div>
+
+      <div class="pagos-form">
+        <input type="date" id="pagoFecha">
+        <select id="pagoMetodo">
+          <option value="efectivo">Efectivo</option>
+          <option value="transferencia">Transferencia</option>
+          <option value="cheque">Cheque</option>
+          <option value="tarjeta">Tarjeta</option>
+        </select>
+        <input type="text" id="pagoReferencia" placeholder="Referencia (opcional)">
+        <input type="number" id="pagoMonto" step="0.01" placeholder="Monto">
+        <button type="button" class="btn btn-primary" id="btnAddPago">+ Agregar Pago</button>
+      </div>
+      <div class="pagos-error" id="pagosError"></div>
     </div>
   </div>
 

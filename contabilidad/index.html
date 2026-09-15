@@ -64,6 +64,20 @@
   .text-danger { color: var(--danger); }
   tr.total-row td { font-weight: 700; background: #fafbfc; border-top: 1.5px solid #e7e9ec; }
 
+  .cxc-note { display: block; font-size: 11px; font-weight: 400; color: var(--ink-soft); margin-top: 3px; }
+  .bucket-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .bucket-0-30 { background: rgba(63,143,106,0.14); color: var(--good); }
+  .bucket-31-60 { background: rgba(6,93,172,0.1); color: var(--blue); }
+  .bucket-60\+ { background: rgba(181,69,59,0.14); color: var(--danger); }
+  tr.overdue td:first-child { border-left: 4px solid var(--danger); }
+
+  .er-report { display: flex; flex-direction: column; gap: 4px; max-width: 420px; background: #fff; border: 1px solid #e7e9ec; border-radius: 12px; padding: 20px 22px; }
+  .er-row { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; font-size: 15px; border-bottom: 1px solid #f0f1f3; }
+  .er-row:last-child { border-bottom: none; }
+  .er-row .mono { font-size: 17px; font-weight: 600; }
+  .er-grand { margin-top: 4px; padding-top: 14px; border-top: 1.5px solid #e7e9ec; font-size: 17px; font-weight: 700; }
+  .er-grand .mono { font-size: 22px; }
+
   .modal-backdrop { position: fixed; inset: 0; background: rgba(15,41,66,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
   .modal-backdrop[hidden] { display: none; }
   .modal { background: #fff; border-radius: 12px; padding: 24px; width: 720px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
@@ -208,16 +222,12 @@
 
           <div class="summary-row">
             <div class="summary-card total">
-              <div class="label">Ingresos en el período</div>
+              <div class="label">Total Facturado<small>Sin ISV — no es ingreso, es un pasivo</small></div>
               <div class="value mono" id="ingSummaryTotal">L. 0.00</div>
             </div>
             <div class="summary-card">
-              <div class="label">ISV cobrado<small>Para declarar al SAR</small></div>
+              <div class="label">ISV Cobrado<small>Para declarar al SAR</small></div>
               <div class="value mono" id="ingSummaryIsv">L. 0.00</div>
-            </div>
-            <div class="summary-card">
-              <div class="label">Cuentas por cobrar<small>Todas las facturas Falta Pago, sin importar el filtro</small></div>
-              <div class="value mono" id="ingSummaryPorCobrar">L. 0.00</div>
             </div>
           </div>
 
@@ -230,25 +240,20 @@
               <label>Hasta</label>
               <input type="date" id="ingFilterHasta">
             </div>
-            <div class="filter-field">
-              <label>Estado</label>
-              <select id="ingFilterEstado">
-                <option value="">Todos</option>
-                <option value="Pagado">Pagado</option>
-                <option value="Falta Pago">Falta Pago</option>
-                <option value="En Proceso">En Proceso</option>
-              </select>
-            </div>
             <button class="btn btn-ghost" id="ingBtnClearFilter">Limpiar filtro</button>
+          </div>
+
+          <div class="head-row" style="margin-top:8px">
+            <h1 style="font-size:16px">Cuentas por Cobrar<span class="cxc-note">Todas las facturas con saldo pendiente, sin importar el filtro de arriba</span></h1>
           </div>
 
           <div class="table-scroll"><table>
             <thead><tr>
-              <th>Fecha</th><th>Factura #</th><th>Cliente</th><th>Estado</th><th class="num">ISV</th><th class="num">Total</th>
+              <th>Cliente</th><th>Factura #</th><th>Fecha</th><th class="num">Saldo</th><th class="num">Días</th><th>Antigüedad</th>
             </tr></thead>
-            <tbody id="ingresosBody"></tbody>
+            <tbody id="cxcBody"></tbody>
           </table></div>
-          <div class="empty-state" id="ingEmptyState" hidden>No hay facturas en este período.</div>
+          <div class="empty-state" id="cxcEmptyState" hidden>No hay cuentas por cobrar pendientes.</div>
         </div>
       </section>
 
@@ -258,35 +263,23 @@
             <h1>Reportes</h1>
           </div>
 
-          <div class="summary-row">
-            <div class="summary-card">
-              <div class="label">Ingresos totales</div>
-              <div class="value mono" id="pnlSummaryIngresos">L. 0.00</div>
-            </div>
-            <div class="summary-card">
-              <div class="label">Gastos totales</div>
-              <div class="value mono" id="pnlSummaryGastos">L. 0.00</div>
-            </div>
-            <div class="summary-card">
-              <div class="label">Utilidad neta</div>
-              <div class="value mono" id="pnlSummaryUtilidad">L. 0.00</div>
-            </div>
-          </div>
-
           <div class="filter-row">
             <div class="filter-field">
-              <label>Año</label>
-              <select id="pnlFilterAnio"><option value="">Todos</option></select>
+              <label>Desde</label>
+              <input type="date" id="erFilterDesde">
             </div>
+            <div class="filter-field">
+              <label>Hasta</label>
+              <input type="date" id="erFilterHasta">
+            </div>
+            <button class="btn btn-ghost" id="erBtnClearFilter">Limpiar filtro</button>
           </div>
 
-          <div class="table-scroll"><table>
-            <thead><tr>
-              <th>Mes</th><th class="num">Ingresos</th><th class="num">Gastos</th><th class="num">Utilidad</th><th class="num">Margen</th>
-            </tr></thead>
-            <tbody id="pnlBody"></tbody>
-          </table></div>
-          <div class="empty-state" id="pnlEmptyState" hidden>Aún no hay ingresos ni gastos registrados.</div>
+          <div class="er-report">
+            <div class="er-row"><span>Ingresos</span><span class="mono" id="erIngresos">L. 0.00</span></div>
+            <div class="er-row"><span>Gastos</span><span class="mono" id="erGastos">L. 0.00</span></div>
+            <div class="er-row er-grand"><span>Utilidad</span><span class="mono" id="erUtilidad">L. 0.00</span></div>
+          </div>
         </div>
       </section>
     </div>
@@ -575,9 +568,10 @@ document.getElementById("closeTrash").addEventListener("click", () => {
   loadGastos();
 });
 
-// ---- Ingresos (read-only reporting lens over existing invoices) ----
+// ---- Ingresos: Total Facturado / ISV Cobrado (date-filtered) + Cuentas por
+// Cobrar aging (always shows every outstanding invoice, regardless of filter -
+// an unpaid invoice from last month is still owed today) ----
 
-let ingresosCache = [];
 let ingresosLoaded = false;
 
 function currentIngresoFilterParams() {
@@ -591,147 +585,68 @@ function currentIngresoFilterParams() {
 
 async function loadIngresos() {
   const params = currentIngresoFilterParams();
-  const estado = document.getElementById("ingFilterEstado").value;
-
-  // Cuentas por cobrar is a snapshot of everything currently unpaid, not
-  // bounded by the date filter - an unpaid invoice from last month is still
-  // owed today - so it always comes from the full, unfiltered invoice list.
-  const [enRango, todas] = await Promise.all([
-    fetch(`/api/invoices?${params.toString()}`).then(r => r.json()),
-    fetch("/api/invoices").then(r => r.json()),
+  const [resumen, cxc] = await Promise.all([
+    fetch(`/api/contabilidad/ingresos?${params.toString()}`).then(r => r.json()),
+    fetch("/api/contabilidad/cuentas-por-cobrar").then(r => r.json()),
   ]);
 
-  ingresosCache = estado ? enRango.filter(i => i.estado === estado) : enRango;
+  document.getElementById("ingSummaryTotal").textContent = fmt(resumen.total_facturado);
+  document.getElementById("ingSummaryIsv").textContent = fmt(resumen.isv_collected);
 
-  const totalIngresos = ingresosCache.reduce((s, i) => s + (i.total_a_pagar || 0), 0);
-  const totalIsv = ingresosCache.reduce((s, i) => s + (i.isv_15 || 0) + (i.isv_18 || 0), 0);
-  const totalPorCobrar = todas.filter(i => i.estado === "Falta Pago").reduce((s, i) => s + (i.total_a_pagar || 0), 0);
-
-  document.getElementById("ingSummaryTotal").textContent = fmt(totalIngresos);
-  document.getElementById("ingSummaryIsv").textContent = fmt(totalIsv);
-  document.getElementById("ingSummaryPorCobrar").textContent = fmt(totalPorCobrar);
-
-  document.getElementById("ingEmptyState").hidden = ingresosCache.length > 0;
-  document.getElementById("ingresosBody").innerHTML = ingresosCache.map(i => `
-    <tr class="clickable" onclick="window.location.href='/facturacion/ver/?id=${i.id}'">
-      <td>${esc(i.fecha)}</td>
-      <td class="mono">${esc(i.numero)}</td>
-      <td>${esc(i.cliente_nombre)}</td>
-      <td><span class="estado-badge estado-${(i.estado || "").replace(/\s+/g, "")}">${esc(i.estado || "Falta Pago")}</span></td>
-      <td class="num mono">${fmt((i.isv_15 || 0) + (i.isv_18 || 0))}</td>
-      <td class="num mono">${fmt(i.total_a_pagar)}</td>
+  document.getElementById("cxcEmptyState").hidden = cxc.length > 0;
+  document.getElementById("cxcBody").innerHTML = cxc.map(c => `
+    <tr class="clickable ${c.bucket === "60+" ? "overdue" : ""}" onclick="window.location.href='/facturacion/ver/?id=${c.id}'">
+      <td>${esc(c.cliente_nombre)}</td>
+      <td class="mono">${esc(c.numero)}</td>
+      <td>${esc(c.fecha)}</td>
+      <td class="num mono">${fmt(c.saldo)}</td>
+      <td class="num mono">${c.dias_transcurridos}</td>
+      <td><span class="bucket-badge bucket-${c.bucket}">${esc(c.bucket)}</span></td>
     </tr>
   `).join("");
 }
 
 document.getElementById("ingFilterDesde").addEventListener("change", loadIngresos);
 document.getElementById("ingFilterHasta").addEventListener("change", loadIngresos);
-document.getElementById("ingFilterEstado").addEventListener("change", loadIngresos);
 document.getElementById("ingBtnClearFilter").addEventListener("click", () => {
   document.getElementById("ingFilterDesde").value = "";
   document.getElementById("ingFilterHasta").value = "";
-  document.getElementById("ingFilterEstado").value = "";
   loadIngresos();
 });
 
-// ---- Reportes: basic P&L (Ingresos - Gastos = Utilidad), by month ----
-// No new data - just aggregates the same invoices and gastos the other two
-// tabs already show, grouped by the YYYY-MM prefix of their fecha.
+// ---- Reportes: basic Estado de Resultados (Ingresos - Gastos = Utilidad)
+// for a chosen date range ----
 
-const MESES_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-function monthLabel(key) {
-  const [y, m] = key.split("-");
-  return `${MESES_ES[Number(m) - 1]} ${y}`;
+let reportesLoaded = false;
+
+function currentEstadoResultadosParams() {
+  const params = new URLSearchParams();
+  const desde = document.getElementById("erFilterDesde").value;
+  const hasta = document.getElementById("erFilterHasta").value;
+  if (desde) params.set("desde", desde);
+  if (hasta) params.set("hasta", hasta);
+  return params;
 }
 
-let pnlLoaded = false;
-let pnlData = null; // { invoices, gastos }, fetched once - both already excl. deleted/trashed
+async function loadEstadoResultados() {
+  const params = currentEstadoResultadosParams();
+  const er = await fetch(`/api/contabilidad/estado-resultados?${params.toString()}`).then(r => r.json());
 
-async function loadPnlData() {
-  const [invoices, gastos] = await Promise.all([
-    fetch("/api/invoices").then(r => r.json()),
-    fetch("/api/gastos").then(r => r.json()),
-  ]);
-  pnlData = { invoices, gastos };
-  populatePnlAnioFilter();
-  renderPnl();
-}
-
-function populatePnlAnioFilter() {
-  const years = new Set();
-  pnlData.invoices.forEach(i => years.add(i.fecha.slice(0, 4)));
-  pnlData.gastos.forEach(g => years.add(g.fecha.slice(0, 4)));
-  const sel = document.getElementById("pnlFilterAnio");
-  const previous = sel.value;
-  const sorted = [...years].sort().reverse();
-  sel.innerHTML = '<option value="">Todos</option>' + sorted.map(y => `<option value="${y}">${y}</option>`).join("");
-  sel.value = sorted.includes(previous) ? previous : "";
-}
-
-function renderPnl() {
-  const anio = document.getElementById("pnlFilterAnio").value;
-  const byMonth = {};
-  const bump = (key, field, amount) => {
-    if (!byMonth[key]) byMonth[key] = { ingresos: 0, gastos: 0 };
-    byMonth[key][field] += amount;
-  };
-  pnlData.invoices.forEach(i => {
-    if (anio && !i.fecha.startsWith(anio)) return;
-    bump(i.fecha.slice(0, 7), "ingresos", i.total_a_pagar || 0);
-  });
-  pnlData.gastos.forEach(g => {
-    if (anio && !g.fecha.startsWith(anio)) return;
-    bump(g.fecha.slice(0, 7), "gastos", g.monto || 0);
-  });
-
-  const months = Object.keys(byMonth).sort().reverse();
-  let totalIngresos = 0, totalGastos = 0;
-
-  const rows = months.map(key => {
-    const { ingresos, gastos } = byMonth[key];
-    const utilidad = ingresos - gastos;
-    const margen = ingresos > 0 ? (utilidad / ingresos * 100) : null;
-    totalIngresos += ingresos;
-    totalGastos += gastos;
-    const cls = utilidad >= 0 ? "text-good" : "text-danger";
-    return `
-      <tr>
-        <td>${esc(monthLabel(key))}</td>
-        <td class="num mono">${fmt(ingresos)}</td>
-        <td class="num mono">${fmt(gastos)}</td>
-        <td class="num mono ${cls}">${fmt(utilidad)}</td>
-        <td class="num mono ${cls}">${margen === null ? "—" : margen.toFixed(1) + "%"}</td>
-      </tr>
-    `;
-  });
-
-  const utilidadTotal = totalIngresos - totalGastos;
-  const margenTotal = totalIngresos > 0 ? (utilidadTotal / totalIngresos * 100) : null;
-  const totalCls = utilidadTotal >= 0 ? "text-good" : "text-danger";
-  if (months.length) {
-    rows.push(`
-      <tr class="total-row">
-        <td>Total</td>
-        <td class="num mono">${fmt(totalIngresos)}</td>
-        <td class="num mono">${fmt(totalGastos)}</td>
-        <td class="num mono ${totalCls}">${fmt(utilidadTotal)}</td>
-        <td class="num mono ${totalCls}">${margenTotal === null ? "—" : margenTotal.toFixed(1) + "%"}</td>
-      </tr>
-    `);
-  }
-
-  document.getElementById("pnlEmptyState").hidden = months.length > 0;
-  document.getElementById("pnlBody").innerHTML = rows.join("");
-
-  document.getElementById("pnlSummaryIngresos").textContent = fmt(totalIngresos);
-  document.getElementById("pnlSummaryGastos").textContent = fmt(totalGastos);
-  const utilEl = document.getElementById("pnlSummaryUtilidad");
-  utilEl.textContent = fmt(utilidadTotal);
+  document.getElementById("erIngresos").textContent = fmt(er.ingresos);
+  document.getElementById("erGastos").textContent = fmt(er.gastos);
+  const utilEl = document.getElementById("erUtilidad");
+  utilEl.textContent = fmt(er.utilidad);
   utilEl.classList.remove("text-good", "text-danger");
-  utilEl.classList.add(totalCls);
+  utilEl.classList.add(er.utilidad >= 0 ? "text-good" : "text-danger");
 }
 
-document.getElementById("pnlFilterAnio").addEventListener("change", renderPnl);
+document.getElementById("erFilterDesde").addEventListener("change", loadEstadoResultados);
+document.getElementById("erFilterHasta").addEventListener("change", loadEstadoResultados);
+document.getElementById("erBtnClearFilter").addEventListener("click", () => {
+  document.getElementById("erFilterDesde").value = "";
+  document.getElementById("erFilterHasta").value = "";
+  loadEstadoResultados();
+});
 
 // ---- Sidebar view switching ----
 
@@ -745,9 +660,9 @@ document.querySelectorAll(".nav-item[data-view]").forEach(btn => {
       ingresosLoaded = true;
       loadIngresos();
     }
-    if (btn.dataset.view === "reportes" && !pnlLoaded) {
-      pnlLoaded = true;
-      loadPnlData();
+    if (btn.dataset.view === "reportes" && !reportesLoaded) {
+      reportesLoaded = true;
+      loadEstadoResultados();
     }
   });
 });

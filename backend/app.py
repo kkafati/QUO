@@ -6,7 +6,7 @@ from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
 from werkzeug.security import check_password_hash, generate_password_hash
-from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GastoOperativoItem, GASTO_CATEGORIAS, StockMovimiento
+from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GastoOperativoItem, GASTO_CATEGORIAS, StockMovimiento, Pago
 from numero_a_letras import numero_a_letras
 from pdf_render import render_invoice_pdf
 from pdf_render_cotizacion import render_cotizacion_pdf
@@ -1467,6 +1467,11 @@ def permanent_delete_cliente(cliente_id):
     return "", 204
 
 
+def compute_invoice_pagado(invoice_id):
+    total = db.session.query(db.func.sum(Pago.monto)).filter(Pago.invoice_id == invoice_id).scalar()
+    return round(total or 0, 2)
+
+
 def compute_invoice_totals(invoice):
     lines = []
     subtotal = 0.0
@@ -1494,6 +1499,12 @@ def compute_invoice_totals(invoice):
 
     total_a_pagar = round(subtotal - descuentos + isv_15 + isv_18, 2)
 
+    total_pagado = compute_invoice_pagado(invoice.id)
+    saldo = round(total_a_pagar - total_pagado, 2)
+    # Surface (never silently hide) a manually-set "Pagado" that disagrees
+    # with what's actually been paid, instead of trusting the label blindly.
+    estado_discrepancia = invoice.estado == "Pagado" and saldo > 0.01
+
     return {
         "id": invoice.id,
         "numero": invoice.numero,
@@ -1514,6 +1525,9 @@ def compute_invoice_totals(invoice):
         "isv_15": isv_15,
         "isv_18": isv_18,
         "total_a_pagar": total_a_pagar,
+        "total_pagado": total_pagado,
+        "saldo": saldo,
+        "estado_discrepancia": estado_discrepancia,
         "total_en_letras": numero_a_letras(total_a_pagar),
         "orden_compra_exenta": invoice.orden_compra_exenta,
         "constancia_registro_exonerado": invoice.constancia_registro_exonerado,
@@ -1773,6 +1787,85 @@ def permanent_delete_invoice(invoice_id):
                                     Invoice.deleted_at.isnot(None)).first_or_404()
     db.session.delete(invoice)
     db.session.commit()
+    return "", 204
+
+
+# ---------------------------------------------------------------------------
+# Pagos (payments recorded against an Invoice)
+# ---------------------------------------------------------------------------
+
+def pago_to_dict(p):
+    return {
+        "id": p.id,
+        "invoice_id": p.invoice_id,
+        "monto": p.monto,
+        "fecha": p.fecha,
+        "metodo": p.metodo,
+        "referencia": p.referencia,
+        "created_at": p.created_at,
+    }
+
+
+@app.route("/api/invoices/<int:invoice_id>/pagos", methods=["GET"])
+@login_required
+def list_pagos(invoice_id):
+    invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id()).first_or_404()
+    pagos = Pago.query.filter_by(invoice_id=invoice.id).order_by(Pago.fecha.desc(), Pago.id.desc()).all()
+    return jsonify([pago_to_dict(p) for p in pagos])
+
+
+@app.route("/api/invoices/<int:invoice_id>/pagos", methods=["POST"])
+@login_required
+def create_pago(invoice_id):
+    invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id()).first_or_404()
+    data = request.json or {}
+    try:
+        monto = float(data.get("monto", 0) or 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "El monto debe ser un número."}), 400
+    if monto <= 0:
+        return jsonify({"error": "El monto debe ser mayor a cero."}), 400
+
+    totals = compute_invoice_totals(invoice)
+    ya_pagado = totals["total_pagado"]
+    # A payment can never push the running total above what's actually owed -
+    # allow a tiny epsilon for float rounding, not a real overpayment.
+    if ya_pagado + monto > totals["total_a_pagar"] + 0.01:
+        saldo_pendiente = round(totals["total_a_pagar"] - ya_pagado, 2)
+        return jsonify({"error": f"Este pago excede el saldo pendiente de la factura (L. {saldo_pendiente:.2f})."}), 400
+
+    now = datetime.utcnow().strftime("%Y-%m-%d")
+    p = Pago(
+        account_id=current_account_id(),
+        invoice_id=invoice.id,
+        monto=monto,
+        fecha=data.get("fecha") or now,
+        metodo=(data.get("metodo") or "").strip(),
+        referencia=(data.get("referencia") or "").strip(),
+        created_at=now,
+    )
+    db.session.add(p)
+    db.session.commit()
+
+    # Auto-suggest: once payments fully cover the balance, mark it Pagado -
+    # but this only ever moves estado TOWARD Pagado, never away from a value
+    # someone set manually for other reasons (see Pago model docstring).
+    nuevo_pagado = round(ya_pagado + monto, 2)
+    if nuevo_pagado >= totals["total_a_pagar"] - 0.01 and invoice.estado != "Pagado":
+        invoice.estado = "Pagado"
+        db.session.commit()
+
+    return jsonify(pago_to_dict(p)), 201
+
+
+@app.route("/api/pagos/<int:pago_id>", methods=["DELETE"])
+@login_required
+def delete_pago(pago_id):
+    p = Pago.query.filter_by(id=pago_id, account_id=current_account_id()).first_or_404()
+    db.session.delete(p)
+    db.session.commit()
+    # Deliberately does NOT revert estado - if this leaves a "Pagado" invoice
+    # underpaid, that discrepancy surfaces via estado_discrepancia instead.
     return "", 204
 
 
@@ -2575,6 +2668,95 @@ def permanent_delete_gasto(gasto_id):
     db.session.delete(g)
     db.session.commit()
     return "", 204
+
+
+# ---------------------------------------------------------------------------
+# Contabilidad - Ingresos, Cuentas por Cobrar, Estado de Resultados
+# ---------------------------------------------------------------------------
+
+@app.route("/api/contabilidad/ingresos", methods=["GET"])
+@login_required
+def contabilidad_ingresos():
+    """Total facturado (pre-tax revenue) and ISV collected, for a date range.
+    ISV is kept separate on purpose - it's a liability the business collects
+    on behalf of SAR, not income, so it must never be folded into revenue."""
+    q = Invoice.query.filter_by(account_id=current_account_id(), deleted_at=None)
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    if desde:
+        q = q.filter(Invoice.fecha >= desde)
+    if hasta:
+        q = q.filter(Invoice.fecha <= hasta)
+    totals = [compute_invoice_totals(i) for i in q.all()]
+    total_facturado = round(sum(t["subtotal"] for t in totals), 2)
+    isv_collected = round(sum(t["isv_15"] + t["isv_18"] for t in totals), 2)
+    return jsonify({"total_facturado": total_facturado, "isv_collected": isv_collected, "count": len(totals)})
+
+
+@app.route("/api/contabilidad/cuentas-por-cobrar", methods=["GET"])
+@login_required
+def contabilidad_cuentas_por_cobrar():
+    """Every non-deleted invoice with an outstanding balance (saldo > 0),
+    bucketed by days since `fecha` (issue date).
+
+    SIMPLIFICATION: Invoice has no due-date field yet - only `fecha` and
+    termino_pago, no dias_credito/fecha_vencimiento - so this buckets against
+    the issue date, not a formal due date. A future pass could add a real
+    due-date field if that distinction becomes necessary; out of scope here."""
+    invoices = Invoice.query.filter_by(account_id=current_account_id(), deleted_at=None).all()
+    hoy = datetime.utcnow().date()
+    result = []
+    for inv in invoices:
+        t = compute_invoice_totals(inv)
+        if t["saldo"] <= 0.01:
+            continue
+        try:
+            dias_transcurridos = (hoy - datetime.strptime(inv.fecha, "%Y-%m-%d").date()).days
+        except (TypeError, ValueError):
+            dias_transcurridos = 0
+        if dias_transcurridos <= 30:
+            bucket = "0-30"
+        elif dias_transcurridos <= 60:
+            bucket = "31-60"
+        else:
+            bucket = "60+"
+        result.append({
+            "id": inv.id,
+            "numero": inv.numero,
+            "cliente_nombre": inv.cliente_nombre,
+            "fecha": inv.fecha,
+            "total_a_pagar": t["total_a_pagar"],
+            "total_pagado": t["total_pagado"],
+            "saldo": t["saldo"],
+            "dias_transcurridos": dias_transcurridos,
+            "bucket": bucket,
+        })
+    result.sort(key=lambda r: r["dias_transcurridos"], reverse=True)
+    return jsonify(result)
+
+
+@app.route("/api/contabilidad/estado-resultados", methods=["GET"])
+@login_required
+def contabilidad_estado_resultados():
+    """Basic P&L for a date range: Ingresos (pre-tax) - Gastos = Utilidad."""
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+
+    inv_q = Invoice.query.filter_by(account_id=current_account_id(), deleted_at=None)
+    if desde:
+        inv_q = inv_q.filter(Invoice.fecha >= desde)
+    if hasta:
+        inv_q = inv_q.filter(Invoice.fecha <= hasta)
+    ingresos = round(sum(compute_invoice_totals(i)["subtotal"] for i in inv_q.all()), 2)
+
+    gasto_q = GastoOperativo.query.filter_by(account_id=current_account_id(), deleted_at=None)
+    if desde:
+        gasto_q = gasto_q.filter(GastoOperativo.fecha >= desde)
+    if hasta:
+        gasto_q = gasto_q.filter(GastoOperativo.fecha <= hasta)
+    gastos = round(sum(g.monto or 0 for g in gasto_q.all()), 2)
+
+    return jsonify({"ingresos": ingresos, "gastos": gastos, "utilidad": round(ingresos - gastos, 2)})
 
 
 # ---------------------------------------------------------------------------
