@@ -6,7 +6,7 @@ from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
 from werkzeug.security import check_password_hash, generate_password_hash
-from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GastoOperativoItem, GASTO_CATEGORIAS, StockMovimiento, Pago
+from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GastoOperativoItem, GASTO_CATEGORIAS, StockMovimiento, Pago, CuentaContable, AsientoContable, AsientoLinea, CuentaPorPagar, PagoProveedor, MovimientoBancario, GASTO_CATEGORIA_CODIGOS
 from numero_a_letras import numero_a_letras
 from pdf_render import render_invoice_pdf
 from pdf_render_cotizacion import render_cotizacion_pdf
@@ -1654,6 +1654,15 @@ def _validate_invoice_date(account_id, fecha, exclude_invoice_id=None):
 
 
 def _sync_invoice_lines(invoice, lines_data):
+    """Does NOT commit - callers control the transaction boundary, since
+    create_invoice needs the invoice, its lines, and its posted asiento to
+    land atomically together (see crear_asiento's own commit).
+
+    For a brand-new (just-constructed, not yet committed) invoice,
+    invoice.lines starts as an empty in-memory collection and - unlike after
+    a commit, which expires it - a plain flush() does NOT make SQLAlchemy
+    re-query it. Without the explicit expire below, compute_invoice_totals()
+    would see zero lines here and post an empty (rejected) asiento."""
     for ln in list(invoice.lines):
         db.session.delete(ln)
     db.session.flush()
@@ -1664,7 +1673,8 @@ def _sync_invoice_lines(invoice, lines_data):
             descripcion=(ln.get("descripcion") or "").strip(),
             precio_unitario=float(ln.get("precio_unitario", 0) or 0),
         ))
-    db.session.commit()
+    db.session.flush()
+    db.session.expire(invoice, ["lines"])
 
 
 @app.route("/api/invoices", methods=["POST"])
@@ -1709,11 +1719,21 @@ def create_invoice():
         updated_at=datetime.utcnow().strftime("%Y-%m-%d"),
     )
     db.session.add(invoice)
-    db.session.commit()
+    db.session.flush()  # get invoice.id, without committing yet - see below
     _sync_invoice_lines(invoice, data.get("lines", []))
 
     account.next_invoice_number = (account.next_invoice_number or 1) + 1
-    db.session.commit()
+
+    # Post the asiento in the SAME transaction as the invoice/lines above: the
+    # invoice was only flush()'d, not committed, so if posting fails (it
+    # shouldn't - the lines below are constructed to always balance - but the
+    # check is the one invariant that must never be skipped) everything rolls
+    # back together instead of leaving an invoice with no journal entry.
+    try:
+        post_factura_asiento(invoice)
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({"error": f"No se pudo registrar el asiento contable: {e}"}), 400
 
     return jsonify(compute_invoice_totals(invoice)), 201
 
@@ -1845,7 +1865,13 @@ def create_pago(invoice_id):
         created_at=now,
     )
     db.session.add(p)
-    db.session.commit()
+    db.session.flush()  # get p.id for posting, commit happens with the asiento below
+
+    try:
+        post_pago_asiento(p, invoice)
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({"error": f"No se pudo registrar el asiento contable: {e}"}), 400
 
     # Auto-suggest: once payments fully cover the balance, mark it Pagado -
     # but this only ever moves estado TOWARD Pagado, never away from a value
@@ -2443,6 +2469,413 @@ def convertir_proforma_a_factura(pf_id):
 
 
 # ---------------------------------------------------------------------------
+# Contabilidad - Catálogo de Cuentas y Asientos Contables (Phase 2: real
+# double-entry bookkeeping). Every flow below that moves money - facturas,
+# pagos, gastos, cuentas por pagar, pagos a proveedores - posts a balanced
+# journal entry through crear_asiento(), the one function that enforces
+# sum(debe) == sum(haber). Historical rows created before this phase was
+# deployed do NOT get retroactive entries here - see scripts/backfill_ledger.py
+# for that, run manually and reviewed, never automatically.
+# ---------------------------------------------------------------------------
+
+def ensure_chart_of_accounts(account_id):
+    """Seeds a reasonable default Catálogo de Cuentas the first time this
+    account touches the ledger, so nobody has to set one up from zero before
+    anything can post. Idempotent - does nothing if accounts already exist."""
+    if CuentaContable.query.filter_by(account_id=account_id).first():
+        return
+    now = datetime.utcnow().strftime("%Y-%m-%d")
+
+    def add(codigo, nombre, tipo, padre_codigo=None):
+        padre = None
+        if padre_codigo:
+            padre = CuentaContable.query.filter_by(account_id=account_id, codigo=padre_codigo).first()
+        cuenta = CuentaContable(
+            account_id=account_id, codigo=codigo, nombre=nombre, tipo=tipo,
+            cuenta_padre_id=padre.id if padre else None, created_at=now,
+        )
+        db.session.add(cuenta)
+        db.session.flush()
+        return cuenta
+
+    add("1000", "Activo Circulante", "activo")
+    add("1010", "Caja y Bancos", "activo", "1000")
+    add("1020", "Cuentas por Cobrar", "activo", "1000")
+    add("1030", "Inventario", "activo", "1000")  # room for the Inventario module to post here later
+    add("2000", "Pasivo Circulante", "pasivo")
+    add("2010", "Cuentas por Pagar", "pasivo", "2000")
+    add("2020", "ISV por Pagar", "pasivo", "2000")
+    add("3000", "Patrimonio", "patrimonio")
+    add("3010", "Capital", "patrimonio", "3000")
+    add("3020", "Utilidades Retenidas", "patrimonio", "3000")
+    add("4000", "Ingresos", "ingreso")
+    add("4010", "Ventas", "ingreso", "4000")
+    add("5000", "Costos y Gastos", "gasto")
+    for categoria, codigo in GASTO_CATEGORIA_CODIGOS.items():
+        add(codigo, categoria, "gasto", "5000")
+    db.session.commit()
+
+
+def crear_asiento(account_id, fecha, descripcion, origen_type, origen_id, lineas):
+    """The ONLY function that should ever create an AsientoContable - every
+    posting path in this file goes through it so the balance check lives in
+    exactly one place. `lineas` is a list of {cuenta_codigo, debe, haber,
+    descripcion?}. Raises ValueError (never silently accepts) if debe/haber
+    don't sum to the same total, or if a cuenta_codigo doesn't resolve."""
+    ensure_chart_of_accounts(account_id)
+
+    # Drop no-op lines (e.g. an exempt invoice's ISV line, or a fully
+    # discounted Ventas line) - they'd otherwise clutter the asiento with a
+    # 0/0 row that contributes nothing to either side of the balance.
+    lineas = [l for l in lineas
+              if round(float(l.get("debe", 0) or 0), 2) != 0 or round(float(l.get("haber", 0) or 0), 2) != 0]
+
+    total_debe = round(sum(float(l.get("debe", 0) or 0) for l in lineas), 2)
+    total_haber = round(sum(float(l.get("haber", 0) or 0) for l in lineas), 2)
+    if total_debe != total_haber:
+        raise ValueError(f"Asiento desbalanceado: debe {total_debe} != haber {total_haber}.")
+    if total_debe == 0:
+        raise ValueError("El asiento no puede estar vacío.")
+
+    cuentas_por_codigo = {}
+    for l in lineas:
+        codigo = l["cuenta_codigo"]
+        if codigo not in cuentas_por_codigo:
+            cuenta = CuentaContable.query.filter_by(account_id=account_id, codigo=codigo, deleted_at=None).first()
+            if not cuenta:
+                raise ValueError(f"Cuenta contable '{codigo}' no encontrada.")
+            cuentas_por_codigo[codigo] = cuenta
+
+    asiento = AsientoContable(
+        account_id=account_id, fecha=fecha, descripcion=descripcion,
+        origen_type=origen_type, origen_id=origen_id,
+        created_at=datetime.utcnow().strftime("%Y-%m-%d"),
+    )
+    db.session.add(asiento)
+    db.session.flush()
+
+    for l in lineas:
+        db.session.add(AsientoLinea(
+            asiento_id=asiento.id, cuenta_contable_id=cuentas_por_codigo[l["cuenta_codigo"]].id,
+            debe=round(float(l.get("debe", 0) or 0), 2), haber=round(float(l.get("haber", 0) or 0), 2),
+            descripcion=l.get("descripcion"),
+        ))
+    db.session.commit()
+    return asiento
+
+
+# Each of these builds the lineas for one kind of transaction and posts them
+# through crear_asiento. Both the live create_* routes below AND
+# scripts/backfill_ledger.py call these SAME functions - never two separate
+# implementations of "how a factura posts" that could quietly drift apart.
+
+def post_factura_asiento(invoice):
+    totals = compute_invoice_totals(invoice)
+    return crear_asiento(
+        account_id=invoice.account_id, fecha=invoice.fecha,
+        descripcion=f"Factura {invoice.numero} - {invoice.cliente_nombre}",
+        origen_type="factura", origen_id=invoice.id,
+        lineas=[
+            {"cuenta_codigo": "1020", "debe": totals["total_a_pagar"], "haber": 0},
+            # Ventas is credited net of descuentos (not raw subtotal) so this
+            # always balances against total_a_pagar = subtotal - descuentos +
+            # isv by construction, even when an invoice has a discount.
+            {"cuenta_codigo": "4010", "debe": 0, "haber": round(totals["subtotal"] - totals["descuentos"], 2)},
+            {"cuenta_codigo": "2020", "debe": 0, "haber": round(totals["isv_15"] + totals["isv_18"], 2)},
+        ],
+    )
+
+
+def post_pago_asiento(pago, invoice):
+    return crear_asiento(
+        account_id=pago.account_id, fecha=pago.fecha,
+        descripcion=f"Pago factura {invoice.numero} - {invoice.cliente_nombre}",
+        origen_type="pago", origen_id=pago.id,
+        lineas=[
+            {"cuenta_codigo": "1010", "debe": pago.monto, "haber": 0},
+            {"cuenta_codigo": "1020", "debe": 0, "haber": pago.monto},
+        ],
+    )
+
+
+def post_gasto_asiento(gasto):
+    # GastoOperativo has no "paid on credit" concept (CuentaPorPagar exists
+    # for that) - assume it's paid immediately in cash/bank.
+    categoria_codigo = GASTO_CATEGORIA_CODIGOS.get(gasto.categoria, GASTO_CATEGORIA_CODIGOS["Otros"])
+    return crear_asiento(
+        account_id=gasto.account_id, fecha=gasto.fecha,
+        descripcion=f"Gasto: {gasto.descripcion}",
+        origen_type="gasto", origen_id=gasto.id,
+        lineas=[
+            {"cuenta_codigo": categoria_codigo, "debe": gasto.monto, "haber": 0},
+            {"cuenta_codigo": "1010", "debe": 0, "haber": gasto.monto},
+        ],
+    )
+
+
+def post_cuenta_por_pagar_asiento(cxp):
+    categoria_codigo = GASTO_CATEGORIA_CODIGOS.get(cxp.categoria, GASTO_CATEGORIA_CODIGOS["Otros"])
+    return crear_asiento(
+        account_id=cxp.account_id, fecha=cxp.fecha_emision,
+        descripcion=f"Cuenta por pagar: {cxp.proveedor} - {cxp.descripcion}",
+        origen_type="cuenta_por_pagar", origen_id=cxp.id,
+        lineas=[
+            {"cuenta_codigo": categoria_codigo, "debe": cxp.monto, "haber": 0},
+            {"cuenta_codigo": "2010", "debe": 0, "haber": cxp.monto},
+        ],
+    )
+
+
+def post_pago_proveedor_asiento(pago, cxp):
+    return crear_asiento(
+        account_id=pago.account_id, fecha=pago.fecha,
+        descripcion=f"Pago a proveedor: {cxp.proveedor} - {cxp.descripcion}",
+        origen_type="pago_proveedor", origen_id=pago.id,
+        lineas=[
+            {"cuenta_codigo": "2010", "debe": pago.monto, "haber": 0},
+            {"cuenta_codigo": "1010", "debe": 0, "haber": pago.monto},
+        ],
+    )
+
+
+def cuenta_contable_to_dict(c):
+    return {
+        "id": c.id, "codigo": c.codigo, "nombre": c.nombre, "tipo": c.tipo,
+        "cuenta_padre_id": c.cuenta_padre_id, "created_at": c.created_at,
+    }
+
+
+@app.route("/api/cuentas-contables", methods=["GET"])
+@login_required
+def list_cuentas_contables():
+    ensure_chart_of_accounts(current_account_id())
+    cuentas = (CuentaContable.query.filter_by(account_id=current_account_id(), deleted_at=None)
+               .order_by(CuentaContable.codigo).all())
+    return jsonify([cuenta_contable_to_dict(c) for c in cuentas])
+
+
+@app.route("/api/cuentas-contables", methods=["POST"])
+@login_required
+def create_cuenta_contable():
+    data = request.json or {}
+    codigo = (data.get("codigo") or "").strip()
+    nombre = (data.get("nombre") or "").strip()
+    tipo = (data.get("tipo") or "").strip()
+    if not codigo or not nombre:
+        return jsonify({"error": "Código y nombre son requeridos."}), 400
+    if tipo not in ("activo", "pasivo", "patrimonio", "ingreso", "gasto"):
+        return jsonify({"error": "Tipo debe ser activo, pasivo, patrimonio, ingreso o gasto."}), 400
+    if CuentaContable.query.filter_by(account_id=current_account_id(), codigo=codigo, deleted_at=None).first():
+        return jsonify({"error": f"El código '{codigo}' ya está en uso."}), 400
+
+    padre_id = None
+    if data.get("cuenta_padre_id"):
+        padre = CuentaContable.query.filter_by(id=data["cuenta_padre_id"], account_id=current_account_id()).first()
+        if not padre:
+            return jsonify({"error": "Cuenta padre no encontrada."}), 400
+        padre_id = padre.id
+
+    c = CuentaContable(
+        account_id=current_account_id(), codigo=codigo, nombre=nombre, tipo=tipo,
+        cuenta_padre_id=padre_id, created_at=datetime.utcnow().strftime("%Y-%m-%d"),
+    )
+    db.session.add(c)
+    db.session.commit()
+    return jsonify(cuenta_contable_to_dict(c)), 201
+
+
+@app.route("/api/cuentas-contables/<int:cuenta_id>", methods=["PUT"])
+@login_required
+def update_cuenta_contable(cuenta_id):
+    c = CuentaContable.query.filter_by(id=cuenta_id, account_id=current_account_id()).first_or_404()
+    data = request.json or {}
+    new_codigo = (data.get("codigo", c.codigo) or "").strip()
+    if new_codigo != c.codigo and CuentaContable.query.filter_by(account_id=current_account_id(), codigo=new_codigo, deleted_at=None).first():
+        return jsonify({"error": f"El código '{new_codigo}' ya está en uso."}), 400
+    c.codigo = new_codigo
+    c.nombre = (data.get("nombre", c.nombre) or "").strip()
+    if "tipo" in data:
+        if data["tipo"] not in ("activo", "pasivo", "patrimonio", "ingreso", "gasto"):
+            return jsonify({"error": "Tipo debe ser activo, pasivo, patrimonio, ingreso o gasto."}), 400
+        c.tipo = data["tipo"]
+    db.session.commit()
+    return jsonify(cuenta_contable_to_dict(c))
+
+
+@app.route("/api/cuentas-contables/<int:cuenta_id>", methods=["DELETE"])
+@login_required
+def delete_cuenta_contable(cuenta_id):
+    c = CuentaContable.query.filter_by(id=cuenta_id, account_id=current_account_id(), deleted_at=None).first_or_404()
+    if AsientoLinea.query.filter_by(cuenta_contable_id=c.id).first():
+        return jsonify({"error": "No se puede eliminar: esta cuenta tiene movimientos contables registrados."}), 400
+    c.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    db.session.commit()
+    return "", 204
+
+
+def asiento_to_dict(a, with_lineas=True):
+    d = {
+        "id": a.id, "fecha": a.fecha, "descripcion": a.descripcion,
+        "origen_type": a.origen_type, "origen_id": a.origen_id, "created_at": a.created_at,
+    }
+    if with_lineas:
+        d["lineas"] = [
+            {
+                "id": l.id, "cuenta_contable_id": l.cuenta_contable_id,
+                "cuenta_codigo": l.cuenta.codigo if l.cuenta else None,
+                "cuenta_nombre": l.cuenta.nombre if l.cuenta else None,
+                "debe": l.debe, "haber": l.haber, "descripcion": l.descripcion,
+            }
+            for l in a.lineas
+        ]
+        d["total_debe"] = round(sum(l.debe or 0 for l in a.lineas), 2)
+        d["total_haber"] = round(sum(l.haber or 0 for l in a.lineas), 2)
+    return d
+
+
+@app.route("/api/asientos", methods=["GET"])
+@login_required
+def list_asientos():
+    """Libro Diario - every journal entry, optionally filtered by date range
+    and/or origen_type."""
+    q = AsientoContable.query.filter_by(account_id=current_account_id())
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    origen_type = request.args.get("origen_type")
+    if desde:
+        q = q.filter(AsientoContable.fecha >= desde)
+    if hasta:
+        q = q.filter(AsientoContable.fecha <= hasta)
+    if origen_type:
+        q = q.filter(AsientoContable.origen_type == origen_type)
+    asientos = q.order_by(AsientoContable.fecha.desc(), AsientoContable.id.desc()).all()
+    return jsonify([asiento_to_dict(a) for a in asientos])
+
+
+@app.route("/api/asientos/<int:asiento_id>", methods=["GET"])
+@login_required
+def get_asiento(asiento_id):
+    a = AsientoContable.query.filter_by(id=asiento_id, account_id=current_account_id()).first_or_404()
+    return jsonify(asiento_to_dict(a))
+
+
+@app.route("/api/asientos", methods=["POST"])
+@login_required
+def create_asiento_manual():
+    """Manual journal entry - e.g. an opening balance, a correction, or a
+    bank fee that needs an asiento before it can be reconciled. Goes through
+    the exact same crear_asiento() validation as every automatic posting."""
+    data = request.json or {}
+    descripcion = (data.get("descripcion") or "").strip()
+    fecha = data.get("fecha") or datetime.utcnow().strftime("%Y-%m-%d")
+    lineas = data.get("lineas")
+    if not isinstance(lineas, list) or not lineas:
+        return jsonify({"error": "Agrega al menos una línea al asiento."}), 400
+    for l in lineas:
+        if not l.get("cuenta_codigo"):
+            return jsonify({"error": "Cada línea necesita una cuenta contable."}), 400
+    try:
+        asiento = crear_asiento(
+            account_id=current_account_id(), fecha=fecha, descripcion=descripcion,
+            origen_type="manual", origen_id=None, lineas=lineas,
+        )
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 400
+    return jsonify(asiento_to_dict(asiento)), 201
+
+
+@app.route("/api/contabilidad/libro-mayor/<int:cuenta_id>", methods=["GET"])
+@login_required
+def libro_mayor(cuenta_id):
+    """Every AsientoLinea for one cuenta contable, oldest first, with a
+    running balance. Sign convention: activo/gasto accounts increase with
+    debe (a debit grows what you own or spend); pasivo/patrimonio/ingreso
+    accounts increase with haber (a credit grows what you owe, are worth, or
+    earned). Getting this backwards is the most common way a ledger lies."""
+    cuenta = CuentaContable.query.filter_by(id=cuenta_id, account_id=current_account_id()).first_or_404()
+    q = (AsientoLinea.query.join(AsientoContable)
+         .filter(AsientoContable.account_id == current_account_id(), AsientoLinea.cuenta_contable_id == cuenta.id))
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    if desde:
+        q = q.filter(AsientoContable.fecha >= desde)
+    if hasta:
+        q = q.filter(AsientoContable.fecha <= hasta)
+    lineas = q.order_by(AsientoContable.fecha, AsientoContable.id, AsientoLinea.id).all()
+
+    aumenta_con_debe = cuenta.tipo in ("activo", "gasto")
+    balance = 0.0
+    rows = []
+    for l in lineas:
+        delta = (l.debe or 0) - (l.haber or 0) if aumenta_con_debe else (l.haber or 0) - (l.debe or 0)
+        balance = round(balance + delta, 2)
+        rows.append({
+            "asiento_id": l.asiento.id, "fecha": l.asiento.fecha, "descripcion": l.asiento.descripcion,
+            "origen_type": l.asiento.origen_type, "origen_id": l.asiento.origen_id,
+            "linea_descripcion": l.descripcion, "debe": l.debe, "haber": l.haber, "balance": balance,
+        })
+    return jsonify({
+        "cuenta": cuenta_contable_to_dict(cuenta),
+        "saldo_inicial": 0,
+        "saldo_final": balance,
+        "movimientos": rows,
+    })
+
+
+@app.route("/api/contabilidad/balanza-comprobacion", methods=["GET"])
+@login_required
+def balanza_comprobacion():
+    """Trial balance: every cuenta with activity in range, its total debe,
+    total haber, and net balance (signed per the same convention as
+    libro_mayor) - plus the top-level balanced flag, which is the entire
+    point of double-entry and must come out exact, not approximate."""
+    q = (AsientoLinea.query.join(AsientoContable)
+         .filter(AsientoContable.account_id == current_account_id()))
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    if desde:
+        q = q.filter(AsientoContable.fecha >= desde)
+    if hasta:
+        q = q.filter(AsientoContable.fecha <= hasta)
+    lineas = q.all()
+
+    por_cuenta = {}
+    for l in lineas:
+        cid = l.cuenta_contable_id
+        if cid not in por_cuenta:
+            por_cuenta[cid] = {"debe": 0.0, "haber": 0.0}
+        por_cuenta[cid]["debe"] += l.debe or 0
+        por_cuenta[cid]["haber"] += l.haber or 0
+
+    cuentas_rows = []
+    total_debe = 0.0
+    total_haber = 0.0
+    for cid, totales in por_cuenta.items():
+        cuenta = CuentaContable.query.get(cid)
+        debe = round(totales["debe"], 2)
+        haber = round(totales["haber"], 2)
+        aumenta_con_debe = cuenta.tipo in ("activo", "gasto")
+        balance = round(debe - haber, 2) if aumenta_con_debe else round(haber - debe, 2)
+        cuentas_rows.append({
+            "cuenta_contable_id": cid, "codigo": cuenta.codigo, "nombre": cuenta.nombre, "tipo": cuenta.tipo,
+            "debe": debe, "haber": haber, "balance": balance,
+        })
+        total_debe += debe
+        total_haber += haber
+    cuentas_rows.sort(key=lambda r: r["codigo"])
+
+    total_debe = round(total_debe, 2)
+    total_haber = round(total_haber, 2)
+    return jsonify({
+        "cuentas": cuentas_rows,
+        "total_debe": total_debe,
+        "total_haber": total_haber,
+        "balanced": total_debe == total_haber,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Contabilidad - Gastos (operating expenses)
 # ---------------------------------------------------------------------------
 
@@ -2605,7 +3038,14 @@ def create_gasto():
     )
     g.items = [GastoOperativoItem(**it) for it in items]
     db.session.add(g)
-    db.session.commit()
+    db.session.flush()  # get g.id for posting, commit happens with the asiento below
+
+    try:
+        post_gasto_asiento(g)
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({"error": f"No se pudo registrar el asiento contable: {e}"}), 400
+
     return jsonify(_gasto_to_dict(g)), 201
 
 
@@ -2757,6 +3197,319 @@ def contabilidad_estado_resultados():
     gastos = round(sum(g.monto or 0 for g in gasto_q.all()), 2)
 
     return jsonify({"ingresos": ingresos, "gastos": gastos, "utilidad": round(ingresos - gastos, 2)})
+
+
+# ---------------------------------------------------------------------------
+# Contabilidad - Cuentas por Pagar (vendor bills) + Pagos a Proveedores.
+# Mirrors GastoOperativo's CRUD depth and Phase 1's Pago overpayment logic,
+# but posts to Cuentas por Pagar instead of paying cash immediately.
+# ---------------------------------------------------------------------------
+
+def compute_cxp_pagado(cuenta_por_pagar_id):
+    total = db.session.query(db.func.sum(PagoProveedor.monto)).filter(
+        PagoProveedor.cuenta_por_pagar_id == cuenta_por_pagar_id).scalar()
+    return round(total or 0, 2)
+
+
+def cuenta_por_pagar_to_dict(c):
+    total_pagado = compute_cxp_pagado(c.id)
+    return {
+        "id": c.id, "proveedor": c.proveedor, "categoria": c.categoria, "descripcion": c.descripcion,
+        "fecha_emision": c.fecha_emision, "fecha_vencimiento": c.fecha_vencimiento, "monto": c.monto,
+        "total_pagado": total_pagado, "saldo": round(c.monto - total_pagado, 2),
+        "created_at": c.created_at, "updated_at": c.updated_at,
+    }
+
+
+@app.route("/api/cuentas-por-pagar", methods=["GET"])
+@login_required
+def list_cuentas_por_pagar():
+    q = CuentaPorPagar.query.filter_by(account_id=current_account_id(), deleted_at=None)
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    if desde:
+        q = q.filter(CuentaPorPagar.fecha_emision >= desde)
+    if hasta:
+        q = q.filter(CuentaPorPagar.fecha_emision <= hasta)
+    cuentas = q.order_by(CuentaPorPagar.fecha_emision.desc(), CuentaPorPagar.id.desc()).all()
+    return jsonify([cuenta_por_pagar_to_dict(c) for c in cuentas])
+
+
+@app.route("/api/cuentas-por-pagar/trash", methods=["GET"])
+@login_required
+def list_cuentas_por_pagar_trash():
+    cuentas = (CuentaPorPagar.query.filter(CuentaPorPagar.account_id == current_account_id(),
+                                            CuentaPorPagar.deleted_at.isnot(None))
+               .order_by(CuentaPorPagar.deleted_at.desc()).all())
+    return jsonify([cuenta_por_pagar_to_dict(c) for c in cuentas])
+
+
+@app.route("/api/cuentas-por-pagar/<int:cxp_id>", methods=["GET"])
+@login_required
+def get_cuenta_por_pagar(cxp_id):
+    c = CuentaPorPagar.query.filter_by(id=cxp_id, account_id=current_account_id()).first_or_404()
+    return jsonify(cuenta_por_pagar_to_dict(c))
+
+
+@app.route("/api/cuentas-por-pagar", methods=["POST"])
+@login_required
+def create_cuenta_por_pagar():
+    data = request.json or {}
+    proveedor = (data.get("proveedor") or "").strip()
+    descripcion = (data.get("descripcion") or "").strip()
+    if not proveedor:
+        return jsonify({"error": "El proveedor es requerido."}), 400
+    if not descripcion:
+        return jsonify({"error": "La descripción es requerida."}), 400
+    try:
+        monto = float(data.get("monto", 0) or 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "El monto debe ser un número."}), 400
+    if monto <= 0:
+        return jsonify({"error": "El monto debe ser mayor a cero."}), 400
+
+    now = datetime.utcnow().strftime("%Y-%m-%d")
+    c = CuentaPorPagar(
+        account_id=current_account_id(),
+        proveedor=proveedor,
+        categoria=data.get("categoria") or "Otros",
+        descripcion=descripcion,
+        fecha_emision=data.get("fecha_emision") or now,
+        fecha_vencimiento=(data.get("fecha_vencimiento") or "").strip() or None,
+        monto=monto,
+        created_at=now,
+        updated_at=now,
+    )
+    db.session.add(c)
+    db.session.flush()  # get c.id for posting, commit happens with the asiento below
+
+    try:
+        post_cuenta_por_pagar_asiento(c)
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({"error": f"No se pudo registrar el asiento contable: {e}"}), 400
+
+    return jsonify(cuenta_por_pagar_to_dict(c)), 201
+
+
+@app.route("/api/cuentas-por-pagar/<int:cxp_id>", methods=["PUT"])
+@login_required
+def update_cuenta_por_pagar(cxp_id):
+    c = CuentaPorPagar.query.filter_by(id=cxp_id, account_id=current_account_id()).first_or_404()
+    data = request.json or {}
+    if "proveedor" in data:
+        proveedor = (data.get("proveedor") or "").strip()
+        if not proveedor:
+            return jsonify({"error": "El proveedor es requerido."}), 400
+        c.proveedor = proveedor
+    if "descripcion" in data:
+        descripcion = (data.get("descripcion") or "").strip()
+        if not descripcion:
+            return jsonify({"error": "La descripción es requerida."}), 400
+        c.descripcion = descripcion
+    c.categoria = data.get("categoria", c.categoria)
+    c.fecha_emision = data.get("fecha_emision", c.fecha_emision)
+    c.fecha_vencimiento = data.get("fecha_vencimiento", c.fecha_vencimiento)
+    # monto is intentionally NOT editable once created - it's already posted
+    # to the ledger; changing it here would leave the asiento out of sync.
+    c.updated_at = datetime.utcnow().strftime("%Y-%m-%d")
+    db.session.commit()
+    return jsonify(cuenta_por_pagar_to_dict(c))
+
+
+@app.route("/api/cuentas-por-pagar/<int:cxp_id>", methods=["DELETE"])
+@login_required
+def delete_cuenta_por_pagar(cxp_id):
+    c = CuentaPorPagar.query.filter_by(id=cxp_id, account_id=current_account_id(), deleted_at=None).first_or_404()
+    c.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    db.session.commit()
+    return "", 204
+
+
+@app.route("/api/cuentas-por-pagar/<int:cxp_id>/restore", methods=["POST"])
+@login_required
+def restore_cuenta_por_pagar(cxp_id):
+    c = CuentaPorPagar.query.filter(CuentaPorPagar.id == cxp_id, CuentaPorPagar.account_id == current_account_id(),
+                                     CuentaPorPagar.deleted_at.isnot(None)).first_or_404()
+    c.deleted_at = None
+    db.session.commit()
+    return jsonify(cuenta_por_pagar_to_dict(c))
+
+
+@app.route("/api/cuentas-por-pagar/<int:cxp_id>/permanent", methods=["DELETE"])
+@login_required
+def permanent_delete_cuenta_por_pagar(cxp_id):
+    c = CuentaPorPagar.query.filter(CuentaPorPagar.id == cxp_id, CuentaPorPagar.account_id == current_account_id(),
+                                     CuentaPorPagar.deleted_at.isnot(None)).first_or_404()
+    db.session.delete(c)
+    db.session.commit()
+    return "", 204
+
+
+def pago_proveedor_to_dict(p):
+    return {
+        "id": p.id, "cuenta_por_pagar_id": p.cuenta_por_pagar_id, "monto": p.monto,
+        "fecha": p.fecha, "metodo": p.metodo, "referencia": p.referencia, "created_at": p.created_at,
+    }
+
+
+@app.route("/api/cuentas-por-pagar/<int:cxp_id>/pagos", methods=["GET"])
+@login_required
+def list_pagos_proveedor(cxp_id):
+    c = CuentaPorPagar.query.filter_by(id=cxp_id, account_id=current_account_id()).first_or_404()
+    pagos = PagoProveedor.query.filter_by(cuenta_por_pagar_id=c.id).order_by(PagoProveedor.fecha.desc(), PagoProveedor.id.desc()).all()
+    return jsonify([pago_proveedor_to_dict(p) for p in pagos])
+
+
+@app.route("/api/cuentas-por-pagar/<int:cxp_id>/pagos", methods=["POST"])
+@login_required
+def create_pago_proveedor(cxp_id):
+    c = CuentaPorPagar.query.filter_by(id=cxp_id, account_id=current_account_id()).first_or_404()
+    data = request.json or {}
+    try:
+        monto = float(data.get("monto", 0) or 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "El monto debe ser un número."}), 400
+    if monto <= 0:
+        return jsonify({"error": "El monto debe ser mayor a cero."}), 400
+
+    ya_pagado = compute_cxp_pagado(c.id)
+    if ya_pagado + monto > c.monto + 0.01:
+        saldo_pendiente = round(c.monto - ya_pagado, 2)
+        return jsonify({"error": f"Este pago excede el saldo pendiente de la cuenta (L. {saldo_pendiente:.2f})."}), 400
+
+    now = datetime.utcnow().strftime("%Y-%m-%d")
+    p = PagoProveedor(
+        account_id=current_account_id(),
+        cuenta_por_pagar_id=c.id,
+        monto=monto,
+        fecha=data.get("fecha") or now,
+        metodo=(data.get("metodo") or "").strip(),
+        referencia=(data.get("referencia") or "").strip(),
+        created_at=now,
+    )
+    db.session.add(p)
+    db.session.flush()  # get p.id for posting, commit happens with the asiento below
+
+    try:
+        post_pago_proveedor_asiento(p, c)
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({"error": f"No se pudo registrar el asiento contable: {e}"}), 400
+
+    return jsonify(pago_proveedor_to_dict(p)), 201
+
+
+@app.route("/api/pagos-proveedor/<int:pago_id>", methods=["DELETE"])
+@login_required
+def delete_pago_proveedor(pago_id):
+    p = PagoProveedor.query.filter_by(id=pago_id, account_id=current_account_id()).first_or_404()
+    db.session.delete(p)
+    db.session.commit()
+    return "", 204
+
+
+# ---------------------------------------------------------------------------
+# Conciliación Bancaria - bank statement lines entered manually, matched by
+# hand against ledger asientos (no bank-feed import, no fuzzy auto-matching).
+# A bank line does not have to match an asiento to be marked conciliado -
+# some lines (fees, interest) may need a manual asiento created first via
+# POST /api/asientos, then matched here for traceability.
+# ---------------------------------------------------------------------------
+
+def movimiento_bancario_to_dict(m):
+    return {
+        "id": m.id, "fecha": m.fecha, "descripcion": m.descripcion, "tipo": m.tipo, "monto": m.monto,
+        "referencia": m.referencia, "conciliado": m.conciliado, "asiento_id": m.asiento_id,
+        "created_at": m.created_at,
+    }
+
+
+@app.route("/api/movimientos-bancarios", methods=["GET"])
+@login_required
+def list_movimientos_bancarios():
+    q = MovimientoBancario.query.filter_by(account_id=current_account_id())
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    conciliado = request.args.get("conciliado")
+    if desde:
+        q = q.filter(MovimientoBancario.fecha >= desde)
+    if hasta:
+        q = q.filter(MovimientoBancario.fecha <= hasta)
+    if conciliado is not None:
+        q = q.filter(MovimientoBancario.conciliado == (conciliado.lower() in ("1", "true", "si")))
+    movimientos = q.order_by(MovimientoBancario.fecha.desc(), MovimientoBancario.id.desc()).all()
+    return jsonify([movimiento_bancario_to_dict(m) for m in movimientos])
+
+
+@app.route("/api/movimientos-bancarios", methods=["POST"])
+@login_required
+def create_movimiento_bancario():
+    data = request.json or {}
+    descripcion = (data.get("descripcion") or "").strip()
+    tipo = (data.get("tipo") or "").strip()
+    if not descripcion:
+        return jsonify({"error": "La descripción es requerida."}), 400
+    if tipo not in ("cargo", "abono"):
+        return jsonify({"error": "El tipo debe ser cargo o abono."}), 400
+    try:
+        monto = float(data.get("monto", 0) or 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "El monto debe ser un número."}), 400
+    if monto <= 0:
+        return jsonify({"error": "El monto debe ser mayor a cero."}), 400
+
+    now = datetime.utcnow().strftime("%Y-%m-%d")
+    m = MovimientoBancario(
+        account_id=current_account_id(),
+        fecha=data.get("fecha") or now,
+        descripcion=descripcion,
+        tipo=tipo,
+        monto=monto,
+        referencia=(data.get("referencia") or "").strip(),
+        conciliado=False,
+        created_at=now,
+    )
+    db.session.add(m)
+    db.session.commit()
+    return jsonify(movimiento_bancario_to_dict(m)), 201
+
+
+@app.route("/api/movimientos-bancarios/<int:mov_id>/conciliar", methods=["POST"])
+@login_required
+def conciliar_movimiento_bancario(mov_id):
+    """Marks a bank line as matched - manually, by a human picking the
+    corresponding asiento (or none). Never auto-matches by amount/date."""
+    m = MovimientoBancario.query.filter_by(id=mov_id, account_id=current_account_id()).first_or_404()
+    data = request.json or {}
+    asiento_id = data.get("asiento_id")
+    if asiento_id:
+        asiento = AsientoContable.query.filter_by(id=asiento_id, account_id=current_account_id()).first()
+        if not asiento:
+            return jsonify({"error": "Asiento contable no encontrado."}), 400
+        m.asiento_id = asiento.id
+    m.conciliado = True
+    db.session.commit()
+    return jsonify(movimiento_bancario_to_dict(m))
+
+
+@app.route("/api/movimientos-bancarios/<int:mov_id>/desconciliar", methods=["POST"])
+@login_required
+def desconciliar_movimiento_bancario(mov_id):
+    m = MovimientoBancario.query.filter_by(id=mov_id, account_id=current_account_id()).first_or_404()
+    m.conciliado = False
+    m.asiento_id = None
+    db.session.commit()
+    return jsonify(movimiento_bancario_to_dict(m))
+
+
+@app.route("/api/movimientos-bancarios/<int:mov_id>", methods=["DELETE"])
+@login_required
+def delete_movimiento_bancario(mov_id):
+    m = MovimientoBancario.query.filter_by(id=mov_id, account_id=current_account_id()).first_or_404()
+    db.session.delete(m)
+    db.session.commit()
+    return "", 204
 
 
 # ---------------------------------------------------------------------------

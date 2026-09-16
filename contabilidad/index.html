@@ -78,6 +78,27 @@
   .er-grand { margin-top: 4px; padding-top: 14px; border-top: 1.5px solid #e7e9ec; font-size: 17px; font-weight: 700; }
   .er-grand .mono { font-size: 22px; }
 
+  /* ---- Balanza de Comprobación: the balanced/unbalanced flag is the one
+     number on this whole screen that matters most, so it can't be missed ---- */
+  .balanza-banner {
+    text-align: center; font-size: 20px; font-weight: 700; padding: 22px; border-radius: 12px;
+    margin-bottom: 22px; background: #eef0f2; color: var(--ink-soft);
+  }
+  .balanza-banner.balanced { background: rgba(63,143,106,0.14); color: var(--good); }
+  .balanza-banner.unbalanced { background: rgba(181,69,59,0.14); color: var(--danger); }
+
+  /* ---- Pagos sub-section inside the Cuenta por Pagar modal ---- */
+  .pagos-head-inline { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .pagos-head-inline h2 { font-size: 14px; }
+  table.pagos-table-inline { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 10px; }
+  table.pagos-table-inline th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); padding: 6px 8px; border-bottom: 1px solid #e7e9ec; }
+  table.pagos-table-inline th.num, table.pagos-table-inline td.num { text-align: right; }
+  table.pagos-table-inline td { padding: 6px 8px; border-bottom: 1px solid #f0f1f3; }
+  .pagos-form-inline { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .pagos-form-inline input, .pagos-form-inline select { border: 1.5px solid #dde1e5; border-radius: 8px; padding: 7px 9px; font-size: 13px; font-family: inherit; }
+  .pagos-form-inline input[type="number"] { width: 100px; }
+  .pagos-form-inline input[type="date"] { width: 135px; }
+
   .modal-backdrop { position: fixed; inset: 0; background: rgba(15,41,66,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
   .modal-backdrop[hidden] { display: none; }
   .modal { background: #fff; border-radius: 12px; padding: 24px; width: 720px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
@@ -162,6 +183,15 @@
         </button>
         <button class="nav-item" data-view="reportes">
           <span class="nav-code">03</span> Reportes
+        </button>
+        <button class="nav-item" data-view="cxp">
+          <span class="nav-code">04</span> Cuentas por Pagar
+        </button>
+        <button class="nav-item" data-view="libro-mayor">
+          <span class="nav-code">05</span> Libro Mayor
+        </button>
+        <button class="nav-item" data-view="balanza">
+          <span class="nav-code">06</span> Balanza de Comprobación
         </button>
       </nav>
     </aside>
@@ -282,6 +312,130 @@
           </div>
         </div>
       </section>
+
+      <section id="view-cxp" class="view">
+        <div class="wrap">
+          <div class="head-row">
+            <h1>Cuentas por Pagar</h1>
+            <div class="toolbar">
+              <button class="btn btn-ghost" id="cxpBtnTrash">🗑 Papelera</button>
+              <button class="btn btn-primary" id="btnNuevaCxp">+ Nueva Cuenta por Pagar</button>
+            </div>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-card total">
+              <div class="label">Total Pendiente</div>
+              <div class="value mono" id="cxpSummaryTotal">L. 0.00</div>
+            </div>
+            <div class="summary-card">
+              <div class="label">Cantidad de Cuentas</div>
+              <div class="value mono" id="cxpSummaryCount">0</div>
+            </div>
+          </div>
+
+          <div class="filter-row">
+            <div class="filter-field">
+              <label>Desde</label>
+              <input type="date" id="cxpFilterDesde">
+            </div>
+            <div class="filter-field">
+              <label>Hasta</label>
+              <input type="date" id="cxpFilterHasta">
+            </div>
+            <button class="btn btn-ghost" id="cxpBtnClearFilter">Limpiar filtro</button>
+          </div>
+
+          <div class="table-scroll"><table>
+            <thead><tr>
+              <th>Emisión</th><th>Vencimiento</th><th>Proveedor</th><th>Categoría</th><th>Descripción</th>
+              <th class="num">Monto</th><th class="num">Saldo</th><th></th>
+            </tr></thead>
+            <tbody id="cxpBody"></tbody>
+          </table></div>
+          <div class="empty-state" id="cxpEmptyState" hidden>Aún no hay cuentas por pagar registradas.</div>
+        </div>
+      </section>
+
+      <section id="view-libro-mayor" class="view">
+        <div class="wrap">
+          <div class="head-row">
+            <h1>Libro Mayor</h1>
+          </div>
+
+          <div class="filter-row">
+            <div class="filter-field">
+              <label>Cuenta</label>
+              <select id="lmFilterCuenta"></select>
+            </div>
+            <div class="filter-field">
+              <label>Desde</label>
+              <input type="date" id="lmFilterDesde">
+            </div>
+            <div class="filter-field">
+              <label>Hasta</label>
+              <input type="date" id="lmFilterHasta">
+            </div>
+            <button class="btn btn-ghost" id="lmBtnClearFilter">Limpiar filtro</button>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-card">
+              <div class="label">Saldo Final</div>
+              <div class="value mono" id="lmSaldoFinal">L. 0.00</div>
+            </div>
+          </div>
+
+          <div class="table-scroll"><table>
+            <thead><tr>
+              <th>Fecha</th><th>Descripción</th><th>Origen</th><th class="num">Debe</th><th class="num">Haber</th><th class="num">Balance</th>
+            </tr></thead>
+            <tbody id="lmBody"></tbody>
+          </table></div>
+          <div class="empty-state" id="lmEmptyState" hidden>Sin movimientos para esta cuenta en el período.</div>
+        </div>
+      </section>
+
+      <section id="view-balanza" class="view">
+        <div class="wrap">
+          <div class="head-row">
+            <h1>Balanza de Comprobación</h1>
+          </div>
+
+          <div class="balanza-banner" id="balanzaBanner">Cargando…</div>
+
+          <div class="filter-row">
+            <div class="filter-field">
+              <label>Desde</label>
+              <input type="date" id="balFilterDesde">
+            </div>
+            <div class="filter-field">
+              <label>Hasta</label>
+              <input type="date" id="balFilterHasta">
+            </div>
+            <button class="btn btn-ghost" id="balBtnClearFilter">Limpiar filtro</button>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-card">
+              <div class="label">Total Debe</div>
+              <div class="value mono" id="balTotalDebe">L. 0.00</div>
+            </div>
+            <div class="summary-card">
+              <div class="label">Total Haber</div>
+              <div class="value mono" id="balTotalHaber">L. 0.00</div>
+            </div>
+          </div>
+
+          <div class="table-scroll"><table>
+            <thead><tr>
+              <th>Código</th><th>Cuenta</th><th>Tipo</th><th class="num">Debe</th><th class="num">Haber</th><th class="num">Balance</th>
+            </tr></thead>
+            <tbody id="balBody"></tbody>
+          </table></div>
+          <div class="empty-state" id="balEmptyState" hidden>Sin movimientos contables en este período.</div>
+        </div>
+      </section>
     </div>
   </div>
 
@@ -345,6 +499,80 @@
       <h2>Papelera — Gastos</h2>
       <table><thead><tr><th>Fecha</th><th>Descripción</th><th></th></tr></thead><tbody id="trashBody"></tbody></table>
       <div class="modal-actions"><button class="btn btn-ghost" id="closeTrash">Cerrar</button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="cxpModal" hidden>
+    <div class="modal">
+      <h2 id="cxpModalTitle">Nueva Cuenta por Pagar</h2>
+      <input type="hidden" id="cxpId">
+      <div class="field">
+        <label>Proveedor</label>
+        <input type="text" id="cxp_proveedor" placeholder="Ej: Ferretería Ramos">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Categoría</label>
+          <select id="cxp_categoria"></select>
+        </div>
+        <div class="field">
+          <label>Monto (L.)</label>
+          <input type="number" id="cxp_monto" step="0.01" min="0" placeholder="0.00">
+        </div>
+      </div>
+      <div class="field">
+        <label>Descripción</label>
+        <input type="text" id="cxp_descripcion" placeholder="Ej: Compra de materiales a crédito">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Fecha de emisión</label>
+          <input type="date" id="cxp_fecha_emision">
+        </div>
+        <div class="field">
+          <label>Fecha de vencimiento</label>
+          <input type="date" id="cxp_fecha_vencimiento">
+        </div>
+      </div>
+      <div class="modal-error" id="cxpModalError"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="cxpBtnCancelModal">Cancelar</button>
+        <button class="btn btn-primary" id="cxpBtnSave">Guardar</button>
+      </div>
+
+      <div id="cxpPagosSection" hidden>
+        <hr style="border:none;border-top:1px solid #e7e9ec;margin:18px 0">
+        <div class="pagos-head-inline">
+          <h2 style="margin:0">Pagos</h2>
+          <div class="mono" id="cxpPagosSaldo">Saldo: L. 0.00</div>
+        </div>
+        <table class="pagos-table-inline">
+          <thead><tr><th>Fecha</th><th>Método</th><th>Referencia</th><th class="num">Monto</th><th></th></tr></thead>
+          <tbody id="cxpPagosBody"></tbody>
+        </table>
+        <div class="empty-state" id="cxpPagosEmpty" hidden style="padding:14px 0">Aún no hay pagos registrados.</div>
+        <div class="pagos-form-inline">
+          <input type="date" id="cxpPagoFecha">
+          <select id="cxpPagoMetodo">
+            <option value="efectivo">Efectivo</option>
+            <option value="transferencia">Transferencia</option>
+            <option value="cheque">Cheque</option>
+            <option value="tarjeta">Tarjeta</option>
+          </select>
+          <input type="text" id="cxpPagoReferencia" placeholder="Referencia (opcional)">
+          <input type="number" id="cxpPagoMonto" step="0.01" placeholder="Monto">
+          <button type="button" class="btn btn-primary btn-sm" id="cxpBtnAddPago">+ Agregar Pago</button>
+        </div>
+        <div class="modal-error" id="cxpPagosError"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="cxpTrashModal" hidden>
+    <div class="modal">
+      <h2>Papelera — Cuentas por Pagar</h2>
+      <table><thead><tr><th>Emisión</th><th>Proveedor</th><th></th></tr></thead><tbody id="cxpTrashBody"></tbody></table>
+      <div class="modal-actions"><button class="btn btn-ghost" id="cxpCloseTrash">Cerrar</button></div>
     </div>
   </div>
 
@@ -417,30 +645,35 @@ let itemRows = [];
 
 function emptyItemRow() { return { descripcion: "", cantidad: 1, precio_unitario: 0, descuento: 0, isv_pct: 15 }; }
 
+function lineTotalFor(row) {
+  const lineSubtotal = (Number(row.cantidad) || 0) * (Number(row.precio_unitario) || 0);
+  const lineNeto = Math.max(lineSubtotal - (Number(row.descuento) || 0), 0);
+  return lineNeto + lineNeto * (Number(row.isv_pct) || 0) / 100;
+}
+
 function renderItemRows() {
-  document.getElementById("itemsBody").innerHTML = itemRows.map((row, i) => {
-    const lineSubtotal = (Number(row.cantidad) || 0) * (Number(row.precio_unitario) || 0);
-    const lineNeto = Math.max(lineSubtotal - (Number(row.descuento) || 0), 0);
-    const lineTotal = lineNeto + lineNeto * (Number(row.isv_pct) || 0) / 100;
-    return `
+  document.getElementById("itemsBody").innerHTML = itemRows.map((row, i) => `
     <tr data-idx="${i}">
       <td><input type="text" class="item-desc" data-field="descripcion" value="${esc(row.descripcion)}" placeholder="Ej: Cemento 42.5kg"></td>
       <td><input type="number" class="item-num" data-field="cantidad" step="0.01" min="0" value="${row.cantidad}"></td>
       <td><input type="number" class="item-num" data-field="precio_unitario" step="0.01" min="0" value="${row.precio_unitario}"></td>
       <td><input type="number" class="item-num" data-field="descuento" step="0.01" min="0" value="${row.descuento}"></td>
       <td><input type="number" class="item-num" data-field="isv_pct" step="0.01" min="0" value="${row.isv_pct}"></td>
-      <td class="item-subtotal">${fmt(lineTotal)}</td>
+      <td class="item-subtotal">${fmt(lineTotalFor(row))}</td>
       <td class="item-del">${itemRows.length > 1 ? `<button type="button" class="btn-remove-row" data-remove="${i}">×</button>` : ""}</td>
     </tr>
-  `;
-  }).join("");
+  `).join("");
 
   document.querySelectorAll("#itemsBody input").forEach(input => {
     input.addEventListener("input", (e) => {
       const idx = Number(e.target.closest("tr").dataset.idx);
       const field = e.target.dataset.field;
       itemRows[idx][field] = field === "descripcion" ? e.target.value : (e.target.value === "" ? 0 : Number(e.target.value));
-      renderItemRows();
+      // Update just this row's computed total in place - rebuilding the whole
+      // table here would recreate every <input>, which steals focus away from
+      // whatever the user is mid-typing into after every single keystroke.
+      const tr = e.target.closest("tr");
+      tr.querySelector(".item-subtotal").textContent = fmt(lineTotalFor(itemRows[idx]));
       recalcTotals();
     });
   });
@@ -648,6 +881,312 @@ document.getElementById("erBtnClearFilter").addEventListener("click", () => {
   loadEstadoResultados();
 });
 
+// ---- Cuentas por Pagar (mirrors Gastos' CRUD pattern; Pagos sub-section
+// mirrors the Invoice Pagos section on facturacion/ver.html) ----
+
+let cxpLoaded = false;
+let cxpCache = [];
+let cxpCategorias = [];
+let cxpPagosCache = [];
+
+async function loadCxpCategorias() {
+  cxpCategorias = await fetch("/api/gastos/categorias").then(r => r.json());
+  document.getElementById("cxp_categoria").innerHTML = cxpCategorias.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+}
+
+function currentCxpFilterParams() {
+  const params = new URLSearchParams();
+  const desde = document.getElementById("cxpFilterDesde").value;
+  const hasta = document.getElementById("cxpFilterHasta").value;
+  if (desde) params.set("desde", desde);
+  if (hasta) params.set("hasta", hasta);
+  return params;
+}
+
+async function loadCxp() {
+  const params = currentCxpFilterParams();
+  cxpCache = await fetch(`/api/cuentas-por-pagar?${params.toString()}`).then(r => r.json());
+
+  const totalPendiente = cxpCache.reduce((s, c) => s + (c.saldo || 0), 0);
+  document.getElementById("cxpSummaryTotal").textContent = fmt(totalPendiente);
+  document.getElementById("cxpSummaryCount").textContent = cxpCache.length;
+
+  document.getElementById("cxpEmptyState").hidden = cxpCache.length > 0;
+  document.getElementById("cxpBody").innerHTML = cxpCache.map(c => `
+    <tr class="clickable" data-id="${c.id}">
+      <td>${esc(c.fecha_emision)}</td>
+      <td>${esc(c.fecha_vencimiento || "—")}</td>
+      <td>${esc(c.proveedor)}</td>
+      <td><span class="pill">${esc(c.categoria)}</span></td>
+      <td>${esc(c.descripcion)}</td>
+      <td class="num mono">${fmt(c.monto)}</td>
+      <td class="num mono ${c.saldo > 0.01 ? "text-danger" : "text-good"}">${fmt(c.saldo)}</td>
+      <td><button class="btn btn-sm btn-danger" data-del="${c.id}">×</button></td>
+    </tr>
+  `).join("");
+
+  document.querySelectorAll("#cxpBody tr[data-id]").forEach(tr => {
+    tr.addEventListener("click", () => openCxpModal(cxpCache.find(c => c.id == tr.dataset.id)));
+  });
+  document.querySelectorAll("#cxpBody [data-del]").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm("¿Mover esta cuenta por pagar a la papelera?")) return;
+      await fetch(`/api/cuentas-por-pagar/${btn.dataset.del}`, { method: "DELETE" });
+      loadCxp();
+    });
+  });
+}
+
+async function loadCxpPagos(cxpId, cuenta) {
+  cxpPagosCache = await fetch(`/api/cuentas-por-pagar/${cxpId}/pagos`).then(r => r.json());
+  document.getElementById("cxpPagosSaldo").textContent = `Saldo: ${fmt(cuenta.saldo)}`;
+  document.getElementById("cxpPagosEmpty").hidden = cxpPagosCache.length > 0;
+  document.getElementById("cxpPagosBody").innerHTML = cxpPagosCache.map(p => `
+    <tr>
+      <td>${esc(p.fecha)}</td>
+      <td>${esc(p.metodo || "—")}</td>
+      <td>${esc(p.referencia || "—")}</td>
+      <td class="num">${fmt(p.monto)}</td>
+      <td><button type="button" class="btn-remove-row" data-pago-del="${p.id}">×</button></td>
+    </tr>
+  `).join("");
+  document.querySelectorAll("#cxpPagosBody [data-pago-del]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("¿Eliminar este pago?")) return;
+      await fetch(`/api/pagos-proveedor/${btn.dataset.pagoDel}`, { method: "DELETE" });
+      const updated = await fetch(`/api/cuentas-por-pagar/${cxpId}`).then(r => r.json());
+      await loadCxpPagos(cxpId, updated);
+      loadCxp();
+    });
+  });
+}
+
+function openCxpModal(cuenta) {
+  document.getElementById("cxpModalError").textContent = "";
+  document.getElementById("cxpPagosError").textContent = "";
+  if (cuenta) {
+    document.getElementById("cxpModalTitle").textContent = "Editar Cuenta por Pagar";
+    document.getElementById("cxpId").value = cuenta.id;
+    document.getElementById("cxp_proveedor").value = cuenta.proveedor;
+    document.getElementById("cxp_categoria").value = cuenta.categoria;
+    document.getElementById("cxp_monto").value = cuenta.monto;
+    document.getElementById("cxp_monto").disabled = true; // not editable once posted - see backend comment
+    document.getElementById("cxp_descripcion").value = cuenta.descripcion;
+    document.getElementById("cxp_fecha_emision").value = cuenta.fecha_emision;
+    document.getElementById("cxp_fecha_vencimiento").value = cuenta.fecha_vencimiento || "";
+    document.getElementById("cxpPagosSection").hidden = false;
+    document.getElementById("cxpPagoFecha").value = new Date().toISOString().slice(0, 10);
+    document.getElementById("cxpPagoMonto").value = "";
+    document.getElementById("cxpPagoReferencia").value = "";
+    loadCxpPagos(cuenta.id, cuenta);
+  } else {
+    document.getElementById("cxpModalTitle").textContent = "Nueva Cuenta por Pagar";
+    document.getElementById("cxpId").value = "";
+    document.getElementById("cxp_proveedor").value = "";
+    document.getElementById("cxp_categoria").value = cxpCategorias[0] || "Otros";
+    document.getElementById("cxp_monto").value = "";
+    document.getElementById("cxp_monto").disabled = false;
+    document.getElementById("cxp_descripcion").value = "";
+    document.getElementById("cxp_fecha_emision").value = new Date().toISOString().slice(0, 10);
+    document.getElementById("cxp_fecha_vencimiento").value = "";
+    document.getElementById("cxpPagosSection").hidden = true;
+  }
+  document.getElementById("cxpModal").hidden = false;
+}
+
+document.getElementById("btnNuevaCxp").addEventListener("click", () => openCxpModal(null));
+document.getElementById("cxpBtnCancelModal").addEventListener("click", () => { document.getElementById("cxpModal").hidden = true; });
+
+document.getElementById("cxpBtnSave").addEventListener("click", async () => {
+  const id = document.getElementById("cxpId").value;
+  const body = {
+    proveedor: document.getElementById("cxp_proveedor").value,
+    categoria: document.getElementById("cxp_categoria").value,
+    descripcion: document.getElementById("cxp_descripcion").value,
+    fecha_emision: document.getElementById("cxp_fecha_emision").value,
+    fecha_vencimiento: document.getElementById("cxp_fecha_vencimiento").value,
+  };
+  if (!id) body.monto = document.getElementById("cxp_monto").value;
+  const url = id ? `/api/cuentas-por-pagar/${id}` : "/api/cuentas-por-pagar";
+  const method = id ? "PUT" : "POST";
+  const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok) {
+    document.getElementById("cxpModalError").textContent = data.error || "Error al guardar.";
+    return;
+  }
+  loadCxp();
+  if (!id) {
+    openCxpModal(data); // reopen in edit mode so Pagos becomes available right away
+  } else {
+    document.getElementById("cxpModal").hidden = true;
+  }
+});
+
+document.getElementById("cxpBtnAddPago").addEventListener("click", async () => {
+  const cxpId = document.getElementById("cxpId").value;
+  const errorEl = document.getElementById("cxpPagosError");
+  errorEl.textContent = "";
+  const body = {
+    monto: document.getElementById("cxpPagoMonto").value,
+    fecha: document.getElementById("cxpPagoFecha").value,
+    metodo: document.getElementById("cxpPagoMetodo").value,
+    referencia: document.getElementById("cxpPagoReferencia").value,
+  };
+  const res = await fetch(`/api/cuentas-por-pagar/${cxpId}/pagos`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) { errorEl.textContent = data.error || "Error al guardar el pago."; return; }
+  document.getElementById("cxpPagoMonto").value = "";
+  document.getElementById("cxpPagoReferencia").value = "";
+  const updated = await fetch(`/api/cuentas-por-pagar/${cxpId}`).then(r => r.json());
+  await loadCxpPagos(cxpId, updated);
+  loadCxp();
+});
+
+document.getElementById("cxpFilterDesde").addEventListener("change", loadCxp);
+document.getElementById("cxpFilterHasta").addEventListener("change", loadCxp);
+document.getElementById("cxpBtnClearFilter").addEventListener("click", () => {
+  document.getElementById("cxpFilterDesde").value = "";
+  document.getElementById("cxpFilterHasta").value = "";
+  loadCxp();
+});
+
+// Distinct data-cxp-* attribute names (not data-restore/data-perm-del) and
+// scoped queries (#cxpTrashBody ...) on purpose - the Gastos trash modal
+// above binds its restore/delete listeners with an UNSCOPED querySelectorAll,
+// so reusing its attribute names here would cross-wire clicks between the
+// two trash modals once both have ever been opened.
+document.getElementById("cxpBtnTrash").addEventListener("click", async () => {
+  const items = await fetch("/api/cuentas-por-pagar/trash").then(r => r.json());
+  document.getElementById("cxpTrashBody").innerHTML = items.map(c => `
+    <tr>
+      <td>${esc(c.fecha_emision)}</td>
+      <td>${esc(c.proveedor)}</td>
+      <td>
+        <button class="btn btn-sm btn-primary" data-cxp-restore="${c.id}">Restaurar</button>
+        <button class="btn btn-sm btn-danger" data-cxp-perm-del="${c.id}">Eliminar</button>
+      </td>
+    </tr>
+  `).join("") || '<tr><td colspan="3" style="color:var(--ink-soft)">La papelera está vacía.</td></tr>';
+  document.getElementById("cxpTrashModal").hidden = false;
+
+  document.querySelectorAll("#cxpTrashBody [data-cxp-restore]").forEach(btn => btn.addEventListener("click", async () => {
+    await fetch(`/api/cuentas-por-pagar/${btn.dataset.cxpRestore}/restore`, { method: "POST" });
+    document.getElementById("cxpBtnTrash").click();
+  }));
+  document.querySelectorAll("#cxpTrashBody [data-cxp-perm-del]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("¿Eliminar PERMANENTEMENTE? No se puede deshacer.")) return;
+    await fetch(`/api/cuentas-por-pagar/${btn.dataset.cxpPermDel}/permanent`, { method: "DELETE" });
+    document.getElementById("cxpBtnTrash").click();
+  }));
+});
+document.getElementById("cxpCloseTrash").addEventListener("click", () => {
+  document.getElementById("cxpTrashModal").hidden = true;
+  loadCxp();
+});
+
+// ---- Libro Mayor ----
+
+let libroMayorLoaded = false;
+
+async function loadCuentasContablesForSelect() {
+  const cuentas = await fetch("/api/cuentas-contables").then(r => r.json());
+  document.getElementById("lmFilterCuenta").innerHTML =
+    cuentas.map(c => `<option value="${c.id}">${esc(c.codigo)} - ${esc(c.nombre)}</option>`).join("");
+}
+
+function currentLmParams() {
+  const params = new URLSearchParams();
+  const desde = document.getElementById("lmFilterDesde").value;
+  const hasta = document.getElementById("lmFilterHasta").value;
+  if (desde) params.set("desde", desde);
+  if (hasta) params.set("hasta", hasta);
+  return params;
+}
+
+async function loadLibroMayor() {
+  const cuentaId = document.getElementById("lmFilterCuenta").value;
+  if (!cuentaId) return;
+  const params = currentLmParams();
+  const data = await fetch(`/api/contabilidad/libro-mayor/${cuentaId}?${params.toString()}`).then(r => r.json());
+
+  document.getElementById("lmSaldoFinal").textContent = fmt(data.saldo_final);
+  document.getElementById("lmEmptyState").hidden = data.movimientos.length > 0;
+  document.getElementById("lmBody").innerHTML = data.movimientos.map(m => `
+    <tr>
+      <td>${esc(m.fecha)}</td>
+      <td>${esc(m.linea_descripcion || m.descripcion || "—")}</td>
+      <td>${esc(m.origen_type || "manual")}</td>
+      <td class="num mono">${m.debe ? fmt(m.debe) : "—"}</td>
+      <td class="num mono">${m.haber ? fmt(m.haber) : "—"}</td>
+      <td class="num mono">${fmt(m.balance)}</td>
+    </tr>
+  `).join("");
+}
+
+document.getElementById("lmFilterCuenta").addEventListener("change", loadLibroMayor);
+document.getElementById("lmFilterDesde").addEventListener("change", loadLibroMayor);
+document.getElementById("lmFilterHasta").addEventListener("change", loadLibroMayor);
+document.getElementById("lmBtnClearFilter").addEventListener("click", () => {
+  document.getElementById("lmFilterDesde").value = "";
+  document.getElementById("lmFilterHasta").value = "";
+  loadLibroMayor();
+});
+
+// ---- Balanza de Comprobación ----
+
+let balanzaLoaded = false;
+
+function currentBalParams() {
+  const params = new URLSearchParams();
+  const desde = document.getElementById("balFilterDesde").value;
+  const hasta = document.getElementById("balFilterHasta").value;
+  if (desde) params.set("desde", desde);
+  if (hasta) params.set("hasta", hasta);
+  return params;
+}
+
+async function loadBalanza() {
+  const params = currentBalParams();
+  const data = await fetch(`/api/contabilidad/balanza-comprobacion?${params.toString()}`).then(r => r.json());
+
+  const banner = document.getElementById("balanzaBanner");
+  banner.classList.remove("balanced", "unbalanced");
+  if (data.balanced) {
+    banner.classList.add("balanced");
+    banner.textContent = "✓ CUADRADA — Debe = Haber";
+  } else {
+    banner.classList.add("unbalanced");
+    banner.textContent = `✗ DESCUADRADA — diferencia de ${fmt(Math.abs(data.total_debe - data.total_haber))}`;
+  }
+
+  document.getElementById("balTotalDebe").textContent = fmt(data.total_debe);
+  document.getElementById("balTotalHaber").textContent = fmt(data.total_haber);
+
+  document.getElementById("balEmptyState").hidden = data.cuentas.length > 0;
+  document.getElementById("balBody").innerHTML = data.cuentas.map(c => `
+    <tr>
+      <td class="mono">${esc(c.codigo)}</td>
+      <td>${esc(c.nombre)}</td>
+      <td>${esc(c.tipo)}</td>
+      <td class="num mono">${fmt(c.debe)}</td>
+      <td class="num mono">${fmt(c.haber)}</td>
+      <td class="num mono">${fmt(c.balance)}</td>
+    </tr>
+  `).join("");
+}
+
+document.getElementById("balFilterDesde").addEventListener("change", loadBalanza);
+document.getElementById("balFilterHasta").addEventListener("change", loadBalanza);
+document.getElementById("balBtnClearFilter").addEventListener("click", () => {
+  document.getElementById("balFilterDesde").value = "";
+  document.getElementById("balFilterHasta").value = "";
+  loadBalanza();
+});
+
 // ---- Sidebar view switching ----
 
 document.querySelectorAll(".nav-item[data-view]").forEach(btn => {
@@ -663,6 +1202,19 @@ document.querySelectorAll(".nav-item[data-view]").forEach(btn => {
     if (btn.dataset.view === "reportes" && !reportesLoaded) {
       reportesLoaded = true;
       loadEstadoResultados();
+    }
+    if (btn.dataset.view === "cxp" && !cxpLoaded) {
+      cxpLoaded = true;
+      loadCxpCategorias();
+      loadCxp();
+    }
+    if (btn.dataset.view === "libro-mayor" && !libroMayorLoaded) {
+      libroMayorLoaded = true;
+      loadCuentasContablesForSelect().then(loadLibroMayor);
+    }
+    if (btn.dataset.view === "balanza" && !balanzaLoaded) {
+      balanzaLoaded = true;
+      loadBalanza();
     }
   });
 });

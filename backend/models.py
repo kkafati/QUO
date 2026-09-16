@@ -450,3 +450,130 @@ class GastoOperativoItem(db.Model):
     descuento = db.Column(db.Float, nullable=False, default=0)
     isv_pct = db.Column(db.Float, nullable=False, default=15)
 
+
+# ---------------------------------------------------------------------------
+# Phase 2 - real double-entry bookkeeping: chart of accounts + journal ledger,
+# with Cuentas por Pagar and bank reconciliation built on top of it.
+# ---------------------------------------------------------------------------
+
+# Maps each GASTO_CATEGORIAS entry to its seeded 5000-series CuentaContable
+# codigo, so gasto/cuenta-por-pagar postings know which sub-account to debit.
+GASTO_CATEGORIA_CODIGOS = {
+    "Materiales": "5010",
+    "Mano de Obra / Nómina": "5020",
+    "Transporte": "5030",
+    "Servicios (agua, luz, internet)": "5040",
+    "Alquiler": "5050",
+    "Impuestos": "5060",
+    "Herramientas / Equipo": "5070",
+    "Otros": "5080",
+}
+
+
+class CuentaContable(db.Model):
+    """One line in the Catálogo de Cuentas (chart of accounts) - NOT the same
+    "account" concept as the `Account` model above (which is the tenant/login).
+    Every field here is scoped to a tenant via account_id, same as every other
+    model in this file; cuenta_padre_id is the self-referential parent for
+    grouping sub-accounts under e.g. "1000 Activo Circulante"."""
+    __tablename__ = "cuentas_contables"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    codigo = db.Column(db.String(16), nullable=False)
+    nombre = db.Column(db.String(255), nullable=False)
+    tipo = db.Column(db.String(16), nullable=False)  # activo | pasivo | patrimonio | ingreso | gasto
+    cuenta_padre_id = db.Column(db.Integer, db.ForeignKey("cuentas_contables.id"))
+    created_at = db.Column(db.String(16))
+    deleted_at = db.Column(db.String(16))  # soft delete - blocked in app.py if any AsientoLinea references it
+
+    hijos = db.relationship("CuentaContable", backref=db.backref("padre", remote_side=[id]))
+
+
+class AsientoContable(db.Model):
+    """One journal entry (asiento) in the Libro Diario. origen_type/origen_id
+    trace back to whatever business record generated it (a factura, pago,
+    gasto, etc.) - both null for a manually-entered asiento. Every asiento is
+    created through crear_asiento() in app.py, which is the ONLY place that
+    validates sum(debe) == sum(haber); nothing should construct one directly."""
+    __tablename__ = "asientos_contables"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    fecha = db.Column(db.String(16), nullable=False)
+    descripcion = db.Column(db.String(255))
+    origen_type = db.Column(db.String(32))  # factura | pago | gasto | cuenta_por_pagar | pago_proveedor | manual
+    origen_id = db.Column(db.Integer)
+    created_at = db.Column(db.String(16))
+
+    lineas = db.relationship("AsientoLinea", backref="asiento", cascade="all, delete-orphan")
+
+
+class AsientoLinea(db.Model):
+    __tablename__ = "asiento_lineas"
+    id = db.Column(db.Integer, primary_key=True)
+    asiento_id = db.Column(db.Integer, db.ForeignKey("asientos_contables.id"), nullable=False)
+    cuenta_contable_id = db.Column(db.Integer, db.ForeignKey("cuentas_contables.id"), nullable=False)
+    debe = db.Column(db.Float, nullable=False, default=0)
+    haber = db.Column(db.Float, nullable=False, default=0)
+    descripcion = db.Column(db.String(255))
+
+    cuenta = db.relationship("CuentaContable")
+
+
+class CuentaPorPagar(db.Model):
+    """A vendor bill (factura de proveedor) owed by the business - the mirror
+    image of GastoOperativo's categoria/monto shape, but for credit purchases
+    tracked to a due date rather than gastos paid immediately in cash. Posts
+    Debe [categoria's 5000 account] / Haber Cuentas por Pagar on creation."""
+    __tablename__ = "cuentas_por_pagar"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    proveedor = db.Column(db.String(255), nullable=False)
+    categoria = db.Column(db.String(64), nullable=False, default="Otros")
+    descripcion = db.Column(db.String(255), nullable=False)
+    fecha_emision = db.Column(db.String(16), nullable=False)
+    fecha_vencimiento = db.Column(db.String(16))
+    monto = db.Column(db.Float, nullable=False, default=0)
+    created_at = db.Column(db.String(16))
+    updated_at = db.Column(db.String(16))
+    deleted_at = db.Column(db.String(16))
+
+    pagos = db.relationship("PagoProveedor", backref="cuenta_por_pagar", cascade="all, delete-orphan")
+
+
+class PagoProveedor(db.Model):
+    """A payment made against a CuentaPorPagar - same shape as Phase 1's Pago
+    (which pays down an Invoice), just pointed at a vendor bill instead of a
+    customer invoice. Same overpayment validation: monto can never push the
+    running total above the bill's monto (enforced in app.py on create)."""
+    __tablename__ = "pagos_proveedor"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    cuenta_por_pagar_id = db.Column(db.Integer, db.ForeignKey("cuentas_por_pagar.id"), nullable=False)
+    monto = db.Column(db.Float, nullable=False, default=0)
+    fecha = db.Column(db.String(16), nullable=False)
+    metodo = db.Column(db.String(32))  # efectivo | transferencia | cheque | tarjeta
+    referencia = db.Column(db.String(255))
+    created_at = db.Column(db.String(16))
+
+
+class MovimientoBancario(db.Model):
+    """One line from a bank statement, entered manually (no bank-feed import
+    or fuzzy auto-matching in this pass - matching is a deliberate human
+    action). asiento_id is an optional link to the AsientoContable this bank
+    line corresponds to, for traceability once conciliado - some lines (bank
+    fees, interest) may need a manual asiento created first via POST
+    /api/asientos, then matched here; not every bank line requires one."""
+    __tablename__ = "movimientos_bancarios"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    fecha = db.Column(db.String(16), nullable=False)
+    descripcion = db.Column(db.String(255), nullable=False)
+    tipo = db.Column(db.String(16), nullable=False)  # cargo (withdrawal) | abono (deposit)
+    monto = db.Column(db.Float, nullable=False, default=0)
+    referencia = db.Column(db.String(255))
+    conciliado = db.Column(db.Boolean, nullable=False, default=False)
+    asiento_id = db.Column(db.Integer, db.ForeignKey("asientos_contables.id"))
+    created_at = db.Column(db.String(16))
+
+    asiento = db.relationship("AsientoContable")
+
