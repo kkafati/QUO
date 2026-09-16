@@ -3,11 +3,12 @@ import re
 import json
 import calendar
 import mimetypes
+import secrets
 from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
 from werkzeug.security import check_password_hash, generate_password_hash
-from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GastoOperativoItem, GASTO_CATEGORIAS, StockMovimiento, Pago, CuentaContable, AsientoContable, AsientoLinea, CuentaPorPagar, PagoProveedor, MovimientoBancario, GASTO_CATEGORIA_CODIGOS, ActivoFijo, DepreciacionRegistro
+from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GastoOperativoItem, GASTO_CATEGORIAS, StockMovimiento, Pago, CuentaContable, AsientoContable, AsientoLinea, CuentaPorPagar, PagoProveedor, MovimientoBancario, GASTO_CATEGORIA_CODIGOS, ActivoFijo, DepreciacionRegistro, LoginAttempt
 from numero_a_letras import numero_a_letras
 from pdf_render import render_invoice_pdf
 from pdf_render_cotizacion import render_cotizacion_pdf
@@ -39,9 +40,32 @@ INVENTARIO_DIR = os.path.join(os.path.dirname(BASE_DIR), "inventario")
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/cotizaciones")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(BASE_DIR, "quoting.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-# IMPORTANT: change this to a long random value before deploying for real.
-# Anyone who has this value can forge login sessions.
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-change-me-before-deploying")
+# IMPORTANT: set the SECRET_KEY environment variable before deploying for
+# real - anyone who has this value can forge login sessions. If it's not
+# set, generate a random one at process startup instead of falling back to
+# a hardcoded string literal that would otherwise sit in this source file
+# forever, publicly known to anyone who can read the repo. The failure mode
+# this creates if SECRET_KEY is forgotten - sessions get invalidated on
+# every restart - is annoying but safe, unlike the old silently-insecure default.
+_secret_key = os.environ.get("SECRET_KEY")
+if not _secret_key:
+    _secret_key = secrets.token_hex(32)
+    # Some consoles (Windows cmd/PowerShell on a non-UTF8 codepage) can't
+    # encode the emoji/accented characters below and would raise
+    # UnicodeEncodeError - which, left unhandled, would crash the app before
+    # SECRET_KEY even gets set. A warning that prevents startup entirely
+    # defeats its own purpose, so fall back to a plain-ASCII version rather
+    # than let that happen.
+    _warning = (
+        "\n⚠️  SECRET_KEY no configurado - usando una clave temporal generada al "
+        "inicio. Las sesiones se invalidarán si el proceso se reinicia. Configura "
+        "la variable de entorno SECRET_KEY antes de desplegar en producción.\n"
+    )
+    try:
+        print(_warning)
+    except UnicodeEncodeError:
+        print(_warning.encode("ascii", errors="replace").decode("ascii"))
+app.config["SECRET_KEY"] = _secret_key
 # Only send the session cookie over HTTPS. Set FORCE_HTTPS=1 once you're
 # actually serving over HTTPS (e.g. behind Cloudflare Tunnel) — leave unset
 # for local http://localhost testing, or login won't work.
@@ -121,6 +145,59 @@ def current_admin_id():
     return session.get("admin_id")
 
 
+def client_ip():
+    """This app is deployed behind Cloudflare Tunnel - request.remote_addr
+    would be Cloudflare's own IP, not the real client's. Use this everywhere
+    a client IP is needed, same pattern already used by log_page_view/LoginEvent."""
+    return request.headers.get("CF-Connecting-IP", request.remote_addr)
+
+
+LOGIN_LOCKOUT_WINDOW_MINUTES = 15
+LOGIN_LOCKOUT_MAX_PER_USERNAME = 5   # failed attempts against ONE username
+LOGIN_LOCKOUT_MAX_PER_IP = 20        # failed attempts from ONE IP, across ANY usernames
+
+
+def log_login_attempt(username, ip_address, success):
+    """Every attempt, successful or not, becomes a row here - the audit
+    trail for "who's been trying to log in". Never deleted on success; the
+    rolling window in is_login_locked_out() below is what makes old failures
+    stop counting, not erasing them."""
+    db.session.add(LoginAttempt(
+        username=username, ip_address=ip_address, success=success,
+        timestamp=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+    ))
+    db.session.commit()
+
+
+def is_login_locked_out(username, ip_address):
+    """Checked BEFORE the password hash comparison, so a locked-out attempt
+    never pays that cost. Two independent thresholds in the same rolling
+    window: per-username (catches repeated guesses against one account) and
+    per-IP (catches one attacker trying many different usernames, which the
+    per-username check alone would never trip). Either one being over its
+    limit is enough to reject."""
+    since = (datetime.utcnow() - timedelta(minutes=LOGIN_LOCKOUT_WINDOW_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
+
+    failed_by_username = LoginAttempt.query.filter(
+        LoginAttempt.username == username,
+        LoginAttempt.success.is_(False),
+        LoginAttempt.timestamp >= since,
+    ).count()
+    if failed_by_username >= LOGIN_LOCKOUT_MAX_PER_USERNAME:
+        return True
+
+    if ip_address:
+        failed_by_ip = LoginAttempt.query.filter(
+            LoginAttempt.ip_address == ip_address,
+            LoginAttempt.success.is_(False),
+            LoginAttempt.timestamp >= since,
+        ).count()
+        if failed_by_ip >= LOGIN_LOCKOUT_MAX_PER_IP:
+            return True
+
+    return False
+
+
 def admin_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -144,6 +221,53 @@ def log_page_view(path):
         db.session.commit()
     except Exception:
         db.session.rollback()
+
+
+@app.before_request
+def require_csrf_header():
+    """Defense-in-depth CSRF mitigation. Every state-changing call from this
+    app's own frontend goes through fetch() with this header explicitly set
+    (every POST/PUT/DELETE fetch() call site in the frontend sets it - grep
+    for X-Requested-With to confirm). A plain HTML <form> submitted from a
+    third-party page cannot set custom headers, so this blocks the classic
+    "attacker's page silently submits a form to your API" pattern. This is
+    an additional layer on top of SameSite=Lax on the session cookie
+    (already set, already correct), not a replacement for it - and it's not
+    a full token-issuance/rotation CSRF system, which this app doesn't need
+    given it has no third-party-embeddable form targets."""
+    if request.method in ("POST", "PUT", "DELETE") and request.headers.get("X-Requested-With") != "XMLHttpRequest":
+        return jsonify({"error": "Solicitud rechazada: falta encabezado requerido."}), 403
+
+
+@app.after_request
+def set_security_headers(response):
+    """Baseline security headers on every response. CSP starts at
+    default-src 'self' and widens only for what this app actually loads:
+    Google Fonts' stylesheet (style-src) and its font files (font-src) -
+    checked by grepping every .html file for external resources, nothing
+    else is loaded from a third party anywhere in this codebase. script-src
+    and style-src need 'unsafe-inline' because this app's pages rely
+    throughout on inline <script>/<style> blocks (no nonce/hash
+    infrastructure exists here) - this is a known, deliberate trade-off:
+    it still blocks loading an arbitrary remote <script src="https://evil...">,
+    which is the actual "third-party script/style injection" this header
+    is meant to stop, just not a reflected/stored-XSS inline payload."""
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"  # this app is never embedded in an iframe anywhere - confirmed, no <iframe> in this codebase
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    )
+    return response
 
 
 @app.before_request
@@ -190,9 +314,18 @@ def api_login():
     data = request.json or {}
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
+    ip_address = client_ip()
+
+    if is_login_locked_out(username, ip_address):
+        log_login_attempt(username, ip_address, False)
+        return jsonify({"error": "Demasiados intentos. Intenta de nuevo en unos minutos."}), 429
+
     account = Account.query.filter_by(username=username).first()
     if not account or not check_password_hash(account.password_hash, password):
+        log_login_attempt(username, ip_address, False)
         return jsonify({"error": "Usuario o contraseña incorrectos."}), 401
+
+    log_login_attempt(username, ip_address, True)
     session["account_id"] = account.id
     session["company_name"] = account.company_name
     session.permanent = True
@@ -200,7 +333,7 @@ def api_login():
     db.session.add(LoginEvent(
         account_id=account.id, event_type="login",
         timestamp=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-        ip_address=request.headers.get("CF-Connecting-IP", request.remote_addr),
+        ip_address=ip_address,
         user_agent=(request.headers.get("User-Agent") or "")[:255],
     ))
     db.session.commit()
@@ -330,9 +463,18 @@ def api_admin_login():
     data = request.json or {}
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
+    ip_address = client_ip()
+
+    if is_login_locked_out(username, ip_address):
+        log_login_attempt(username, ip_address, False)
+        return jsonify({"error": "Demasiados intentos. Intenta de nuevo en unos minutos."}), 429
+
     admin = Admin.query.filter_by(username=username).first()
     if not admin or not check_password_hash(admin.password_hash, password):
+        log_login_attempt(username, ip_address, False)
         return jsonify({"error": "Usuario o contraseña incorrectos."}), 401
+
+    log_login_attempt(username, ip_address, True)
     session["admin_id"] = admin.id
     session.permanent = True
     return jsonify({"ok": True})

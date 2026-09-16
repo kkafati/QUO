@@ -231,6 +231,22 @@ class LoginEvent(db.Model):
     account = db.relationship("Account")
 
 
+class LoginAttempt(db.Model):
+    """Every login attempt against /api/login OR /api/admin/login, successful
+    or not - this is the rate-limiting/lockout audit trail. Tracked by the
+    attempted username (not account_id): a failed attempt may not match any
+    real account at all, so there's nothing to foreign-key to. Rows are never
+    deleted on success - the rolling window in app.py's lockout check handles
+    that naturally, and erasing history here would defeat the audit-trail
+    purpose of this table."""
+    __tablename__ = "login_attempts"
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), nullable=False)
+    ip_address = db.Column(db.String(64))
+    success = db.Column(db.Boolean, nullable=False, default=False)
+    timestamp = db.Column(db.String(32), nullable=False)
+
+
 class PageView(db.Model):
     """One row per page load (not API calls) - for basic traffic counts.
     account_id is null for anonymous views (e.g. the public landing page)."""

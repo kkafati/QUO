@@ -823,7 +823,7 @@ async function loadGastos() {
     btn.addEventListener("click", async (e) => {
       e.stopPropagation();
       if (!confirm("¿Mover este gasto a la papelera?")) return;
-      await fetch(`/api/gastos/${btn.dataset.del}`, { method: "DELETE" });
+      await fetch(`/api/gastos/${btn.dataset.del}`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
       loadGastos();
     });
   });
@@ -940,7 +940,7 @@ document.getElementById("btnSaveGasto").addEventListener("click", async () => {
   };
   const url = id ? `/api/gastos/${id}` : "/api/gastos";
   const method = id ? "PUT" : "POST";
-  const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const res = await fetch(url, { method, headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" }, body: JSON.stringify(body) });
   const data = await res.json();
   if (!res.ok) {
     document.getElementById("modalError").textContent = data.error || "Error al guardar.";
@@ -975,12 +975,12 @@ document.getElementById("btn-trash").addEventListener("click", async () => {
   document.getElementById("trashModal").hidden = false;
 
   document.querySelectorAll("[data-restore]").forEach(btn => btn.addEventListener("click", async () => {
-    await fetch(`/api/gastos/${btn.dataset.restore}/restore`, { method: "POST" });
+    await fetch(`/api/gastos/${btn.dataset.restore}/restore`, { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" } });
     document.getElementById("btn-trash").click();
   }));
   document.querySelectorAll("[data-perm-del]").forEach(btn => btn.addEventListener("click", async () => {
     if (!confirm("¿Eliminar PERMANENTEMENTE? No se puede deshacer.")) return;
-    await fetch(`/api/gastos/${btn.dataset.permDel}/permanent`, { method: "DELETE" });
+    await fetch(`/api/gastos/${btn.dataset.permDel}/permanent`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
     document.getElementById("btn-trash").click();
   }));
 });
@@ -1120,7 +1120,7 @@ async function loadCxp() {
     btn.addEventListener("click", async (e) => {
       e.stopPropagation();
       if (!confirm("¿Mover esta cuenta por pagar a la papelera?")) return;
-      await fetch(`/api/cuentas-por-pagar/${btn.dataset.del}`, { method: "DELETE" });
+      await fetch(`/api/cuentas-por-pagar/${btn.dataset.del}`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
       loadCxp();
     });
   });
@@ -1142,7 +1142,7 @@ async function loadCxpPagos(cxpId, cuenta) {
   document.querySelectorAll("#cxpPagosBody [data-pago-del]").forEach(btn => {
     btn.addEventListener("click", async () => {
       if (!confirm("¿Eliminar este pago?")) return;
-      await fetch(`/api/pagos-proveedor/${btn.dataset.pagoDel}`, { method: "DELETE" });
+      await fetch(`/api/pagos-proveedor/${btn.dataset.pagoDel}`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
       const updated = await fetch(`/api/cuentas-por-pagar/${cxpId}`).then(r => r.json());
       await loadCxpPagos(cxpId, updated);
       loadCxp();
@@ -1198,7 +1198,7 @@ document.getElementById("cxpBtnSave").addEventListener("click", async () => {
   if (!id) body.monto = document.getElementById("cxp_monto").value;
   const url = id ? `/api/cuentas-por-pagar/${id}` : "/api/cuentas-por-pagar";
   const method = id ? "PUT" : "POST";
-  const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const res = await fetch(url, { method, headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" }, body: JSON.stringify(body) });
   const data = await res.json();
   if (!res.ok) {
     document.getElementById("cxpModalError").textContent = data.error || "Error al guardar.";
@@ -1223,7 +1223,7 @@ document.getElementById("cxpBtnAddPago").addEventListener("click", async () => {
     referencia: document.getElementById("cxpPagoReferencia").value,
   };
   const res = await fetch(`/api/cuentas-por-pagar/${cxpId}/pagos`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" }, body: JSON.stringify(body),
   });
   const data = await res.json();
   if (!res.ok) { errorEl.textContent = data.error || "Error al guardar el pago."; return; }
@@ -1262,12 +1262,12 @@ document.getElementById("cxpBtnTrash").addEventListener("click", async () => {
   document.getElementById("cxpTrashModal").hidden = false;
 
   document.querySelectorAll("#cxpTrashBody [data-cxp-restore]").forEach(btn => btn.addEventListener("click", async () => {
-    await fetch(`/api/cuentas-por-pagar/${btn.dataset.cxpRestore}/restore`, { method: "POST" });
+    await fetch(`/api/cuentas-por-pagar/${btn.dataset.cxpRestore}/restore`, { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" } });
     document.getElementById("cxpBtnTrash").click();
   }));
   document.querySelectorAll("#cxpTrashBody [data-cxp-perm-del]").forEach(btn => btn.addEventListener("click", async () => {
     if (!confirm("¿Eliminar PERMANENTEMENTE? No se puede deshacer.")) return;
-    await fetch(`/api/cuentas-por-pagar/${btn.dataset.cxpPermDel}/permanent`, { method: "DELETE" });
+    await fetch(`/api/cuentas-por-pagar/${btn.dataset.cxpPermDel}/permanent`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
     document.getElementById("cxpBtnTrash").click();
   }));
 });
@@ -1500,7 +1500,7 @@ async function loadActivosFijos() {
   document.querySelectorAll("#afBody [data-del]").forEach(btn => {
     btn.addEventListener("click", async () => {
       if (!confirm("¿Eliminar este activo fijo?")) return;
-      const res = await fetch(`/api/activos-fijos/${btn.dataset.del}`, { method: "DELETE" });
+      const res = await fetch(`/api/activos-fijos/${btn.dataset.del}`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         alert(data.error || "No se pudo eliminar el activo.");
@@ -1557,7 +1557,7 @@ document.getElementById("activoBtnSave").addEventListener("click", async () => {
   }
   const url = id ? `/api/activos-fijos/${id}` : "/api/activos-fijos";
   const method = id ? "PUT" : "POST";
-  const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const res = await fetch(url, { method, headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" }, body: JSON.stringify(body) });
   const data = await res.json();
   if (!res.ok) {
     document.getElementById("activoModalError").textContent = data.error || "Error al guardar.";
@@ -1571,7 +1571,7 @@ document.getElementById("btnCorrerDepreciacion").addEventListener("click", async
   const periodo = document.getElementById("afPeriodo").value; // "YYYY-MM" from <input type="month">
   const resultEl = document.getElementById("afDepreciarResult");
   if (!periodo) { alert("Selecciona un período."); return; }
-  const res = await fetch(`/api/activos-fijos/depreciar?periodo=${encodeURIComponent(periodo)}`, { method: "POST" });
+  const res = await fetch(`/api/activos-fijos/depreciar?periodo=${encodeURIComponent(periodo)}`, { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" } });
   const data = await res.json();
   resultEl.hidden = false;
   if (!res.ok) {

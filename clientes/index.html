@@ -231,7 +231,7 @@ async function saveClient(existingId) {
   try {
     const url = existingId ? `/api/clientes/${existingId}` : "/api/clientes";
     const method = existingId ? "PUT" : "POST";
-    const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const res = await fetch(url, { method, headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" }, body: JSON.stringify(body) });
     const data = await res.json();
     if (!res.ok) {
       statusMsg.textContent = data.error || "Error al guardar.";
@@ -248,7 +248,7 @@ async function saveClient(existingId) {
 
 async function deleteClient(id, nombre) {
   if (!confirm(`¿Mover a "${nombre}" a la papelera? Podrás restaurarlo después desde 🗑 Papelera.`)) return;
-  await fetch(`/api/clientes/${id}`, { method: "DELETE" });
+  await fetch(`/api/clientes/${id}`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
   selectedClientId = null;
   document.getElementById("detailPanel").innerHTML = '<div class="detail-empty">Selecciona un cliente de la lista, o crea uno nuevo.</div>';
   loadClientList();
@@ -284,7 +284,7 @@ async function loadClientInvoices(clienteId) {
     sel.addEventListener("change", async (e) => {
       e.stopPropagation();
       await fetch(`/api/invoices/${sel.dataset.invoiceId}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" },
+        method: "PUT", headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
         body: JSON.stringify({ estado: sel.value }),
       });
     });
@@ -356,12 +356,12 @@ document.getElementById("closeTrash").addEventListener("click", () => {
   loadClientList();
 });
 async function restoreClient(id) {
-  await fetch(`/api/clientes/${id}/restore`, { method: "POST" });
+  await fetch(`/api/clientes/${id}/restore`, { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" } });
   document.getElementById("btnTrash").click();
 }
 async function permanentDeleteClient(id) {
   if (!confirm("¿Eliminar PERMANENTEMENTE? No se puede deshacer.")) return;
-  await fetch(`/api/clientes/${id}/permanent`, { method: "DELETE" });
+  await fetch(`/api/clientes/${id}/permanent`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
   document.getElementById("btnTrash").click();
 }
 

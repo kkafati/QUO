@@ -20,9 +20,9 @@ async function parseApiResponse(res) {
 
 const api = {
   get: (url) => fetch(url).then(handleAuthFailure).then(r => r.json()),
-  post: (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(handleAuthFailure).then(parseApiResponse),
-  put: (url, body) => fetch(url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(handleAuthFailure).then(parseApiResponse),
-  del: (url) => fetch(url, { method: "DELETE" }).then(handleAuthFailure),
+  post: (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" }, body: JSON.stringify(body) }).then(handleAuthFailure).then(parseApiResponse),
+  put: (url, body) => fetch(url, { method: "PUT", headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" }, body: JSON.stringify(body) }).then(handleAuthFailure).then(parseApiResponse),
+  del: (url) => fetch(url, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } }).then(handleAuthFailure),
 };
 
 function fmt(n) {

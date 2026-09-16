@@ -420,7 +420,7 @@ document.getElementById("btnSaveMovimiento").addEventListener("click", async () 
     fecha: document.getElementById("f_fecha").value,
     referencia: document.getElementById("f_referencia").value,
   };
-  const res = await fetch("/api/inventario/movimientos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const res = await fetch("/api/inventario/movimientos", { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" }, body: JSON.stringify(body) });
   const data = await res.json();
   if (!res.ok) {
     document.getElementById("modalError").textContent = data.error || "Error al guardar.";

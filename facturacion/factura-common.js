@@ -363,7 +363,7 @@ document.getElementById("btnGuardar").addEventListener("click", async () => {
   try {
     const url = invoiceId ? `/api/invoices/${invoiceId}` : "/api/invoices";
     const method = invoiceId ? "PUT" : "POST";
-    const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const res = await fetch(url, { method, headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" }, body: JSON.stringify(body) });
     const data = await res.json();
     if (!res.ok) {
       statusMsg.textContent = data.error || "Error al guardar.";
@@ -402,7 +402,7 @@ document.getElementById("btnImprimir").addEventListener("click", () => {
 document.getElementById("btnEliminar").addEventListener("click", async () => {
   const numero = document.getElementById("facturaNumero").textContent;
   if (!confirm(`¿Mover la factura "${numero}" a la papelera?`)) return;
-  await fetch(`/api/invoices/${invoiceId}`, { method: "DELETE" });
+  await fetch(`/api/invoices/${invoiceId}`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
   window.location.href = "/facturacion/";
 });
 
@@ -418,7 +418,7 @@ if (estadoSwitcher) {
   estadoSwitcher.addEventListener("change", async () => {
     if (!invoiceId) return;
     await fetch(`/api/invoices/${invoiceId}`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT", headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
       body: JSON.stringify({ estado: estadoSwitcher.value }),
     });
   });
@@ -457,7 +457,7 @@ function renderPagos(inv) {
   document.querySelectorAll("#pagosBody [data-del]").forEach(btn => {
     btn.addEventListener("click", async () => {
       if (!confirm("¿Eliminar este pago?")) return;
-      await fetch(`/api/pagos/${btn.dataset.del}`, { method: "DELETE" });
+      await fetch(`/api/pagos/${btn.dataset.del}`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
       await loadPagos();
     });
   });
@@ -479,7 +479,7 @@ if (btnAddPago) {
       referencia: document.getElementById("pagoReferencia").value,
     };
     const res = await fetch(`/api/invoices/${invoiceId}/pagos`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" }, body: JSON.stringify(body),
     });
     const data = await res.json();
     if (!res.ok) {

@@ -299,7 +299,7 @@ document.getElementById("btnGuardar").addEventListener("click", async () => {
   try {
     const url = cotizacionId ? `/api/cotizaciones-clasica/${cotizacionId}` : "/api/cotizaciones-clasica";
     const method = cotizacionId ? "PUT" : "POST";
-    const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const res = await fetch(url, { method, headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" }, body: JSON.stringify(body) });
     const data = await res.json();
     if (!res.ok) {
       statusMsg.textContent = data.error || "Error al guardar.";
@@ -334,7 +334,7 @@ document.getElementById("btnImprimir").addEventListener("click", () => {
 document.getElementById("btnEliminar").addEventListener("click", async () => {
   const numero = document.getElementById("facturaNumero").textContent;
   if (!confirm(`¿Mover la cotización "${numero}" a la papelera?`)) return;
-  await fetch(`/api/cotizaciones-clasica/${cotizacionId}`, { method: "DELETE" });
+  await fetch(`/api/cotizaciones-clasica/${cotizacionId}`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
   window.location.href = "/cotizaciones/";
 });
 
@@ -343,7 +343,7 @@ document.getElementById("btnConvertir").addEventListener("click", async () => {
   if (!confirm("¿Convertir esta cotización en una factura? Se creará una nueva factura con estos mismos datos.")) return;
   const statusMsg = document.getElementById("statusMsg");
   try {
-    const res = await fetch(`/api/cotizaciones-clasica/${cotizacionId}/convertir-a-factura`, { method: "POST" });
+    const res = await fetch(`/api/cotizaciones-clasica/${cotizacionId}/convertir-a-factura`, { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" } });
     const data = await res.json();
     if (!res.ok) {
       statusMsg.textContent = data.error || "No se pudo convertir a factura.";

@@ -246,7 +246,7 @@ async function loadInvoices() {
 
 async function deleteInvoice(id, numero) {
   if (!confirm(`¿Mover la factura "${numero}" a la papelera? Podrás restaurarla después desde 🗑 Papelera.`)) return;
-  await fetch(`/api/invoices/${id}`, { method: "DELETE" });
+  await fetch(`/api/invoices/${id}`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
   loadInvoices();
 }
 
@@ -269,12 +269,12 @@ document.getElementById("closeTrash").addEventListener("click", () => {
   loadInvoices();
 });
 async function restoreInvoice(id) {
-  await fetch(`/api/invoices/${id}/restore`, { method: "POST" });
+  await fetch(`/api/invoices/${id}/restore`, { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" } });
   document.getElementById("btn-trash").click();
 }
 async function permanentDeleteInvoice(id) {
   if (!confirm("¿Eliminar PERMANENTEMENTE? No se puede deshacer.")) return;
-  await fetch(`/api/invoices/${id}/permanent`, { method: "DELETE" });
+  await fetch(`/api/invoices/${id}/permanent`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
   document.getElementById("btn-trash").click();
 }
 
@@ -351,7 +351,7 @@ async function loadProformas() {
 
 async function deleteProforma(id) {
   if (!confirm("¿Mover esta proforma a la papelera? Podrás restaurarla después desde 🗑 Papelera.")) return;
-  await fetch(`/api/proformas/${id}`, { method: "DELETE" });
+  await fetch(`/api/proformas/${id}`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
   loadProformas();
 }
 
@@ -374,12 +374,12 @@ document.getElementById("closeTrashProforma").addEventListener("click", () => {
   loadProformas();
 });
 async function restoreProforma(id) {
-  await fetch(`/api/proformas/${id}/restore`, { method: "POST" });
+  await fetch(`/api/proformas/${id}/restore`, { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" } });
   document.getElementById("btn-trash-proforma").click();
 }
 async function permanentDeleteProforma(id) {
   if (!confirm("¿Eliminar PERMANENTEMENTE? No se puede deshacer.")) return;
-  await fetch(`/api/proformas/${id}/permanent`, { method: "DELETE" });
+  await fetch(`/api/proformas/${id}/permanent`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
   document.getElementById("btn-trash-proforma").click();
 }
 

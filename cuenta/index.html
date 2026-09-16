@@ -482,7 +482,7 @@ document.getElementById("settingsForm").addEventListener("submit", async (e) => 
   try {
     const res = await fetch("/api/account", {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
       body: JSON.stringify(body),
     });
     const data = await res.json();

@@ -350,7 +350,7 @@ document.getElementById("btnGuardar").addEventListener("click", async () => {
   try {
     const url = proformaId ? `/api/proformas/${proformaId}` : "/api/proformas";
     const method = proformaId ? "PUT" : "POST";
-    const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const res = await fetch(url, { method, headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" }, body: JSON.stringify(body) });
     const data = await res.json();
     if (!res.ok) {
       statusMsg.textContent = data.error || "Error al guardar.";
@@ -387,7 +387,7 @@ document.getElementById("btnConvertir").addEventListener("click", async () => {
   if (!confirm("¿Convertir esta proforma en una factura? Se creará una nueva factura con estos mismos datos.")) return;
   const statusMsg = document.getElementById("statusMsg");
   try {
-    const res = await fetch(`/api/proformas/${proformaId}/convertir-a-factura`, { method: "POST" });
+    const res = await fetch(`/api/proformas/${proformaId}/convertir-a-factura`, { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" } });
     const data = await res.json();
     if (!res.ok) {
       statusMsg.textContent = data.error || "No se pudo convertir a factura.";
@@ -402,7 +402,7 @@ document.getElementById("btnConvertir").addEventListener("click", async () => {
 
 document.getElementById("btnEliminar").addEventListener("click", async () => {
   if (!confirm("¿Mover esta proforma a la papelera?")) return;
-  await fetch(`/api/proformas/${proformaId}`, { method: "DELETE" });
+  await fetch(`/api/proformas/${proformaId}`, { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } });
   window.location.href = "/facturacion/";
 });
 

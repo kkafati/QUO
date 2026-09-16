@@ -1113,6 +1113,11 @@ let currentStudyId = null;
 let currentStudyName = "";
 
 async function apiFetch(url, opts){
+  // Defense-in-depth CSRF mitigation: the backend rejects any POST/PUT/DELETE
+  // without this header (a plain HTML form can't set it), so add it here
+  // once for every call through this wrapper rather than at each call site.
+  opts = opts || {};
+  opts.headers = Object.assign({ "X-Requested-With": "XMLHttpRequest" }, opts.headers || {});
   const res = await fetch(url, opts);
   if(res.status === 401){
     window.location.href = "/login?next=" + encodeURIComponent(window.location.pathname);
