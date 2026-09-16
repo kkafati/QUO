@@ -67,6 +67,23 @@
   tr.bajo-stock td:first-child { border-left: 4px solid var(--danger); }
   .bajo-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: var(--danger); margin-left: 8px; }
 
+  /* ---- Reconciliación: valor_reposicion (today's catalog price) vs the
+     ledger's actual Inventario (1030) balance. Same color treatment as
+     Contabilidad's balanced/unbalanced indicators, so a real mismatch reads
+     the same way here as it does there. ---- */
+  .reconciliacion-panel { border-radius: 12px; padding: 16px 20px; margin-bottom: 22px; background: #eef0f2; }
+  .reconciliacion-status { font-size: 15px; font-weight: 700; margin-bottom: 8px; color: var(--ink-soft); }
+  .reconciliacion-panel.coincide { background: rgba(63,143,106,0.14); }
+  .reconciliacion-panel.coincide .reconciliacion-status { color: var(--good); }
+  .reconciliacion-panel.no-coincide { background: rgba(181,69,59,0.14); }
+  .reconciliacion-panel.no-coincide .reconciliacion-status { color: var(--danger); }
+  .reconciliacion-detail { display: flex; gap: 24px; flex-wrap: wrap; font-size: 13px; color: var(--ink-soft); }
+  .reconciliacion-detail strong { font-family: 'IBM Plex Mono', monospace; color: var(--ink); }
+
+  /* ---- Active material filter indicator on Movimientos ---- */
+  .mov-filter-banner { display: flex; align-items: center; gap: 12px; background: #eaf2fa; color: var(--blue); border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 14px; }
+  .mov-filter-banner strong { font-weight: 700; }
+
   .modal-backdrop { position: fixed; inset: 0; background: rgba(15,41,66,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
   .modal-backdrop[hidden] { display: none; }
   .modal { background: #fff; border-radius: 12px; padding: 24px; width: 480px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
@@ -156,6 +173,10 @@
             </div>
           </div>
 
+          <div class="reconciliacion-panel" id="reconciliacionPanel">
+            <div class="reconciliacion-status">Cargando…</div>
+          </div>
+
           <div class="filter-row">
             <label class="filter-check">
               <input type="checkbox" id="filterSoloBajoStock">
@@ -165,7 +186,7 @@
 
           <div class="table-scroll"><table>
             <thead><tr>
-              <th>Código</th><th>Descripción</th><th class="num">Stock</th><th class="num">Mínimo</th><th class="num">Valor</th>
+              <th>Código</th><th>Descripción</th><th class="num">Stock</th><th class="num">Mínimo</th><th class="num">Valor Reposición</th>
             </tr></thead>
             <tbody id="existenciasBody"></tbody>
           </table></div>
@@ -196,6 +217,11 @@
               <select id="movFilterMaterial"><option value="">Todos</option></select>
             </div>
             <button class="btn btn-ghost" id="movBtnClearFilter">Limpiar filtro</button>
+          </div>
+
+          <div class="mov-filter-banner" id="movFilterBanner" hidden>
+            Mostrando: <strong id="movFilterBannerText"></strong>
+            <button type="button" class="btn btn-sm btn-ghost" id="movBtnVerTodos">Ver todos</button>
           </div>
 
           <div class="table-scroll"><table>
@@ -256,16 +282,32 @@ function fmt(n) { return "L. " + (Number(n) || 0).toLocaleString("es-HN", { mini
 let existenciasCache = [];
 
 async function loadExistencias() {
-  const [inventario, resumen] = await Promise.all([
+  const [inventario, resumen, reconciliacion] = await Promise.all([
     fetch("/api/inventario").then(r => r.json()),
     fetch("/api/inventario/resumen").then(r => r.json()),
+    fetch("/api/inventario/reconciliacion").then(r => r.json()),
   ]);
   existenciasCache = inventario;
 
   document.getElementById("invSummaryValor").textContent = fmt(resumen.valor_total);
   document.getElementById("invSummaryBajoStock").textContent = resumen.materiales_bajo_stock;
 
+  renderReconciliacion(reconciliacion);
   renderExistencias();
+}
+
+function renderReconciliacion(data) {
+  const panel = document.getElementById("reconciliacionPanel");
+  panel.classList.remove("coincide", "no-coincide");
+  panel.classList.add(data.coincide ? "coincide" : "no-coincide");
+  panel.innerHTML = `
+    <div class="reconciliacion-status">${data.coincide ? "✓ El valor de reposición coincide con el saldo contable" : "✗ El valor de reposición NO coincide con el saldo contable"}</div>
+    <div class="reconciliacion-detail">
+      <span>Valor Reposición: <strong>${fmt(data.valor_reposicion_total)}</strong></span>
+      <span>Saldo Contable (Inventario 1030): <strong>${fmt(data.saldo_contable)}</strong></span>
+      <span>Diferencia: <strong>${fmt(data.diferencia)}</strong></span>
+    </div>
+  `;
 }
 
 function renderExistencias() {
@@ -274,14 +316,18 @@ function renderExistencias() {
 
   document.getElementById("existenciasEmptyState").hidden = rows.length > 0;
   document.getElementById("existenciasBody").innerHTML = rows.map(m => `
-    <tr class="${m.bajo_stock ? "bajo-stock" : ""}">
+    <tr class="clickable ${m.bajo_stock ? "bajo-stock" : ""}" data-material-id="${m.id}">
       <td class="mono">${esc(m.code)}</td>
       <td>${esc(m.description)}${m.bajo_stock ? '<span class="bajo-badge">⚠ Stock bajo</span>' : ""}</td>
       <td class="num mono ${m.bajo_stock ? "text-danger" : ""}">${m.stock}</td>
       <td class="num mono">${m.minimo_stock}</td>
-      <td class="num mono">${fmt(m.valor)}</td>
+      <td class="num mono">${fmt(m.valor_reposicion)}</td>
     </tr>
   `).join("");
+
+  document.querySelectorAll("#existenciasBody tr[data-material-id]").forEach(tr => {
+    tr.addEventListener("click", () => viewMaterialMovimientos(tr.dataset.materialId));
+  });
 }
 
 document.getElementById("filterSoloBajoStock").addEventListener("change", renderExistencias);
@@ -325,14 +371,32 @@ async function loadMovimientos() {
   `).join("");
 }
 
+function updateMovFilterBanner() {
+  const materialId = document.getElementById("movFilterMaterial").value;
+  const banner = document.getElementById("movFilterBanner");
+  if (!materialId) {
+    banner.hidden = true;
+    return;
+  }
+  const material = materialesCache.find(m => m.id == materialId);
+  document.getElementById("movFilterBannerText").textContent = material ? `${material.code} — ${material.description}` : "";
+  banner.hidden = false;
+}
+
 document.getElementById("movFilterDesde").addEventListener("change", loadMovimientos);
 document.getElementById("movFilterHasta").addEventListener("change", loadMovimientos);
-document.getElementById("movFilterMaterial").addEventListener("change", loadMovimientos);
+document.getElementById("movFilterMaterial").addEventListener("change", () => { loadMovimientos(); updateMovFilterBanner(); });
 document.getElementById("movBtnClearFilter").addEventListener("click", () => {
   document.getElementById("movFilterDesde").value = "";
   document.getElementById("movFilterHasta").value = "";
   document.getElementById("movFilterMaterial").value = "";
   loadMovimientos();
+  updateMovFilterBanner();
+});
+document.getElementById("movBtnVerTodos").addEventListener("click", () => {
+  document.getElementById("movFilterMaterial").value = "";
+  loadMovimientos();
+  updateMovFilterBanner();
 });
 
 function openMovimientoModal() {
@@ -369,18 +433,33 @@ document.getElementById("btnSaveMovimiento").addEventListener("click", async () 
 
 // ---- Sidebar view switching ----
 
+function activateInventarioView(viewName) {
+  document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  const btn = document.querySelector(`.nav-item[data-view="${viewName}"]`);
+  if (btn) btn.classList.add("active");
+  document.getElementById(`view-${viewName}`).classList.add("active");
+}
+
 document.querySelectorAll(".nav-item[data-view]").forEach(btn => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById(`view-${btn.dataset.view}`).classList.add("active");
+    activateInventarioView(btn.dataset.view);
     if (btn.dataset.view === "movimientos" && !movimientosLoaded) {
       movimientosLoaded = true;
       loadMovimientos();
     }
   });
 });
+
+// Clicking a material row on Existencias jumps here filtered to just that
+// material's kardex, instead of landing on the full unfiltered list.
+function viewMaterialMovimientos(materialId) {
+  activateInventarioView("movimientos");
+  movimientosLoaded = true;
+  document.getElementById("movFilterMaterial").value = materialId;
+  loadMovimientos();
+  updateMovFilterBanner();
+}
 
 fetch("/api/me").then(r => r.json()).then(me => {
   if (me.authenticated && me.company_name) document.getElementById("topbarClient").textContent = "Inventario — " + me.company_name;

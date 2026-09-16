@@ -3466,7 +3466,7 @@ def panel_resumen():
 
     inventario = _compute_inventario_list(account_id)
     materiales_bajo_stock = sum(1 for m in inventario if m["bajo_stock"])
-    valor_total_inventario = round(sum(m["valor"] for m in inventario), 2)
+    valor_total_inventario = round(sum(m["valor_reposicion"] for m in inventario), 2)
 
     # "Current month" computed from the server's date the same way the rest
     # of this app already defaults fecha fields (datetime.utcnow()).
@@ -4019,7 +4019,14 @@ def get_material_stock(material_id):
 
 
 def _compute_inventario_list(account_id):
-    """Factored out so /api/panel/resumen can reuse it directly."""
+    """Factored out so /api/panel/resumen can reuse it directly.
+
+    "valor_reposicion" (replacement cost) is stock x TODAY's unit_price -
+    deliberately NOT the same figure as the ledger's Inventario (1030)
+    account, which only reflects whatever price was posted at the time of
+    each movement. This field used to be called plain "valor", which
+    wrongly implied it WAS the accounting figure - see
+    /api/inventario/reconciliacion for the two compared side by side."""
     materials = Material.query.filter_by(account_id=account_id, deleted_at=None).order_by(Material.code).all()
     result = []
     for m in materials:
@@ -4034,7 +4041,7 @@ def _compute_inventario_list(account_id):
             "stock": stock,
             "minimo_stock": minimo,
             "bajo_stock": stock < minimo,
-            "valor": round(stock * m.unit_price, 2),
+            "valor_reposicion": round(stock * m.unit_price, 2),
         })
     return result
 
@@ -4062,6 +4069,36 @@ def inventario_resumen():
         "valor_total": round(valor_total, 2),
         "materiales_bajo_stock": materiales_bajo_stock,
         "total_materiales": len(materials),
+    })
+
+
+@app.route("/api/inventario/reconciliacion", methods=["GET"])
+@login_required
+def inventario_reconciliacion():
+    """Surfaces a real valuation inconsistency instead of hiding it:
+    valor_reposicion_total revalues ALL stock at TODAY's unit_price, while
+    the ledger's Inventario (1030) account only reflects whatever price was
+    posted at the time of each movement. The two are expected to diverge the
+    moment a material's price changes since its last movement - this
+    endpoint compares them side by side rather than pretending they agree.
+    Not a bug to "fix" into always matching - that would need full
+    FIFO/average-cost layering, a bigger feature, out of scope here."""
+    account_id = current_account_id()
+
+    inventario = _compute_inventario_list(account_id)
+    valor_reposicion_total = round(sum(m["valor_reposicion"] for m in inventario), 2)
+
+    ensure_chart_of_accounts(account_id)
+    cuenta_inventario = CuentaContable.query.filter_by(account_id=account_id, codigo="1030", deleted_at=None).first()
+    hoy = datetime.utcnow().strftime("%Y-%m-%d")
+    saldo_contable = compute_cuenta_balance_asof(account_id, cuenta_inventario, hoy) if cuenta_inventario else 0.0
+
+    diferencia = round(valor_reposicion_total - saldo_contable, 2)
+    return jsonify({
+        "valor_reposicion_total": valor_reposicion_total,
+        "saldo_contable": saldo_contable,
+        "diferencia": diferencia,
+        "coincide": abs(diferencia) < 0.01,
     })
 
 
