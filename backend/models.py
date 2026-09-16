@@ -31,6 +31,30 @@ class Account(db.Model):
     rango_autorizado_hasta = db.Column(db.String(24))
     last_seen = db.Column(db.String(32))  # updated on each authenticated request, for "online now"
 
+    usuarios = db.relationship("Usuario", backref="account", cascade="all, delete-orphan")
+
+
+ROLES = ["administrador", "ventas", "contador", "bodega"]
+
+
+class Usuario(db.Model):
+    """An individual staff login belonging to an Account. Account itself no
+    longer authenticates anyone directly (its username/password_hash columns
+    are kept as-is for this phase, but are not checked at login time) - every
+    real person who logs in is a Usuario, scoped to one Account and one of
+    the four fixed ROLES. Usernames are unique platform-wide (not just within
+    the account), same as Account.username was before this phase."""
+    __tablename__ = "usuarios"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    username = db.Column(db.String(80), nullable=False, unique=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    nombre = db.Column(db.String(255), nullable=False)
+    rol = db.Column(db.String(16), nullable=False)  # administrador | ventas | contador | bodega
+    activo = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.String(32))
+    last_seen = db.Column(db.String(32))
+
 
 class Material(db.Model):
     __tablename__ = "materials"

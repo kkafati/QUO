@@ -8,7 +8,7 @@ from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
 from werkzeug.security import check_password_hash, generate_password_hash
-from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GastoOperativoItem, GASTO_CATEGORIAS, StockMovimiento, Pago, CuentaContable, AsientoContable, AsientoLinea, CuentaPorPagar, PagoProveedor, MovimientoBancario, GASTO_CATEGORIA_CODIGOS, ActivoFijo, DepreciacionRegistro, LoginAttempt
+from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GastoOperativoItem, GASTO_CATEGORIAS, StockMovimiento, Pago, CuentaContable, AsientoContable, AsientoLinea, CuentaPorPagar, PagoProveedor, MovimientoBancario, GASTO_CATEGORIA_CODIGOS, ActivoFijo, DepreciacionRegistro, LoginAttempt, Usuario, ROLES
 from numero_a_letras import numero_a_letras
 from pdf_render import render_invoice_pdf
 from pdf_render_cotizacion import render_cotizacion_pdf
@@ -36,6 +36,7 @@ PROFORMA_DIR = os.path.join(os.path.dirname(BASE_DIR), "proforma")
 CONTABILIDAD_DIR = os.path.join(os.path.dirname(BASE_DIR), "contabilidad")
 CLIENTES_DIR = os.path.join(os.path.dirname(BASE_DIR), "clientes")
 INVENTARIO_DIR = os.path.join(os.path.dirname(BASE_DIR), "inventario")
+USUARIOS_DIR = os.path.join(os.path.dirname(BASE_DIR), "usuarios")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/cotizaciones")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(BASE_DIR, "quoting.db")
@@ -139,6 +140,21 @@ CATEGORY_MODELS = {"material": Material, "labor": Labor, "tool": Tool, "transpor
 
 def current_account_id():
     return session.get("account_id")
+
+
+def current_usuario_id():
+    return session.get("usuario_id")
+
+
+def current_usuario():
+    usuario_id = session.get("usuario_id")
+    if not usuario_id:
+        return None
+    return Usuario.query.get(usuario_id)
+
+
+def current_role():
+    return session.get("rol")
 
 
 def current_admin_id():
@@ -272,23 +288,39 @@ def set_security_headers(response):
 
 @app.before_request
 def touch_last_seen():
-    """Keep Account.last_seen fresh for the admin's 'online now' indicator.
+    """Keep both Account.last_seen (admin's platform-wide 'online now' view,
+    unchanged from before) and Usuario.last_seen (the actual person) fresh.
     Throttled to avoid a write on every single request."""
     account_id = session.get("account_id")
     if not account_id:
         return
-    account = Account.query.get(account_id)
-    if not account:
-        return
     now = datetime.utcnow()
-    if account.last_seen:
-        try:
-            last = datetime.strptime(account.last_seen, "%Y-%m-%d %H:%M:%S")
-            if (now - last).total_seconds() < 30:
-                return  # updated recently enough, skip the write
-        except ValueError:
-            pass
-    account.last_seen = now.strftime("%Y-%m-%d %H:%M:%S")
+    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+
+    account = Account.query.get(account_id)
+    if account:
+        stale = True
+        if account.last_seen:
+            try:
+                stale = (now - datetime.strptime(account.last_seen, "%Y-%m-%d %H:%M:%S")).total_seconds() >= 30
+            except ValueError:
+                pass
+        if stale:
+            account.last_seen = now_str
+
+    usuario_id = session.get("usuario_id")
+    if usuario_id:
+        usuario = Usuario.query.get(usuario_id)
+        if usuario:
+            stale = True
+            if usuario.last_seen:
+                try:
+                    stale = (now - datetime.strptime(usuario.last_seen, "%Y-%m-%d %H:%M:%S")).total_seconds() >= 30
+                except ValueError:
+                    pass
+            if stale:
+                usuario.last_seen = now_str
+
     db.session.commit()
 
 
@@ -301,6 +333,26 @@ def login_required(view):
             return redirect(url_for("login", next=request.path))
         return view(*args, **kwargs)
     return wrapped
+
+
+def requires_role(*roles):
+    """Gate a route to one or more of the four fixed ROLES. Always stacked
+    ON TOP of @login_required (i.e. listed above it, so it runs after
+    login_required has already confirmed there's a session at all) - this
+    decorator only checks WHICH module the logged-in user may reach, not
+    WHETHER they're logged in. A role each role doesn't have gets a 403,
+    not a redirect to login, since the user IS authenticated - they just
+    can't use this module."""
+    def decorator(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if current_role() not in roles:
+                if request.path.startswith("/api/"):
+                    return jsonify({"error": "No tienes permiso para acceder a este módulo."}), 403
+                abort(403)
+            return view(*args, **kwargs)
+        return wrapped
+    return decorator
 
 
 @app.route("/login", methods=["GET"])
@@ -320,19 +372,28 @@ def api_login():
         log_login_attempt(username, ip_address, False)
         return jsonify({"error": "Demasiados intentos. Intenta de nuevo en unos minutos."}), 429
 
-    account = Account.query.filter_by(username=username).first()
-    if not account or not check_password_hash(account.password_hash, password):
+    usuario = Usuario.query.filter_by(username=username).first()
+    if not usuario or not usuario.activo or not check_password_hash(usuario.password_hash, password):
+        log_login_attempt(username, ip_address, False)
+        return jsonify({"error": "Usuario o contraseña incorrectos."}), 401
+
+    account = Account.query.get(usuario.account_id)
+    if not account:
         log_login_attempt(username, ip_address, False)
         return jsonify({"error": "Usuario o contraseña incorrectos."}), 401
 
     log_login_attempt(username, ip_address, True)
+    session["usuario_id"] = usuario.id
     session["account_id"] = account.id
+    session["rol"] = usuario.rol
     session["company_name"] = account.company_name
     session.permanent = True
-    account.last_seen = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    account.last_seen = now_str
+    usuario.last_seen = now_str
     db.session.add(LoginEvent(
         account_id=account.id, event_type="login",
-        timestamp=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        timestamp=now_str,
         ip_address=ip_address,
         user_agent=(request.headers.get("User-Agent") or "")[:255],
     ))
@@ -344,7 +405,13 @@ def api_login():
 def api_me():
     if not current_account_id():
         return jsonify({"authenticated": False})
-    return jsonify({"authenticated": True, "company_name": session.get("company_name")})
+    usuario = current_usuario()
+    return jsonify({
+        "authenticated": True,
+        "company_name": session.get("company_name"),
+        "rol": session.get("rol"),
+        "nombre": usuario.nombre if usuario else None,
+    })
 
 
 def account_profile_dict(account):
@@ -371,6 +438,7 @@ def account_profile_dict(account):
 
 @app.route("/api/account", methods=["GET"])
 @login_required
+@requires_role("administrador")
 def get_account_profile():
     account = Account.query.get_or_404(current_account_id())
     return jsonify(account_profile_dict(account))
@@ -378,6 +446,7 @@ def get_account_profile():
 
 @app.route("/api/account", methods=["PUT"])
 @login_required
+@requires_role("administrador")
 def update_account_profile():
     account = Account.query.get_or_404(current_account_id())
     data = request.json or {}
@@ -433,6 +502,7 @@ def logout():
 
 @app.route("/api/account/activity", methods=["GET"])
 @login_required
+@requires_role("administrador")
 def get_own_activity():
     """A business account's own login/logout history - not other accounts'.
     Last 3 months, not just a flat recent-N-events limit."""
@@ -443,6 +513,121 @@ def get_own_activity():
     return jsonify([{
         "event_type": e.event_type, "timestamp": e.timestamp, "ip_address": e.ip_address,
     } for e in events])
+
+
+# ---------------------------------------------------------------------------
+# Usuarios - individual staff logins within one Account, each with one of
+# the four fixed ROLES. Administrador-only to view or manage.
+# ---------------------------------------------------------------------------
+
+def usuario_to_dict(u):
+    return {
+        "id": u.id,
+        "username": u.username,
+        "nombre": u.nombre,
+        "rol": u.rol,
+        "activo": u.activo,
+        "created_at": u.created_at,
+        "last_seen": u.last_seen,
+    }
+
+
+def _count_other_active_administradores(account_id, exclude_usuario_id):
+    """How many OTHER active administrador Usuarios exist on this account -
+    used to block removing the last one, so a business can never lock
+    itself out of its own user management."""
+    return Usuario.query.filter(
+        Usuario.account_id == account_id,
+        Usuario.rol == "administrador",
+        Usuario.activo.is_(True),
+        Usuario.id != exclude_usuario_id,
+    ).count()
+
+
+@app.route("/api/usuarios", methods=["GET"])
+@login_required
+@requires_role("administrador")
+def list_usuarios():
+    usuarios = Usuario.query.filter_by(account_id=current_account_id()).order_by(Usuario.id).all()
+    return jsonify([usuario_to_dict(u) for u in usuarios])
+
+
+@app.route("/api/usuarios", methods=["POST"])
+@login_required
+@requires_role("administrador")
+def create_usuario():
+    data = request.json or {}
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    nombre = (data.get("nombre") or "").strip()
+    rol = (data.get("rol") or "").strip()
+
+    if not username:
+        return jsonify({"error": "El usuario es requerido."}), 400
+    if not password or len(password) < 6:
+        return jsonify({"error": "La contraseña debe tener al menos 6 caracteres."}), 400
+    if not nombre:
+        return jsonify({"error": "El nombre es requerido."}), 400
+    if rol not in ROLES:
+        return jsonify({"error": "Rol inválido."}), 400
+    if Usuario.query.filter_by(username=username).first():
+        return jsonify({"error": f"El usuario '{username}' ya está en uso."}), 400
+
+    usuario = Usuario(
+        account_id=current_account_id(),
+        username=username,
+        password_hash=generate_password_hash(password),
+        nombre=nombre,
+        rol=rol,
+        activo=True,
+        created_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    db.session.add(usuario)
+    db.session.commit()
+    return jsonify(usuario_to_dict(usuario)), 201
+
+
+@app.route("/api/usuarios/<int:usuario_id>", methods=["PUT"])
+@login_required
+@requires_role("administrador")
+def update_usuario(usuario_id):
+    usuario = Usuario.query.filter_by(id=usuario_id, account_id=current_account_id()).first_or_404()
+    data = request.json or {}
+
+    nuevo_rol = (data.get("rol") or usuario.rol).strip()
+    if nuevo_rol not in ROLES:
+        return jsonify({"error": "Rol inválido."}), 400
+    nueva_activo = data.get("activo", usuario.activo)
+
+    was_admin_active = usuario.rol == "administrador" and usuario.activo
+    will_be_admin_active = nuevo_rol == "administrador" and bool(nueva_activo)
+    if was_admin_active and not will_be_admin_active:
+        if _count_other_active_administradores(current_account_id(), usuario.id) == 0:
+            return jsonify({"error": "No se puede quitar el último administrador de la cuenta."}), 400
+
+    if "nombre" in data:
+        nombre = (data.get("nombre") or "").strip()
+        if not nombre:
+            return jsonify({"error": "El nombre es requerido."}), 400
+        usuario.nombre = nombre
+    usuario.rol = nuevo_rol
+    usuario.activo = bool(nueva_activo)
+    db.session.commit()
+    return jsonify(usuario_to_dict(usuario))
+
+
+@app.route("/api/usuarios/<int:usuario_id>/reset-password", methods=["POST"])
+@login_required
+@requires_role("administrador")
+def reset_usuario_password(usuario_id):
+    usuario = Usuario.query.filter_by(id=usuario_id, account_id=current_account_id()).first_or_404()
+    data = request.json or {}
+    password = data.get("password") or ""
+    if not password or len(password) < 6:
+        return jsonify({"error": "La contraseña debe tener al menos 6 caracteres."}), 400
+    usuario.password_hash = generate_password_hash(password)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -596,13 +781,23 @@ def panel():
 
 @app.route("/cuenta/")
 @login_required
+@requires_role("administrador")
 def cuenta():
     log_page_view("/cuenta/")
     return send_from_directory(CUENTA_DIR, "index.html")
 
 
+@app.route("/usuarios/")
+@login_required
+@requires_role("administrador")
+def usuarios_page():
+    log_page_view("/usuarios/")
+    return send_from_directory(USUARIOS_DIR, "index.html")
+
+
 @app.route("/cotizaciones/")
 @login_required
+@requires_role("ventas")
 def index():
     log_page_view("/cotizaciones/")
     return send_from_directory(FRONTEND_DIR, "index.html")
@@ -611,6 +806,7 @@ def index():
 @app.route("/regulación/")
 @app.route("/regulacion/")
 @login_required
+@requires_role("administrador")
 def regulacion():
     log_page_view("/regulacion/")
     return send_from_directory(REGULACION_DIR, "index.html")
@@ -671,9 +867,15 @@ def material_to_dict(item):
 
 def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
     endpoint = f"catalog_{category}"
+    # Catálogos is a ventas module, but Inventario's own stock-movement modal
+    # (bodega) depends on GET /api/catalog/material to populate its material
+    # dropdown - so that one read endpoint, and only that one, is also open
+    # to bodega. Every other catalog route/category stays ventas-only.
+    list_roles = ("ventas", "bodega") if category == "material" else ("ventas",)
 
     @app.route(f"/api/catalog/{category}", methods=["GET"], endpoint=f"{endpoint}_list")
     @login_required
+    @requires_role(*list_roles)
     def list_items():
         q = request.args.get("q", "").strip().lower()
         items = Model.query.filter_by(account_id=current_account_id(), deleted_at=None).order_by(Model.code).all()
@@ -683,6 +885,7 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
 
     @app.route(f"/api/catalog/{category}/trash", methods=["GET"], endpoint=f"{endpoint}_trash_list")
     @login_required
+    @requires_role("ventas")
     def list_trash():
         items = (Model.query.filter(Model.account_id == current_account_id(), Model.deleted_at.isnot(None))
                  .order_by(Model.deleted_at.desc()).all())
@@ -690,6 +893,7 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
 
     @app.route(f"/api/catalog/{category}", methods=["POST"], endpoint=f"{endpoint}_create")
     @login_required
+    @requires_role("ventas")
     def create_item():
         data = request.json or {}
         code = data.get("code", "").strip()
@@ -713,6 +917,7 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
 
     @app.route(f"/api/catalog/{category}/<int:item_id>", methods=["PUT"], endpoint=f"{endpoint}_update")
     @login_required
+    @requires_role("ventas")
     def update_item(item_id):
         item = Model.query.filter_by(id=item_id, account_id=current_account_id()).first_or_404()
         data = request.json or {}
@@ -731,6 +936,7 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
 
     @app.route(f"/api/catalog/{category}/<int:item_id>", methods=["DELETE"], endpoint=f"{endpoint}_delete")
     @login_required
+    @requires_role("ventas")
     def delete_item(item_id):
         item = Model.query.filter_by(id=item_id, account_id=current_account_id(), deleted_at=None).first_or_404()
         item.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
@@ -739,6 +945,7 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
 
     @app.route(f"/api/catalog/{category}/<int:item_id>/restore", methods=["POST"], endpoint=f"{endpoint}_restore")
     @login_required
+    @requires_role("ventas")
     def restore_item(item_id):
         item = Model.query.filter(Model.id == item_id, Model.account_id == current_account_id(),
                                    Model.deleted_at.isnot(None)).first_or_404()
@@ -750,6 +957,7 @@ def register_catalog_routes(category, Model, to_dict=catalog_to_dict):
 
     @app.route(f"/api/catalog/{category}/<int:item_id>/permanent", methods=["DELETE"], endpoint=f"{endpoint}_permanent")
     @login_required
+    @requires_role("ventas")
     def permanent_delete_item(item_id):
         item = Model.query.filter(Model.id == item_id, Model.account_id == current_account_id(),
                                    Model.deleted_at.isnot(None)).first_or_404()
@@ -781,6 +989,7 @@ def supplier_to_dict(s):
 
 @app.route("/api/suppliers", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_all_suppliers():
     q = request.args.get("q", "").strip().lower()
     rows = (SupplierPrice.query.join(Material)
@@ -802,6 +1011,7 @@ def list_all_suppliers():
 
 @app.route("/api/materials/<int:material_id>/suppliers", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_suppliers(material_id):
     Material.query.filter_by(id=material_id, account_id=current_account_id()).first_or_404()
     rows = SupplierPrice.query.filter_by(material_id=material_id).order_by(SupplierPrice.date.desc()).all()
@@ -810,6 +1020,7 @@ def list_suppliers(material_id):
 
 @app.route("/api/materials/<int:material_id>/suppliers", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def create_supplier(material_id):
     Material.query.filter_by(id=material_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
@@ -836,6 +1047,7 @@ def _owned_supplier_or_404(supplier_id):
 
 @app.route("/api/suppliers/<int:supplier_id>", methods=["PUT"])
 @login_required
+@requires_role("ventas")
 def update_supplier(supplier_id):
     s = _owned_supplier_or_404(supplier_id)
     data = request.json or {}
@@ -851,6 +1063,7 @@ def update_supplier(supplier_id):
 
 @app.route("/api/suppliers/<int:supplier_id>", methods=["DELETE"])
 @login_required
+@requires_role("ventas")
 def delete_supplier(supplier_id):
     s = _owned_supplier_or_404(supplier_id)
     db.session.delete(s)
@@ -922,6 +1135,7 @@ def compute_card_totals(card):
 
 @app.route("/api/costcards", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_costcards():
     q = request.args.get("q", "").strip().lower()
     cards = CostCard.query.filter_by(account_id=current_account_id(), deleted_at=None).order_by(CostCard.code).all()
@@ -932,6 +1146,7 @@ def list_costcards():
 
 @app.route("/api/costcards/trash", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_costcards_trash():
     cards = (CostCard.query.filter(CostCard.account_id == current_account_id(), CostCard.deleted_at.isnot(None))
              .order_by(CostCard.deleted_at.desc()).all())
@@ -940,6 +1155,7 @@ def list_costcards_trash():
 
 @app.route("/api/costcards/<int:card_id>", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def get_costcard(card_id):
     card = CostCard.query.filter_by(id=card_id, account_id=current_account_id()).first_or_404()
     return jsonify(compute_card_totals(card))
@@ -947,6 +1163,7 @@ def get_costcard(card_id):
 
 @app.route("/api/costcards", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def create_costcard():
     data = request.json or {}
     code = data.get("code", "").strip()
@@ -971,6 +1188,7 @@ def create_costcard():
 
 @app.route("/api/costcards/<int:card_id>", methods=["PUT"])
 @login_required
+@requires_role("ventas")
 def update_costcard(card_id):
     card = CostCard.query.filter_by(id=card_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
@@ -1013,6 +1231,7 @@ def _sync_items(card, items_data):
 
 @app.route("/api/costcards/<int:card_id>", methods=["DELETE"])
 @login_required
+@requires_role("ventas")
 def delete_costcard(card_id):
     card = CostCard.query.filter_by(id=card_id, account_id=current_account_id(), deleted_at=None).first_or_404()
     card.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
@@ -1022,6 +1241,7 @@ def delete_costcard(card_id):
 
 @app.route("/api/costcards/<int:card_id>/restore", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def restore_costcard(card_id):
     card = CostCard.query.filter(CostCard.id == card_id, CostCard.account_id == current_account_id(),
                                   CostCard.deleted_at.isnot(None)).first_or_404()
@@ -1034,6 +1254,7 @@ def restore_costcard(card_id):
 
 @app.route("/api/costcards/<int:card_id>/permanent", methods=["DELETE"])
 @login_required
+@requires_role("ventas")
 def permanent_delete_costcard(card_id):
     card = CostCard.query.filter(CostCard.id == card_id, CostCard.account_id == current_account_id(),
                                   CostCard.deleted_at.isnot(None)).first_or_404()
@@ -1097,6 +1318,7 @@ def compute_quote_totals(quote):
 
 @app.route("/api/quotes", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_quotes():
     quotes = Quote.query.filter_by(account_id=current_account_id(), deleted_at=None).order_by(Quote.id.desc()).all()
     return jsonify([compute_quote_totals(q) for q in quotes])
@@ -1104,6 +1326,7 @@ def list_quotes():
 
 @app.route("/api/quotes/trash", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_quotes_trash():
     quotes = (Quote.query.filter(Quote.account_id == current_account_id(), Quote.deleted_at.isnot(None))
               .order_by(Quote.deleted_at.desc()).all())
@@ -1112,6 +1335,7 @@ def list_quotes_trash():
 
 @app.route("/api/quotes/<int:quote_id>", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def get_quote(quote_id):
     quote = Quote.query.filter_by(id=quote_id, account_id=current_account_id()).first_or_404()
     return jsonify(compute_quote_totals(quote))
@@ -1123,6 +1347,7 @@ CATEGORY_LABELS = {"material": "Materiales", "labor": "Mano de Obra", "tool": "H
 
 @app.route("/api/quotes/<int:quote_id>/summary", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def get_quote_summary(quote_id):
     """Consolidated bill-of-materials style rollup: for every material/labor/tool/
     transport/gasto item across every ficha in this quote, sum the total quantity
@@ -1171,6 +1396,7 @@ def get_quote_summary(quote_id):
 
 @app.route("/api/quotes/<int:quote_id>/refresh-prices", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def refresh_quote_prices(quote_id):
     """Pushes each ficha's material item prices to match the current catalog
     auto-price (highest quote at the most recent date), and PERSISTS it —
@@ -1204,6 +1430,7 @@ def refresh_quote_prices(quote_id):
 
 @app.route("/api/quotes", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def create_quote():
     data = request.json or {}
     quote = Quote(
@@ -1221,6 +1448,7 @@ def create_quote():
 
 @app.route("/api/quotes/<int:quote_id>", methods=["PUT"])
 @login_required
+@requires_role("ventas")
 def update_quote(quote_id):
     quote = Quote.query.filter_by(id=quote_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
@@ -1273,6 +1501,7 @@ def _sync_quote_children(quote, data):
 
 @app.route("/api/quotes/<int:quote_id>", methods=["DELETE"])
 @login_required
+@requires_role("ventas")
 def delete_quote(quote_id):
     quote = Quote.query.filter_by(id=quote_id, account_id=current_account_id(), deleted_at=None).first_or_404()
     quote.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
@@ -1282,6 +1511,7 @@ def delete_quote(quote_id):
 
 @app.route("/api/quotes/<int:quote_id>/restore", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def restore_quote(quote_id):
     quote = Quote.query.filter(Quote.id == quote_id, Quote.account_id == current_account_id(),
                                 Quote.deleted_at.isnot(None)).first_or_404()
@@ -1292,6 +1522,7 @@ def restore_quote(quote_id):
 
 @app.route("/api/quotes/<int:quote_id>/permanent", methods=["DELETE"])
 @login_required
+@requires_role("ventas")
 def permanent_delete_quote(quote_id):
     quote = Quote.query.filter(Quote.id == quote_id, Quote.account_id == current_account_id(),
                                 Quote.deleted_at.isnot(None)).first_or_404()
@@ -1310,6 +1541,7 @@ def regulacion_summary(r):
 
 @app.route("/api/regulacion", methods=["GET"])
 @login_required
+@requires_role("administrador")
 def list_regulacion_studies():
     rows = RegulacionStudy.query.filter_by(account_id=current_account_id()).order_by(RegulacionStudy.id.desc()).all()
     return jsonify([regulacion_summary(r) for r in rows])
@@ -1317,6 +1549,7 @@ def list_regulacion_studies():
 
 @app.route("/api/regulacion/<int:study_id>", methods=["GET"])
 @login_required
+@requires_role("administrador")
 def get_regulacion_study(study_id):
     r = RegulacionStudy.query.filter_by(id=study_id, account_id=current_account_id()).first_or_404()
     return jsonify({**regulacion_summary(r), "data": json.loads(r.data)})
@@ -1324,6 +1557,7 @@ def get_regulacion_study(study_id):
 
 @app.route("/api/regulacion", methods=["POST"])
 @login_required
+@requires_role("administrador")
 def create_regulacion_study():
     body = request.json or {}
     name = (body.get("name") or "").strip() or "Estudio sin título"
@@ -1340,6 +1574,7 @@ def create_regulacion_study():
 
 @app.route("/api/regulacion/<int:study_id>", methods=["PUT"])
 @login_required
+@requires_role("administrador")
 def update_regulacion_study(study_id):
     r = RegulacionStudy.query.filter_by(id=study_id, account_id=current_account_id()).first_or_404()
     body = request.json or {}
@@ -1354,6 +1589,7 @@ def update_regulacion_study(study_id):
 
 @app.route("/api/regulacion/<int:study_id>", methods=["DELETE"])
 @login_required
+@requires_role("administrador")
 def delete_regulacion_study(study_id):
     r = RegulacionStudy.query.filter_by(id=study_id, account_id=current_account_id()).first_or_404()
     db.session.delete(r)
@@ -1367,6 +1603,7 @@ def delete_regulacion_study(study_id):
 
 @app.route("/facturacion/")
 @login_required
+@requires_role("ventas")
 def facturacion():
     log_page_view("/facturacion/")
     return send_from_directory(FACTURACION_DIR, "index.html")
@@ -1374,6 +1611,7 @@ def facturacion():
 
 @app.route("/facturacion/factura-common.js")
 @login_required
+@requires_role("ventas")
 def facturacion_common_js():
     return send_from_directory(FACTURACION_DIR, "factura-common.js", mimetype="application/javascript")
 
@@ -1391,6 +1629,7 @@ TEMPLATE_FILES = {
 
 @app.route("/facturacion/ver/")
 @login_required
+@requires_role("ventas")
 def factura_ver():
     log_page_view("/facturacion/ver/")
     invoice_id = request.args.get("id", type=int)
@@ -1410,6 +1649,7 @@ def factura_ver():
 
 @app.route("/cotizacion-clasica/ver/")
 @login_required
+@requires_role("ventas")
 def cotizacion_clasica_ver():
     log_page_view("/cotizacion-clasica/ver/")
     return send_from_directory(COTIZACION_CLASICA_DIR, "ver.html")
@@ -1417,6 +1657,7 @@ def cotizacion_clasica_ver():
 
 @app.route("/cotizacion-clasica/cotizacion-common.js")
 @login_required
+@requires_role("ventas")
 def cotizacion_clasica_common_js():
     return send_from_directory(COTIZACION_CLASICA_DIR, "cotizacion-common.js", mimetype="application/javascript")
 
@@ -1427,6 +1668,7 @@ def cotizacion_clasica_common_js():
 
 @app.route("/proforma/ver/")
 @login_required
+@requires_role("ventas")
 def proforma_ver():
     log_page_view("/proforma/ver/")
     return send_from_directory(PROFORMA_DIR, "ver.html")
@@ -1434,6 +1676,7 @@ def proforma_ver():
 
 @app.route("/proforma/proforma-common.js")
 @login_required
+@requires_role("ventas")
 def proforma_common_js():
     return send_from_directory(PROFORMA_DIR, "proforma-common.js", mimetype="application/javascript")
 
@@ -1444,6 +1687,7 @@ def proforma_common_js():
 
 @app.route("/contabilidad/")
 @login_required
+@requires_role("contador")
 def contabilidad():
     log_page_view("/contabilidad/")
     return send_from_directory(CONTABILIDAD_DIR, "index.html")
@@ -1455,6 +1699,7 @@ def contabilidad():
 
 @app.route("/inventario/")
 @login_required
+@requires_role("bodega")
 def inventario():
     log_page_view("/inventario/")
     return send_from_directory(INVENTARIO_DIR, "index.html")
@@ -1466,6 +1711,7 @@ def inventario():
 
 @app.route("/clientes/")
 @login_required
+@requires_role("ventas")
 def clientes_page():
     log_page_view("/clientes/")
     return send_from_directory(CLIENTES_DIR, "index.html")
@@ -1483,6 +1729,7 @@ def cliente_to_dict(c):
 
 @app.route("/api/clientes", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_clientes():
     q = request.args.get("q", "").strip().lower()
     clientes = Cliente.query.filter_by(account_id=current_account_id(), deleted_at=None).order_by(Cliente.nombre).all()
@@ -1494,6 +1741,7 @@ def list_clientes():
 
 @app.route("/api/clientes/trash", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_clientes_trash():
     clientes = (Cliente.query.filter(Cliente.account_id == current_account_id(), Cliente.deleted_at.isnot(None))
                 .order_by(Cliente.deleted_at.desc()).all())
@@ -1502,6 +1750,7 @@ def list_clientes_trash():
 
 @app.route("/api/clientes/<int:cliente_id>", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def get_cliente(cliente_id):
     c = Cliente.query.filter_by(id=cliente_id, account_id=current_account_id()).first_or_404()
     return jsonify(cliente_to_dict(c))
@@ -1509,6 +1758,7 @@ def get_cliente(cliente_id):
 
 @app.route("/api/clientes/<int:cliente_id>/invoices", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def get_cliente_invoices(cliente_id):
     cliente = Cliente.query.filter_by(id=cliente_id, account_id=current_account_id()).first_or_404()
     # Match invoices linked by cliente_id, plus older invoices that predate the
@@ -1521,6 +1771,7 @@ def get_cliente_invoices(cliente_id):
 
 @app.route("/api/clientes/<int:cliente_id>/cotizaciones-clasica", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def get_cliente_cotizaciones_clasica(cliente_id):
     cliente = Cliente.query.filter_by(id=cliente_id, account_id=current_account_id()).first_or_404()
     cots = (Cotizacion.query.filter_by(account_id=current_account_id(), deleted_at=None)
@@ -1531,6 +1782,7 @@ def get_cliente_cotizaciones_clasica(cliente_id):
 
 @app.route("/api/clientes/<int:cliente_id>/proformas", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def get_cliente_proformas(cliente_id):
     cliente = Cliente.query.filter_by(id=cliente_id, account_id=current_account_id()).first_or_404()
     pfs = (Proforma.query.filter_by(account_id=current_account_id(), deleted_at=None)
@@ -1541,6 +1793,7 @@ def get_cliente_proformas(cliente_id):
 
 @app.route("/api/clientes", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def create_cliente():
     data = request.json or {}
     nombre = (data.get("nombre") or "").strip()
@@ -1564,6 +1817,7 @@ def create_cliente():
 
 @app.route("/api/clientes/<int:cliente_id>", methods=["PUT"])
 @login_required
+@requires_role("ventas")
 def update_cliente(cliente_id):
     c = Cliente.query.filter_by(id=cliente_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
@@ -1583,6 +1837,7 @@ def update_cliente(cliente_id):
 
 @app.route("/api/clientes/<int:cliente_id>", methods=["DELETE"])
 @login_required
+@requires_role("ventas")
 def delete_cliente(cliente_id):
     c = Cliente.query.filter_by(id=cliente_id, account_id=current_account_id(), deleted_at=None).first_or_404()
     c.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
@@ -1592,6 +1847,7 @@ def delete_cliente(cliente_id):
 
 @app.route("/api/clientes/<int:cliente_id>/restore", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def restore_cliente(cliente_id):
     c = Cliente.query.filter(Cliente.id == cliente_id, Cliente.account_id == current_account_id(),
                               Cliente.deleted_at.isnot(None)).first_or_404()
@@ -1602,6 +1858,7 @@ def restore_cliente(cliente_id):
 
 @app.route("/api/clientes/<int:cliente_id>/permanent", methods=["DELETE"])
 @login_required
+@requires_role("ventas")
 def permanent_delete_cliente(cliente_id):
     c = Cliente.query.filter(Cliente.id == cliente_id, Cliente.account_id == current_account_id(),
                               Cliente.deleted_at.isnot(None)).first_or_404()
@@ -1682,6 +1939,7 @@ def compute_invoice_totals(invoice):
 
 @app.route("/api/invoices", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_invoices():
     q = Invoice.query.filter_by(account_id=current_account_id(), deleted_at=None)
     desde = request.args.get("desde")
@@ -1696,6 +1954,7 @@ def list_invoices():
 
 @app.route("/api/invoices/trash", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_invoices_trash():
     invoices = (Invoice.query.filter(Invoice.account_id == current_account_id(), Invoice.deleted_at.isnot(None))
                 .order_by(Invoice.deleted_at.desc()).all())
@@ -1704,6 +1963,7 @@ def list_invoices_trash():
 
 @app.route("/api/invoices/<int:invoice_id>", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def get_invoice(invoice_id):
     invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id()).first_or_404()
     return jsonify(compute_invoice_totals(invoice))
@@ -1711,6 +1971,7 @@ def get_invoice(invoice_id):
 
 @app.route("/api/invoices/<int:invoice_id>/pdf", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def get_invoice_pdf(invoice_id):
     invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id()).first_or_404()
     account = Account.query.get_or_404(current_account_id())
@@ -1822,6 +2083,7 @@ def _sync_invoice_lines(invoice, lines_data):
 
 @app.route("/api/invoices", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def create_invoice():
     account = Account.query.get_or_404(current_account_id())
     numero = _next_invoice_numero(account)
@@ -1883,6 +2145,7 @@ def create_invoice():
 
 @app.route("/api/invoices/<int:invoice_id>", methods=["PUT"])
 @login_required
+@requires_role("ventas")
 def update_invoice(invoice_id):
     invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
@@ -1926,6 +2189,7 @@ def update_invoice(invoice_id):
 
 @app.route("/api/invoices/<int:invoice_id>", methods=["DELETE"])
 @login_required
+@requires_role("ventas")
 def delete_invoice(invoice_id):
     invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id(), deleted_at=None).first_or_404()
     invoice.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
@@ -1935,6 +2199,7 @@ def delete_invoice(invoice_id):
 
 @app.route("/api/invoices/<int:invoice_id>/restore", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def restore_invoice(invoice_id):
     invoice = Invoice.query.filter(Invoice.id == invoice_id, Invoice.account_id == current_account_id(),
                                     Invoice.deleted_at.isnot(None)).first_or_404()
@@ -1945,6 +2210,7 @@ def restore_invoice(invoice_id):
 
 @app.route("/api/invoices/<int:invoice_id>/permanent", methods=["DELETE"])
 @login_required
+@requires_role("ventas")
 def permanent_delete_invoice(invoice_id):
     invoice = Invoice.query.filter(Invoice.id == invoice_id, Invoice.account_id == current_account_id(),
                                     Invoice.deleted_at.isnot(None)).first_or_404()
@@ -1971,6 +2237,7 @@ def pago_to_dict(p):
 
 @app.route("/api/invoices/<int:invoice_id>/pagos", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_pagos(invoice_id):
     invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id()).first_or_404()
     pagos = Pago.query.filter_by(invoice_id=invoice.id).order_by(Pago.fecha.desc(), Pago.id.desc()).all()
@@ -1979,6 +2246,7 @@ def list_pagos(invoice_id):
 
 @app.route("/api/invoices/<int:invoice_id>/pagos", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def create_pago(invoice_id):
     invoice = Invoice.query.filter_by(id=invoice_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
@@ -2029,6 +2297,7 @@ def create_pago(invoice_id):
 
 @app.route("/api/pagos/<int:pago_id>", methods=["DELETE"])
 @login_required
+@requires_role("ventas")
 def delete_pago(pago_id):
     p = Pago.query.filter_by(id=pago_id, account_id=current_account_id()).first_or_404()
     db.session.delete(p)
@@ -2131,6 +2400,7 @@ def _build_cotizacion_pdf_filename(cot):
 
 @app.route("/api/cotizaciones-clasica", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_cotizaciones_clasica():
     cots = (Cotizacion.query.filter_by(account_id=current_account_id(), deleted_at=None)
             .order_by(Cotizacion.id.desc()).all())
@@ -2139,6 +2409,7 @@ def list_cotizaciones_clasica():
 
 @app.route("/api/cotizaciones-clasica/trash", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_cotizaciones_clasica_trash():
     cots = (Cotizacion.query.filter(Cotizacion.account_id == current_account_id(), Cotizacion.deleted_at.isnot(None))
             .order_by(Cotizacion.deleted_at.desc()).all())
@@ -2147,6 +2418,7 @@ def list_cotizaciones_clasica_trash():
 
 @app.route("/api/cotizaciones-clasica/<int:cot_id>", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def get_cotizacion_clasica(cot_id):
     cot = Cotizacion.query.filter_by(id=cot_id, account_id=current_account_id()).first_or_404()
     return jsonify(compute_cotizacion_totals(cot))
@@ -2154,6 +2426,7 @@ def get_cotizacion_clasica(cot_id):
 
 @app.route("/api/cotizaciones-clasica/<int:cot_id>/pdf", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def get_cotizacion_clasica_pdf(cot_id):
     cot = Cotizacion.query.filter_by(id=cot_id, account_id=current_account_id()).first_or_404()
     account = Account.query.get_or_404(current_account_id())
@@ -2171,6 +2444,7 @@ def get_cotizacion_clasica_pdf(cot_id):
 
 @app.route("/api/cotizaciones-clasica", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def create_cotizacion_clasica():
     account = Account.query.get_or_404(current_account_id())
     data = request.json or {}
@@ -2210,6 +2484,7 @@ def create_cotizacion_clasica():
 
 @app.route("/api/cotizaciones-clasica/<int:cot_id>", methods=["PUT"])
 @login_required
+@requires_role("ventas")
 def update_cotizacion_clasica(cot_id):
     cot = Cotizacion.query.filter_by(id=cot_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
@@ -2243,6 +2518,7 @@ def update_cotizacion_clasica(cot_id):
 
 @app.route("/api/cotizaciones-clasica/<int:cot_id>", methods=["DELETE"])
 @login_required
+@requires_role("ventas")
 def delete_cotizacion_clasica(cot_id):
     cot = Cotizacion.query.filter_by(id=cot_id, account_id=current_account_id(), deleted_at=None).first_or_404()
     cot.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
@@ -2252,6 +2528,7 @@ def delete_cotizacion_clasica(cot_id):
 
 @app.route("/api/cotizaciones-clasica/<int:cot_id>/restore", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def restore_cotizacion_clasica(cot_id):
     cot = Cotizacion.query.filter(Cotizacion.id == cot_id, Cotizacion.account_id == current_account_id(),
                                    Cotizacion.deleted_at.isnot(None)).first_or_404()
@@ -2262,6 +2539,7 @@ def restore_cotizacion_clasica(cot_id):
 
 @app.route("/api/cotizaciones-clasica/<int:cot_id>/permanent", methods=["DELETE"])
 @login_required
+@requires_role("ventas")
 def permanent_delete_cotizacion_clasica(cot_id):
     cot = Cotizacion.query.filter(Cotizacion.id == cot_id, Cotizacion.account_id == current_account_id(),
                                    Cotizacion.deleted_at.isnot(None)).first_or_404()
@@ -2272,6 +2550,7 @@ def permanent_delete_cotizacion_clasica(cot_id):
 
 @app.route("/api/cotizaciones-clasica/<int:cot_id>/convertir-a-factura", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def convertir_cotizacion_a_factura(cot_id):
     cot = Cotizacion.query.filter_by(id=cot_id, account_id=current_account_id(), deleted_at=None).first_or_404()
     account = Account.query.get_or_404(current_account_id())
@@ -2420,6 +2699,7 @@ def _build_proforma_pdf_filename(pf):
 
 @app.route("/api/proformas", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_proformas():
     pfs = (Proforma.query.filter_by(account_id=current_account_id(), deleted_at=None)
            .order_by(Proforma.id.desc()).all())
@@ -2428,6 +2708,7 @@ def list_proformas():
 
 @app.route("/api/proformas/trash", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def list_proformas_trash():
     pfs = (Proforma.query.filter(Proforma.account_id == current_account_id(), Proforma.deleted_at.isnot(None))
            .order_by(Proforma.deleted_at.desc()).all())
@@ -2436,6 +2717,7 @@ def list_proformas_trash():
 
 @app.route("/api/proformas/<int:pf_id>", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def get_proforma(pf_id):
     pf = Proforma.query.filter_by(id=pf_id, account_id=current_account_id()).first_or_404()
     return jsonify(compute_proforma_totals(pf))
@@ -2443,6 +2725,7 @@ def get_proforma(pf_id):
 
 @app.route("/api/proformas/<int:pf_id>/pdf", methods=["GET"])
 @login_required
+@requires_role("ventas")
 def get_proforma_pdf(pf_id):
     pf = Proforma.query.filter_by(id=pf_id, account_id=current_account_id()).first_or_404()
     account = Account.query.get_or_404(current_account_id())
@@ -2460,6 +2743,7 @@ def get_proforma_pdf(pf_id):
 
 @app.route("/api/proformas", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def create_proforma():
     account = Account.query.get_or_404(current_account_id())
     data = request.json or {}
@@ -2496,6 +2780,7 @@ def create_proforma():
 
 @app.route("/api/proformas/<int:pf_id>", methods=["PUT"])
 @login_required
+@requires_role("ventas")
 def update_proforma(pf_id):
     pf = Proforma.query.filter_by(id=pf_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
@@ -2530,6 +2815,7 @@ def update_proforma(pf_id):
 
 @app.route("/api/proformas/<int:pf_id>", methods=["DELETE"])
 @login_required
+@requires_role("ventas")
 def delete_proforma(pf_id):
     pf = Proforma.query.filter_by(id=pf_id, account_id=current_account_id(), deleted_at=None).first_or_404()
     pf.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
@@ -2539,6 +2825,7 @@ def delete_proforma(pf_id):
 
 @app.route("/api/proformas/<int:pf_id>/restore", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def restore_proforma(pf_id):
     pf = Proforma.query.filter(Proforma.id == pf_id, Proforma.account_id == current_account_id(),
                                 Proforma.deleted_at.isnot(None)).first_or_404()
@@ -2549,6 +2836,7 @@ def restore_proforma(pf_id):
 
 @app.route("/api/proformas/<int:pf_id>/permanent", methods=["DELETE"])
 @login_required
+@requires_role("ventas")
 def permanent_delete_proforma(pf_id):
     pf = Proforma.query.filter(Proforma.id == pf_id, Proforma.account_id == current_account_id(),
                                 Proforma.deleted_at.isnot(None)).first_or_404()
@@ -2559,6 +2847,7 @@ def permanent_delete_proforma(pf_id):
 
 @app.route("/api/proformas/<int:pf_id>/convertir-a-factura", methods=["POST"])
 @login_required
+@requires_role("ventas")
 def convertir_proforma_a_factura(pf_id):
     pf = Proforma.query.filter_by(id=pf_id, account_id=current_account_id(), deleted_at=None).first_or_404()
     account = Account.query.get_or_404(current_account_id())
@@ -2869,6 +3158,7 @@ def cuenta_contable_to_dict(c):
 
 @app.route("/api/cuentas-contables", methods=["GET"])
 @login_required
+@requires_role("contador")
 def list_cuentas_contables():
     ensure_chart_of_accounts(current_account_id())
     cuentas = (CuentaContable.query.filter_by(account_id=current_account_id(), deleted_at=None)
@@ -2878,6 +3168,7 @@ def list_cuentas_contables():
 
 @app.route("/api/cuentas-contables", methods=["POST"])
 @login_required
+@requires_role("contador")
 def create_cuenta_contable():
     data = request.json or {}
     codigo = (data.get("codigo") or "").strip()
@@ -2908,6 +3199,7 @@ def create_cuenta_contable():
 
 @app.route("/api/cuentas-contables/<int:cuenta_id>", methods=["PUT"])
 @login_required
+@requires_role("contador")
 def update_cuenta_contable(cuenta_id):
     c = CuentaContable.query.filter_by(id=cuenta_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
@@ -2926,6 +3218,7 @@ def update_cuenta_contable(cuenta_id):
 
 @app.route("/api/cuentas-contables/<int:cuenta_id>", methods=["DELETE"])
 @login_required
+@requires_role("contador")
 def delete_cuenta_contable(cuenta_id):
     c = CuentaContable.query.filter_by(id=cuenta_id, account_id=current_account_id(), deleted_at=None).first_or_404()
     if AsientoLinea.query.filter_by(cuenta_contable_id=c.id).first():
@@ -2957,6 +3250,7 @@ def asiento_to_dict(a, with_lineas=True):
 
 @app.route("/api/asientos", methods=["GET"])
 @login_required
+@requires_role("contador")
 def list_asientos():
     """Libro Diario - every journal entry, optionally filtered by date range
     and/or origen_type."""
@@ -2976,6 +3270,7 @@ def list_asientos():
 
 @app.route("/api/asientos/<int:asiento_id>", methods=["GET"])
 @login_required
+@requires_role("contador")
 def get_asiento(asiento_id):
     a = AsientoContable.query.filter_by(id=asiento_id, account_id=current_account_id()).first_or_404()
     return jsonify(asiento_to_dict(a))
@@ -2983,6 +3278,7 @@ def get_asiento(asiento_id):
 
 @app.route("/api/asientos", methods=["POST"])
 @login_required
+@requires_role("contador")
 def create_asiento_manual():
     """Manual journal entry - e.g. an opening balance, a correction, or a
     bank fee that needs an asiento before it can be reconciled. Goes through
@@ -3009,6 +3305,7 @@ def create_asiento_manual():
 
 @app.route("/api/contabilidad/libro-mayor/<int:cuenta_id>", methods=["GET"])
 @login_required
+@requires_role("contador")
 def libro_mayor(cuenta_id):
     """Every AsientoLinea for one cuenta contable, oldest first, with a
     running balance. Sign convention: activo/gasto accounts increase with
@@ -3047,6 +3344,7 @@ def libro_mayor(cuenta_id):
 
 @app.route("/api/contabilidad/balanza-comprobacion", methods=["GET"])
 @login_required
+@requires_role("contador")
 def balanza_comprobacion():
     """Trial balance: every cuenta with activity in range, its total debe,
     total haber, and net balance (signed per the same convention as
@@ -3119,6 +3417,7 @@ def compute_cuenta_balance_asof(account_id, cuenta, fecha_hasta):
 
 @app.route("/api/contabilidad/balance-general", methods=["GET"])
 @login_required
+@requires_role("contador")
 def balance_general():
     """Snapshot at a single date - Activo / Pasivo / Patrimonio.
 
@@ -3188,6 +3487,7 @@ FLUJO_ORIGEN_INESPERADO = {"factura", "cuenta_por_pagar"}
 
 @app.route("/api/contabilidad/flujo-efectivo", methods=["GET"])
 @login_required
+@requires_role("contador")
 def flujo_efectivo():
     """Estado de Flujo de Efectivo - Actividades de Operación only, direct
     method (grouped by origen_type). Investing/Financing are NOT fabricated:
@@ -3332,12 +3632,14 @@ def _parse_gasto_items(raw_items):
 
 @app.route("/api/gastos/categorias", methods=["GET"])
 @login_required
+@requires_role("contador")
 def list_gasto_categorias():
     return jsonify(GASTO_CATEGORIAS)
 
 
 @app.route("/api/gastos", methods=["GET"])
 @login_required
+@requires_role("contador")
 def list_gastos():
     q = GastoOperativo.query.filter_by(account_id=current_account_id(), deleted_at=None)
     desde = request.args.get("desde")
@@ -3352,6 +3654,7 @@ def list_gastos():
 
 @app.route("/api/gastos/summary", methods=["GET"])
 @login_required
+@requires_role("contador")
 def gastos_summary():
     """Total and per-category breakdown, honoring the same desde/hasta
     filters as the list endpoint - the list and its total should always
@@ -3373,6 +3676,7 @@ def gastos_summary():
 
 @app.route("/api/gastos/trash", methods=["GET"])
 @login_required
+@requires_role("contador")
 def list_gastos_trash():
     gastos = (GastoOperativo.query.filter(GastoOperativo.account_id == current_account_id(),
                                            GastoOperativo.deleted_at.isnot(None))
@@ -3382,6 +3686,7 @@ def list_gastos_trash():
 
 @app.route("/api/gastos/<int:gasto_id>", methods=["GET"])
 @login_required
+@requires_role("contador")
 def get_gasto(gasto_id):
     g = GastoOperativo.query.filter_by(id=gasto_id, account_id=current_account_id()).first_or_404()
     return jsonify(_gasto_to_dict(g))
@@ -3389,6 +3694,7 @@ def get_gasto(gasto_id):
 
 @app.route("/api/gastos", methods=["POST"])
 @login_required
+@requires_role("contador")
 def create_gasto():
     data = request.json or {}
     descripcion = (data.get("descripcion") or "").strip()
@@ -3429,6 +3735,7 @@ def create_gasto():
 
 @app.route("/api/gastos/<int:gasto_id>", methods=["PUT"])
 @login_required
+@requires_role("contador")
 def update_gasto(gasto_id):
     g = GastoOperativo.query.filter_by(id=gasto_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
@@ -3461,6 +3768,7 @@ def update_gasto(gasto_id):
 
 @app.route("/api/gastos/<int:gasto_id>", methods=["DELETE"])
 @login_required
+@requires_role("contador")
 def delete_gasto(gasto_id):
     g = GastoOperativo.query.filter_by(id=gasto_id, account_id=current_account_id(), deleted_at=None).first_or_404()
     g.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
@@ -3470,6 +3778,7 @@ def delete_gasto(gasto_id):
 
 @app.route("/api/gastos/<int:gasto_id>/restore", methods=["POST"])
 @login_required
+@requires_role("contador")
 def restore_gasto(gasto_id):
     g = GastoOperativo.query.filter(GastoOperativo.id == gasto_id, GastoOperativo.account_id == current_account_id(),
                                      GastoOperativo.deleted_at.isnot(None)).first_or_404()
@@ -3480,6 +3789,7 @@ def restore_gasto(gasto_id):
 
 @app.route("/api/gastos/<int:gasto_id>/permanent", methods=["DELETE"])
 @login_required
+@requires_role("contador")
 def permanent_delete_gasto(gasto_id):
     g = GastoOperativo.query.filter(GastoOperativo.id == gasto_id, GastoOperativo.account_id == current_account_id(),
                                      GastoOperativo.deleted_at.isnot(None)).first_or_404()
@@ -3494,6 +3804,7 @@ def permanent_delete_gasto(gasto_id):
 
 @app.route("/api/contabilidad/ingresos", methods=["GET"])
 @login_required
+@requires_role("contador")
 def contabilidad_ingresos():
     """Total facturado (pre-tax revenue) and ISV collected, for a date range.
     ISV is kept separate on purpose - it's a liability the business collects
@@ -3555,6 +3866,7 @@ def _compute_cuentas_por_cobrar(account_id):
 
 @app.route("/api/contabilidad/cuentas-por-cobrar", methods=["GET"])
 @login_required
+@requires_role("contador")
 def contabilidad_cuentas_por_cobrar():
     return jsonify(_compute_cuentas_por_cobrar(current_account_id()))
 
@@ -3582,6 +3894,7 @@ def _compute_estado_resultados(account_id, desde, hasta):
 
 @app.route("/api/contabilidad/estado-resultados", methods=["GET"])
 @login_required
+@requires_role("contador")
 def contabilidad_estado_resultados():
     desde = request.args.get("desde")
     hasta = request.args.get("hasta")
@@ -3655,6 +3968,7 @@ def cuenta_por_pagar_to_dict(c):
 
 @app.route("/api/cuentas-por-pagar", methods=["GET"])
 @login_required
+@requires_role("contador")
 def list_cuentas_por_pagar():
     q = CuentaPorPagar.query.filter_by(account_id=current_account_id(), deleted_at=None)
     desde = request.args.get("desde")
@@ -3669,6 +3983,7 @@ def list_cuentas_por_pagar():
 
 @app.route("/api/cuentas-por-pagar/trash", methods=["GET"])
 @login_required
+@requires_role("contador")
 def list_cuentas_por_pagar_trash():
     cuentas = (CuentaPorPagar.query.filter(CuentaPorPagar.account_id == current_account_id(),
                                             CuentaPorPagar.deleted_at.isnot(None))
@@ -3678,6 +3993,7 @@ def list_cuentas_por_pagar_trash():
 
 @app.route("/api/cuentas-por-pagar/<int:cxp_id>", methods=["GET"])
 @login_required
+@requires_role("contador")
 def get_cuenta_por_pagar(cxp_id):
     c = CuentaPorPagar.query.filter_by(id=cxp_id, account_id=current_account_id()).first_or_404()
     return jsonify(cuenta_por_pagar_to_dict(c))
@@ -3685,6 +4001,7 @@ def get_cuenta_por_pagar(cxp_id):
 
 @app.route("/api/cuentas-por-pagar", methods=["POST"])
 @login_required
+@requires_role("contador")
 def create_cuenta_por_pagar():
     data = request.json or {}
     proveedor = (data.get("proveedor") or "").strip()
@@ -3726,6 +4043,7 @@ def create_cuenta_por_pagar():
 
 @app.route("/api/cuentas-por-pagar/<int:cxp_id>", methods=["PUT"])
 @login_required
+@requires_role("contador")
 def update_cuenta_por_pagar(cxp_id):
     c = CuentaPorPagar.query.filter_by(id=cxp_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
@@ -3751,6 +4069,7 @@ def update_cuenta_por_pagar(cxp_id):
 
 @app.route("/api/cuentas-por-pagar/<int:cxp_id>", methods=["DELETE"])
 @login_required
+@requires_role("contador")
 def delete_cuenta_por_pagar(cxp_id):
     c = CuentaPorPagar.query.filter_by(id=cxp_id, account_id=current_account_id(), deleted_at=None).first_or_404()
     c.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
@@ -3760,6 +4079,7 @@ def delete_cuenta_por_pagar(cxp_id):
 
 @app.route("/api/cuentas-por-pagar/<int:cxp_id>/restore", methods=["POST"])
 @login_required
+@requires_role("contador")
 def restore_cuenta_por_pagar(cxp_id):
     c = CuentaPorPagar.query.filter(CuentaPorPagar.id == cxp_id, CuentaPorPagar.account_id == current_account_id(),
                                      CuentaPorPagar.deleted_at.isnot(None)).first_or_404()
@@ -3770,6 +4090,7 @@ def restore_cuenta_por_pagar(cxp_id):
 
 @app.route("/api/cuentas-por-pagar/<int:cxp_id>/permanent", methods=["DELETE"])
 @login_required
+@requires_role("contador")
 def permanent_delete_cuenta_por_pagar(cxp_id):
     c = CuentaPorPagar.query.filter(CuentaPorPagar.id == cxp_id, CuentaPorPagar.account_id == current_account_id(),
                                      CuentaPorPagar.deleted_at.isnot(None)).first_or_404()
@@ -3787,6 +4108,7 @@ def pago_proveedor_to_dict(p):
 
 @app.route("/api/cuentas-por-pagar/<int:cxp_id>/pagos", methods=["GET"])
 @login_required
+@requires_role("contador")
 def list_pagos_proveedor(cxp_id):
     c = CuentaPorPagar.query.filter_by(id=cxp_id, account_id=current_account_id()).first_or_404()
     pagos = PagoProveedor.query.filter_by(cuenta_por_pagar_id=c.id).order_by(PagoProveedor.fecha.desc(), PagoProveedor.id.desc()).all()
@@ -3795,6 +4117,7 @@ def list_pagos_proveedor(cxp_id):
 
 @app.route("/api/cuentas-por-pagar/<int:cxp_id>/pagos", methods=["POST"])
 @login_required
+@requires_role("contador")
 def create_pago_proveedor(cxp_id):
     c = CuentaPorPagar.query.filter_by(id=cxp_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
@@ -3834,6 +4157,7 @@ def create_pago_proveedor(cxp_id):
 
 @app.route("/api/pagos-proveedor/<int:pago_id>", methods=["DELETE"])
 @login_required
+@requires_role("contador")
 def delete_pago_proveedor(pago_id):
     p = PagoProveedor.query.filter_by(id=pago_id, account_id=current_account_id()).first_or_404()
     db.session.delete(p)
@@ -3859,6 +4183,7 @@ def movimiento_bancario_to_dict(m):
 
 @app.route("/api/movimientos-bancarios", methods=["GET"])
 @login_required
+@requires_role("contador")
 def list_movimientos_bancarios():
     q = MovimientoBancario.query.filter_by(account_id=current_account_id())
     desde = request.args.get("desde")
@@ -3876,6 +4201,7 @@ def list_movimientos_bancarios():
 
 @app.route("/api/movimientos-bancarios", methods=["POST"])
 @login_required
+@requires_role("contador")
 def create_movimiento_bancario():
     data = request.json or {}
     descripcion = (data.get("descripcion") or "").strip()
@@ -3909,6 +4235,7 @@ def create_movimiento_bancario():
 
 @app.route("/api/movimientos-bancarios/<int:mov_id>/conciliar", methods=["POST"])
 @login_required
+@requires_role("contador")
 def conciliar_movimiento_bancario(mov_id):
     """Marks a bank line as matched - manually, by a human picking the
     corresponding asiento (or none). Never auto-matches by amount/date."""
@@ -3927,6 +4254,7 @@ def conciliar_movimiento_bancario(mov_id):
 
 @app.route("/api/movimientos-bancarios/<int:mov_id>/desconciliar", methods=["POST"])
 @login_required
+@requires_role("contador")
 def desconciliar_movimiento_bancario(mov_id):
     m = MovimientoBancario.query.filter_by(id=mov_id, account_id=current_account_id()).first_or_404()
     m.conciliado = False
@@ -3937,6 +4265,7 @@ def desconciliar_movimiento_bancario(mov_id):
 
 @app.route("/api/movimientos-bancarios/<int:mov_id>", methods=["DELETE"])
 @login_required
+@requires_role("contador")
 def delete_movimiento_bancario(mov_id):
     m = MovimientoBancario.query.filter_by(id=mov_id, account_id=current_account_id()).first_or_404()
     db.session.delete(m)
@@ -3973,6 +4302,7 @@ def activo_fijo_to_dict(a):
 
 @app.route("/api/activos-fijos", methods=["GET"])
 @login_required
+@requires_role("contador")
 def list_activos_fijos():
     activos = (ActivoFijo.query.filter_by(account_id=current_account_id(), deleted_at=None)
                .order_by(ActivoFijo.fecha_adquisicion.desc(), ActivoFijo.id.desc()).all())
@@ -3981,6 +4311,7 @@ def list_activos_fijos():
 
 @app.route("/api/activos-fijos/<int:activo_id>", methods=["GET"])
 @login_required
+@requires_role("contador")
 def get_activo_fijo(activo_id):
     a = ActivoFijo.query.filter_by(id=activo_id, account_id=current_account_id()).first_or_404()
     return jsonify(activo_fijo_to_dict(a))
@@ -3988,6 +4319,7 @@ def get_activo_fijo(activo_id):
 
 @app.route("/api/activos-fijos", methods=["POST"])
 @login_required
+@requires_role("contador")
 def create_activo_fijo():
     data = request.json or {}
     nombre = (data.get("nombre") or "").strip()
@@ -4033,6 +4365,7 @@ def create_activo_fijo():
 
 @app.route("/api/activos-fijos/<int:activo_id>", methods=["PUT"])
 @login_required
+@requires_role("contador")
 def update_activo_fijo(activo_id):
     a = ActivoFijo.query.filter_by(id=activo_id, account_id=current_account_id()).first_or_404()
     data = request.json or {}
@@ -4052,6 +4385,7 @@ def update_activo_fijo(activo_id):
 
 @app.route("/api/activos-fijos/<int:activo_id>", methods=["DELETE"])
 @login_required
+@requires_role("contador")
 def delete_activo_fijo(activo_id):
     a = ActivoFijo.query.filter_by(id=activo_id, account_id=current_account_id(), deleted_at=None).first_or_404()
     if DepreciacionRegistro.query.filter_by(activo_fijo_id=a.id).first():
@@ -4066,6 +4400,7 @@ def delete_activo_fijo(activo_id):
 
 @app.route("/api/activos-fijos/depreciar", methods=["POST"])
 @login_required
+@requires_role("contador")
 def depreciar_activos_fijos():
     """Runs straight-line depreciation for every active asset acquired on or
     before the end of `periodo`, once per período per asset (enforced by
@@ -4155,6 +4490,7 @@ def movimiento_to_dict(m):
 
 @app.route("/api/materiales/<int:material_id>/stock", methods=["GET"])
 @login_required
+@requires_role("bodega")
 def get_material_stock(material_id):
     material = Material.query.filter_by(id=material_id, account_id=current_account_id()).first_or_404()
     return jsonify({"material_id": material.id, "stock": compute_material_stock(material.id)})
@@ -4190,12 +4526,14 @@ def _compute_inventario_list(account_id):
 
 @app.route("/api/inventario", methods=["GET"])
 @login_required
+@requires_role("bodega")
 def list_inventario():
     return jsonify(_compute_inventario_list(current_account_id()))
 
 
 @app.route("/api/inventario/resumen", methods=["GET"])
 @login_required
+@requires_role("bodega")
 def inventario_resumen():
     """Mirrors /api/gastos/summary's style - powers the summary cards above
     the Existencias table."""
@@ -4216,6 +4554,7 @@ def inventario_resumen():
 
 @app.route("/api/inventario/reconciliacion", methods=["GET"])
 @login_required
+@requires_role("bodega")
 def inventario_reconciliacion():
     """Surfaces a real valuation inconsistency instead of hiding it:
     valor_reposicion_total revalues ALL stock at TODAY's unit_price, while
@@ -4246,6 +4585,7 @@ def inventario_reconciliacion():
 
 @app.route("/api/inventario/movimientos", methods=["GET"])
 @login_required
+@requires_role("bodega")
 def list_movimientos():
     q = StockMovimiento.query.filter_by(account_id=current_account_id())
     material_id = request.args.get("material_id")
@@ -4263,6 +4603,7 @@ def list_movimientos():
 
 @app.route("/api/inventario/movimientos", methods=["POST"])
 @login_required
+@requires_role("bodega")
 def create_movimiento():
     data = request.json or {}
     tipo = (data.get("tipo") or "").strip()

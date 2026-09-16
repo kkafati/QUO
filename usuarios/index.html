@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Usuarios — Grupo Liquidámbar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --blue: #065dac; --lime: #cddc28; --ink: #16232f; --ink-soft: #5a6570; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; min-height: 100vh; font-family: 'Poppins', sans-serif; background: #fafbfc; color: var(--ink); }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  .topbar { display: flex; justify-content: space-between; align-items: center; padding: 18px 32px; background: #fff; border-bottom: 1px solid #e7e9ec; }
+  .topbar-brand { font-weight: 600; font-size: 14px; }
+  .topbar-links { display: flex; gap: 20px; align-items: center; }
+  .topbar-links a { color: var(--blue); text-decoration: none; font-weight: 600; font-size: 13px; }
+  .topbar-links a:hover { text-decoration: underline; }
+
+  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 24px 80px; }
+  .head-row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; }
+  h1 { font-size: 22px; font-weight: 700; margin: 0; }
+  p.sub { color: var(--ink-soft); font-size: 13px; margin: 6px 0 0; }
+
+  .btn { border: 1.5px solid var(--ink); background: #fff; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 8px; }
+  .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn-primary:hover { background: #054a87; }
+  .btn-ghost { border-color: #dde1e5; color: var(--ink-soft); }
+  .btn-ghost:hover { border-color: var(--ink); color: var(--ink); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-danger { border-color: #b5453b; color: #b5453b; }
+  .btn-danger:hover { background: #b5453b; color: #fff; }
+
+  .panel { background: #fff; border: 1px solid #e7e9ec; border-radius: 12px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); padding: 10px 14px; border-bottom: 1px solid #eef0f2; }
+  td { padding: 12px 14px; border-bottom: 1px solid #f4f5f6; vertical-align: middle; }
+  .empty-msg { padding: 30px 16px; color: var(--ink-soft); font-size: 13px; text-align: center; }
+
+  select.rol-select { border: 1.5px solid #dde1e5; border-radius: 6px; font-size: 12px; padding: 5px 6px; font-family: inherit; }
+
+  .estado-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .estado-activo { background: rgba(63,143,106,0.14); color: #3f8f6a; }
+  .estado-inactivo { background: rgba(181,69,59,0.12); color: #b5453b; }
+
+  .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(15,41,66,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .modal-backdrop[hidden] { display: none; }
+  .modal { background: #fff; border-radius: 12px; padding: 24px; width: 420px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
+  .modal h2 { margin: 0 0 16px; font-size: 16px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; align-items: center; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); font-weight: 600; margin-bottom: 5px; }
+  .field input, .field select { width: 100%; padding: 9px 12px; border: 1.5px solid #dde1e5; border-radius: 8px; font-size: 13.5px; font-family: inherit; }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--blue); }
+  .field .hint { font-size: 11px; color: var(--ink-soft); margin-top: 5px; }
+
+  .status { font-size: 12px; color: var(--ink-soft); }
+  .status.ok { color: #3f8f6a; }
+  .status.error { color: #b5453b; }
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-brand">Usuarios</div>
+    <div class="topbar-links">
+      <a href="/cuenta/">← Cuenta</a>
+      <a href="/panel/">Panel</a>
+      <a href="/logout">Cerrar sesión</a>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="head-row">
+      <div>
+        <h1>Usuarios</h1>
+        <p class="sub">Administra quién puede iniciar sesión en tu cuenta y a qué módulos tiene acceso.</p>
+      </div>
+      <button class="btn btn-primary" id="btnNuevo">+ Nuevo Usuario</button>
+    </div>
+
+    <div class="panel">
+      <table>
+        <thead><tr>
+          <th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Último Acceso</th><th></th>
+        </tr></thead>
+        <tbody id="usuariosBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="newModal" hidden>
+    <div class="modal">
+      <h2>Nuevo Usuario</h2>
+      <div class="field"><label>Usuario</label><input id="f_username" autocomplete="off"></div>
+      <div class="field"><label>Contraseña</label><input id="f_password" type="password" autocomplete="new-password"></div>
+      <div class="field"><label>Nombre</label><input id="f_nombre"></div>
+      <div class="field">
+        <label>Rol</label>
+        <select id="f_rol">
+          <option value="administrador">Administrador — acceso total</option>
+          <option value="ventas">Ventas — Facturación, Cotizaciones, Clientes, Catálogos</option>
+          <option value="contador">Contador — Contabilidad</option>
+          <option value="bodega">Bodega — Inventario</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <span class="status" id="newStatusMsg"></span>
+        <button class="btn btn-ghost" id="cancelNew">Cancelar</button>
+        <button class="btn btn-primary" id="saveNew">Crear</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="resetModal" hidden>
+    <div class="modal">
+      <h2>Restablecer Contraseña</h2>
+      <p class="sub" style="margin-bottom:16px" id="resetTargetLabel"></p>
+      <div class="field"><label>Nueva Contraseña</label><input id="f_reset_password" type="password" autocomplete="new-password"></div>
+      <div class="modal-actions">
+        <span class="status" id="resetStatusMsg"></span>
+        <button class="btn btn-ghost" id="cancelReset">Cancelar</button>
+        <button class="btn btn-primary" id="saveReset">Restablecer</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+const ROL_LABELS = { administrador: "Administrador", ventas: "Ventas", contador: "Contador", bodega: "Bodega" };
+let usuariosCache = [];
+let resetTargetId = null;
+
+function esc(s) { return (s ?? "").toString().replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+
+async function loadUsuarios() {
+  const res = await fetch("/api/usuarios");
+  if (!res.ok) {
+    document.getElementById("usuariosBody").innerHTML = '<tr><td colspan="6" class="empty-msg">No se pudo cargar la lista de usuarios.</td></tr>';
+    return;
+  }
+  usuariosCache = await res.json();
+  renderUsuarios();
+}
+
+function renderUsuarios() {
+  const host = document.getElementById("usuariosBody");
+  if (usuariosCache.length === 0) {
+    host.innerHTML = '<tr><td colspan="6" class="empty-msg">Sin usuarios todavía.</td></tr>';
+    return;
+  }
+  host.innerHTML = usuariosCache.map(u => `
+    <tr data-id="${u.id}">
+      <td class="mono">${esc(u.username)}</td>
+      <td>${esc(u.nombre)}</td>
+      <td>
+        <select class="rol-select" data-action="rol">
+          ${Object.entries(ROL_LABELS).map(([v, label]) => `<option value="${v}" ${u.rol === v ? "selected" : ""}>${label}</option>`).join("")}
+        </select>
+      </td>
+      <td><span class="estado-badge ${u.activo ? "estado-activo" : "estado-inactivo"}">${u.activo ? "Activo" : "Inactivo"}</span></td>
+      <td style="color:var(--ink-soft); font-size:12px">${u.last_seen ? esc(u.last_seen) : "Nunca"}</td>
+      <td>
+        <div class="row-actions">
+          <button class="btn btn-ghost btn-sm" data-action="toggle-activo">${u.activo ? "Desactivar" : "Activar"}</button>
+          <button class="btn btn-ghost btn-sm" data-action="reset-password">Contraseña</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+
+  host.querySelectorAll("tr").forEach(row => {
+    const id = parseInt(row.dataset.id);
+    const usuario = usuariosCache.find(u => u.id === id);
+
+    row.querySelector('[data-action="rol"]').addEventListener("change", (e) => {
+      updateUsuario(id, { rol: e.target.value }, e.target, usuario.rol);
+    });
+    row.querySelector('[data-action="toggle-activo"]').addEventListener("click", (e) => {
+      updateUsuario(id, { activo: !usuario.activo }, e.target);
+    });
+    row.querySelector('[data-action="reset-password"]').addEventListener("click", () => {
+      openResetModal(id, usuario.username);
+    });
+  });
+}
+
+async function updateUsuario(id, patch, triggerEl, revertValue) {
+  try {
+    const res = await fetch(`/api/usuarios/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+      body: JSON.stringify(patch),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || "No se pudo actualizar el usuario.");
+      if (triggerEl && triggerEl.tagName === "SELECT" && revertValue !== undefined) triggerEl.value = revertValue;
+      return;
+    }
+    await loadUsuarios();
+  } catch (err) {
+    alert("Error de conexión.");
+    if (triggerEl && triggerEl.tagName === "SELECT" && revertValue !== undefined) triggerEl.value = revertValue;
+  }
+}
+
+function openResetModal(id, username) {
+  resetTargetId = id;
+  document.getElementById("resetTargetLabel").textContent = `Usuario: ${username}`;
+  document.getElementById("f_reset_password").value = "";
+  document.getElementById("resetStatusMsg").textContent = "";
+  document.getElementById("resetModal").hidden = false;
+}
+
+document.getElementById("cancelReset").addEventListener("click", () => { document.getElementById("resetModal").hidden = true; });
+
+document.getElementById("saveReset").addEventListener("click", async () => {
+  const statusMsg = document.getElementById("resetStatusMsg");
+  const password = document.getElementById("f_reset_password").value;
+  statusMsg.textContent = "Guardando…"; statusMsg.className = "status";
+  try {
+    const res = await fetch(`/api/usuarios/${resetTargetId}/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+      body: JSON.stringify({ password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = data.error || "Error al guardar."; statusMsg.className = "status error";
+      return;
+    }
+    statusMsg.textContent = "Contraseña actualizada ✓"; statusMsg.className = "status ok";
+    setTimeout(() => { document.getElementById("resetModal").hidden = true; }, 700);
+  } catch (err) {
+    statusMsg.textContent = "Error de conexión."; statusMsg.className = "status error";
+  }
+});
+
+document.getElementById("btnNuevo").addEventListener("click", () => {
+  document.getElementById("f_username").value = "";
+  document.getElementById("f_password").value = "";
+  document.getElementById("f_nombre").value = "";
+  document.getElementById("f_rol").value = "ventas";
+  document.getElementById("newStatusMsg").textContent = "";
+  document.getElementById("newModal").hidden = false;
+});
+document.getElementById("cancelNew").addEventListener("click", () => { document.getElementById("newModal").hidden = true; });
+
+document.getElementById("saveNew").addEventListener("click", async () => {
+  const statusMsg = document.getElementById("newStatusMsg");
+  const body = {
+    username: document.getElementById("f_username").value.trim(),
+    password: document.getElementById("f_password").value,
+    nombre: document.getElementById("f_nombre").value.trim(),
+    rol: document.getElementById("f_rol").value,
+  };
+  statusMsg.textContent = "Creando…"; statusMsg.className = "status";
+  try {
+    const res = await fetch("/api/usuarios", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = data.error || "Error al crear."; statusMsg.className = "status error";
+      return;
+    }
+    document.getElementById("newModal").hidden = true;
+    await loadUsuarios();
+  } catch (err) {
+    statusMsg.textContent = "Error de conexión."; statusMsg.className = "status error";
+  }
+});
+
+loadUsuarios();
+</script>
+</body>
+</html>

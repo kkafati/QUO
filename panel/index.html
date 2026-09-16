@@ -177,19 +177,19 @@
     <h1>¿Qué deseas hacer?</h1>
 
     <div class="summary-row">
-      <a class="summary-card" href="/contabilidad/?view=ingresos">
+      <a class="summary-card" href="/contabilidad/?view=ingresos" data-role="contador">
         <div class="summary-label">Cuentas por Cobrar</div>
         <div class="summary-value" id="scCxcValue">…</div>
         <div class="summary-sub" id="scCxcSub"></div>
       </a>
 
-      <a class="summary-card" href="/inventario/">
+      <a class="summary-card" href="/inventario/" data-role="bodega">
         <div class="summary-label">Inventario</div>
         <div class="summary-value" id="scInvValue">…</div>
         <div class="summary-sub" id="scInvSub"></div>
       </a>
 
-      <a class="summary-card" href="/contabilidad/?view=reportes">
+      <a class="summary-card" href="/contabilidad/?view=reportes" data-role="contador">
         <div class="summary-label">Utilidad del Mes</div>
         <div class="summary-value" id="scUtilValue">…</div>
         <div class="summary-sub" id="scUtilSub"></div>
@@ -197,49 +197,49 @@
     </div>
 
     <div class="options">
-      <a class="option-card" href="/facturacion/" style="border-color:var(--blue)">
+      <a class="option-card" href="/facturacion/" style="border-color:var(--blue)" data-role="ventas">
         <div class="option-icon" style="background:var(--blue)">🧾</div>
         <div class="option-title">Facturación</div>
         <div class="option-desc">Crea facturas, calcula ISV, y da seguimiento a pagos.</div>
         <div class="option-arrow">Ir a facturación →</div>
       </a>
 
-      <a class="option-card" href="/contabilidad/" style="border-color:var(--blue)">
+      <a class="option-card" href="/contabilidad/" style="border-color:var(--blue)" data-role="contador">
         <div class="option-icon" style="background:var(--blue)">📊</div>
         <div class="option-title">Contabilidad</div>
         <div class="option-desc">Ingresos, gastos, y reportes financieros basicos.</div>
         <div class="option-arrow">Ir a contabilidad →</div>
       </a>
 
-      <a class="option-card" href="/inventario/" style="border-color:var(--blue)">
+      <a class="option-card" href="/inventario/" style="border-color:var(--blue)" data-role="bodega">
         <div class="option-icon" style="background:var(--blue)">📦</div>
         <div class="option-title">Inventario</div>
         <div class="option-desc">Control de existencias de materiales en bodega.</div>
         <div class="option-arrow">Ir a inventario →</div>
       </a>
 
-      <a class="option-card cotiz" href="/cotizaciones/">
+      <a class="option-card cotiz" href="/cotizaciones/" data-role="ventas">
         <div class="option-icon">§</div>
         <div class="option-title">Cotizaciones</div>
         <div class="option-desc">Calculadora de referencia: catálogos, fichas de costo, y cotizaciones.</div>
         <div class="option-arrow">Ir al sistema →</div>
       </a>
 
-      <a class="option-card regul" href="/regulación/">
+      <a class="option-card regul" href="/regulación/" data-role="administrador">
         <div class="option-icon">⚡</div>
         <div class="option-title">Planificador de Demanda</div>
         <div class="option-desc">Dimensionamiento de transformador y regulación de circuitos.</div>
         <div class="option-arrow">Abrir planificador →</div>
       </a>
 
-      <a class="option-card" href="/clientes/" style="border-color:var(--blue)">
+      <a class="option-card" href="/clientes/" style="border-color:var(--blue)" data-role="ventas">
         <div class="option-icon" style="background:var(--blue)">👥</div>
         <div class="option-title">Clientes</div>
         <div class="option-desc">Datos de clientes y el historial de facturas de cada uno.</div>
         <div class="option-arrow">Ver clientes →</div>
       </a>
 
-      <a class="option-card" href="/cuenta/" style="border-color:#e7e9ec">
+      <a class="option-card" href="/cuenta/" style="border-color:#e7e9ec" data-role="administrador">
         <div class="option-icon" style="background:#eef0f2;color:var(--ink)">⚙</div>
         <div class="option-title">Configuración de la Cuenta</div>
         <div class="option-desc">Datos del negocio, logo, moneda, y numeración de facturas.</div>
@@ -255,42 +255,65 @@ fetch("/api/me").then(r => r.json()).then(me => {
   if (me.authenticated && me.company_name) {
     document.getElementById("topbarClient").textContent = me.company_name;
   }
+  // Each card/link is marked with the one role that module belongs to
+  // (see the four fixed ROLES in backend/app.py's requires_role mapping).
+  // administrador sees everything; every other role sees only its own module -
+  // this only hides the card, the backend still enforces access on every route.
+  if (me.rol && me.rol !== "administrador") {
+    document.querySelectorAll("[data-role]").forEach(el => {
+      if (el.dataset.role !== me.rol) el.remove();
+    });
+  }
 });
 
 // ---- Dashboard summary row ----
 function fmt(n) { return "L. " + (Number(n) || 0).toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
 fetch("/api/panel/resumen").then(r => r.json()).then(data => {
+  // Cards for modules the current role can't see may already have been
+  // removed by the /api/me role-hiding above (the two fetches race) - guard
+  // every element lookup instead of assuming the card is still there.
   const cxc = data.cuentas_por_cobrar;
-  document.getElementById("scCxcValue").textContent = fmt(cxc.total_pendiente);
-  const cxcSub = document.getElementById("scCxcSub");
-  if (cxc.vencidas_60_mas > 0) {
-    cxcSub.textContent = `${cxc.vencidas_60_mas} factura${cxc.vencidas_60_mas === 1 ? "" : "s"} con más de 60 días de atraso (${fmt(cxc.vencidas_60_mas_total)})`;
-    cxcSub.classList.add("text-danger");
-  } else {
-    cxcSub.textContent = "Al día";
+  const cxcValueEl = document.getElementById("scCxcValue");
+  if (cxcValueEl) {
+    cxcValueEl.textContent = fmt(cxc.total_pendiente);
+    const cxcSub = document.getElementById("scCxcSub");
+    if (cxc.vencidas_60_mas > 0) {
+      cxcSub.textContent = `${cxc.vencidas_60_mas} factura${cxc.vencidas_60_mas === 1 ? "" : "s"} con más de 60 días de atraso (${fmt(cxc.vencidas_60_mas_total)})`;
+      cxcSub.classList.add("text-danger");
+    } else {
+      cxcSub.textContent = "Al día";
+    }
   }
 
   const inv = data.inventario;
-  document.getElementById("scInvValue").textContent = fmt(inv.valor_total);
-  const invSub = document.getElementById("scInvSub");
-  if (inv.materiales_bajo_stock > 0) {
-    invSub.textContent = `${inv.materiales_bajo_stock} material${inv.materiales_bajo_stock === 1 ? "" : "es"} con stock bajo`;
-    invSub.classList.add("text-danger");
-  } else {
-    invSub.textContent = "Sin alertas de stock";
+  const invValueEl = document.getElementById("scInvValue");
+  if (invValueEl) {
+    invValueEl.textContent = fmt(inv.valor_total);
+    const invSub = document.getElementById("scInvSub");
+    if (inv.materiales_bajo_stock > 0) {
+      invSub.textContent = `${inv.materiales_bajo_stock} material${inv.materiales_bajo_stock === 1 ? "" : "es"} con stock bajo`;
+      invSub.classList.add("text-danger");
+    } else {
+      invSub.textContent = "Sin alertas de stock";
+    }
   }
 
   const mes = data.mes_actual;
   const utilEl = document.getElementById("scUtilValue");
-  utilEl.textContent = fmt(mes.utilidad);
-  utilEl.classList.add(mes.utilidad >= 0 ? "text-good" : "text-danger");
-  document.getElementById("scUtilSub").textContent = `Ingresos ${fmt(mes.ingresos)} · Gastos ${fmt(mes.gastos)}`;
+  if (utilEl) {
+    utilEl.textContent = fmt(mes.utilidad);
+    utilEl.classList.add(mes.utilidad >= 0 ? "text-good" : "text-danger");
+    document.getElementById("scUtilSub").textContent = `Ingresos ${fmt(mes.ingresos)} · Gastos ${fmt(mes.gastos)}`;
+  }
 }).catch(() => {
   // Read-only dashboard - if it fails to load, degrade to a plain dash
   // rather than leaving the "…" placeholder looking stuck, and never let
   // this block the rest of the Panel page from working.
-  ["scCxcValue", "scInvValue", "scUtilValue"].forEach(id => { document.getElementById(id).textContent = "—"; });
+  ["scCxcValue", "scInvValue", "scUtilValue"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = "—";
+  });
 });
 </script>
 </body>
