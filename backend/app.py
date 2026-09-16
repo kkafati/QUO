@@ -2875,6 +2875,162 @@ def balanza_comprobacion():
     })
 
 
+def compute_cuenta_balance_asof(account_id, cuenta, fecha_hasta):
+    """One cuenta's balance using every AsientoLinea on an asiento dated on
+    or before fecha_hasta - the same sign convention as libro_mayor and
+    balanza_comprobacion (activo/gasto increase with debe; pasivo/patrimonio/
+    ingreso increase with haber), reused here rather than redefined so
+    Balance General and Flujo de Efectivo can never quietly disagree with
+    Libro Mayor about what a cuenta's balance means."""
+    q = (AsientoLinea.query.join(AsientoContable)
+         .filter(AsientoContable.account_id == account_id,
+                 AsientoLinea.cuenta_contable_id == cuenta.id,
+                 AsientoContable.fecha <= fecha_hasta))
+    total_debe = total_haber = 0.0
+    for l in q.all():
+        total_debe += l.debe or 0
+        total_haber += l.haber or 0
+    aumenta_con_debe = cuenta.tipo in ("activo", "gasto")
+    balance = (total_debe - total_haber) if aumenta_con_debe else (total_haber - total_debe)
+    return round(balance, 2)
+
+
+@app.route("/api/contabilidad/balance-general", methods=["GET"])
+@login_required
+def balance_general():
+    """Snapshot at a single date - Activo / Pasivo / Patrimonio.
+
+    DESIGN DECISION (see task spec): this app has no year-end closing process
+    - nothing ever zeros Ingreso/Gasto account balances into Utilidades
+    Retenidas - so a naive sum of account balances will NOT balance: all the
+    unclosed income/expense activity sitting in Ingreso/Gasto accounts isn't
+    represented in Patrimonio at all. The fix is a plug figure, "Utilidad
+    Acumulada (desde el inicio)" = sum(Ingreso balances) - sum(Gasto
+    balances) AS OF this date, using ALL history since there's no fiscal-year
+    boundary concept here - NOT a proper fiscal-year net income figure, and
+    labeled as such everywhere it's shown so it's never mistaken for one."""
+    account_id = current_account_id()
+    ensure_chart_of_accounts(account_id)
+    fecha = request.args.get("fecha") or datetime.utcnow().strftime("%Y-%m-%d")
+
+    cuentas = CuentaContable.query.filter_by(account_id=account_id, deleted_at=None).order_by(CuentaContable.codigo).all()
+
+    activo, pasivo, patrimonio = [], [], []
+    total_ingresos = 0.0
+    total_gastos = 0.0
+    for cuenta in cuentas:
+        balance = compute_cuenta_balance_asof(account_id, cuenta, fecha)
+        row = {"cuenta_contable_id": cuenta.id, "codigo": cuenta.codigo, "nombre": cuenta.nombre, "balance": balance}
+        if cuenta.tipo == "activo":
+            activo.append(row)
+        elif cuenta.tipo == "pasivo":
+            pasivo.append(row)
+        elif cuenta.tipo == "patrimonio":
+            patrimonio.append(row)
+        elif cuenta.tipo == "ingreso":
+            total_ingresos += balance
+        elif cuenta.tipo == "gasto":
+            total_gastos += balance
+
+    utilidad_acumulada = round(total_ingresos - total_gastos, 2)
+    patrimonio.append({
+        "cuenta_contable_id": None, "codigo": None,
+        "nombre": "Utilidad Acumulada (desde el inicio)", "balance": utilidad_acumulada,
+    })
+
+    total_activo = round(sum(r["balance"] for r in activo), 2)
+    total_pasivo = round(sum(r["balance"] for r in pasivo), 2)
+    total_patrimonio = round(sum(r["balance"] for r in patrimonio), 2)
+
+    return jsonify({
+        "fecha": fecha,
+        "activo": activo, "pasivo": pasivo, "patrimonio": patrimonio,
+        "total_activo": total_activo, "total_pasivo": total_pasivo, "total_patrimonio": total_patrimonio,
+        "balanced": total_activo == round(total_pasivo + total_patrimonio, 2),
+    })
+
+
+FLUJO_ORIGEN_LABELS = {
+    "pago": "Cobros de Clientes",
+    "gasto": "Pago de Gastos Operativos",
+    "pago_proveedor": "Pago a Proveedores",
+    "manual": "Asientos Manuales / Otros",
+}
+# factura/cuenta_por_pagar never debit or credit Caja y Bancos directly under
+# Phase 2's posting rules (a factura moves Cuentas por Cobrar, a cuenta por
+# pagar moves Cuentas por Pagar) - if one shows up here, something upstream
+# is posting incorrectly, so it's labeled as a visible anomaly rather than
+# folded quietly into another bucket.
+FLUJO_ORIGEN_INESPERADO = {"factura", "cuenta_por_pagar"}
+
+
+@app.route("/api/contabilidad/flujo-efectivo", methods=["GET"])
+@login_required
+def flujo_efectivo():
+    """Estado de Flujo de Efectivo - Actividades de Operación only, direct
+    method (grouped by origen_type). Investing/Financing are NOT fabricated:
+    this app tracks no fixed assets, loans, or capital contributions, so
+    those sections come back as explicitly not_implemented rather than
+    guessed-at numbers."""
+    account_id = current_account_id()
+    ensure_chart_of_accounts(account_id)
+    hoy = datetime.utcnow().strftime("%Y-%m-%d")
+    desde = request.args.get("desde") or hoy
+    hasta = request.args.get("hasta") or hoy
+
+    caja = CuentaContable.query.filter_by(account_id=account_id, codigo="1010", deleted_at=None).first_or_404()
+
+    dia_anterior = (datetime.strptime(desde, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+    saldo_inicial = compute_cuenta_balance_asof(account_id, caja, dia_anterior)
+
+    lineas = (AsientoLinea.query.join(AsientoContable)
+              .filter(AsientoContable.account_id == account_id, AsientoLinea.cuenta_contable_id == caja.id,
+                      AsientoContable.fecha >= desde, AsientoContable.fecha <= hasta).all())
+
+    por_origen = {}
+    inesperados = []
+    for l in lineas:
+        origen = l.asiento.origen_type or "manual"
+        # Caja is an activo account: a debit is a real cash inflow, a credit a real outflow.
+        monto = (l.debe or 0) - (l.haber or 0)
+        por_origen[origen] = round(por_origen.get(origen, 0) + monto, 2)
+        if origen in FLUJO_ORIGEN_INESPERADO:
+            inesperados.append({"asiento_id": l.asiento.id, "origen_type": origen, "fecha": l.asiento.fecha})
+
+    def label_for(origen):
+        if origen in FLUJO_ORIGEN_INESPERADO:
+            return f"⚠ Origen inesperado ({origen}) - revisar posting"
+        return FLUJO_ORIGEN_LABELS.get(origen, origen)
+
+    actividades_operacion = [
+        {"origen_type": origen, "label": label_for(origen), "monto": monto}
+        for origen, monto in sorted(por_origen.items())
+    ]
+    neto_operacion = round(sum(g["monto"] for g in actividades_operacion), 2)
+    saldo_final = round(saldo_inicial + neto_operacion, 2)
+
+    # Integrity check: this computed saldo_final must equal Caja's actual
+    # ledger balance as of `hasta`, independently recomputed - if it doesn't,
+    # that's a real discrepancy in either this report or the ledger itself.
+    saldo_final_ledger = compute_cuenta_balance_asof(account_id, caja, hasta)
+
+    result = {
+        "desde": desde, "hasta": hasta,
+        "saldo_inicial": saldo_inicial,
+        "actividades_operacion": actividades_operacion,
+        "neto_operacion": neto_operacion,
+        "saldo_final": saldo_final,
+        "saldo_final_ledger": saldo_final_ledger,
+        "reconciles": saldo_final == saldo_final_ledger,
+        "actividades_inversion": {"items": [], "not_implemented": True},
+        "actividades_financiamiento": {"items": [], "not_implemented": True},
+    }
+    if inesperados:
+        result["advertencia"] = f"{len(inesperados)} movimiento(s) de Caja con origen inesperado (factura/cuenta_por_pagar) - revisar el posting."
+        result["movimientos_inesperados"] = inesperados
+    return jsonify(result)
+
+
 # ---------------------------------------------------------------------------
 # Contabilidad - Gastos (operating expenses)
 # ---------------------------------------------------------------------------

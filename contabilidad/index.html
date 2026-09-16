@@ -87,6 +87,16 @@
   .balanza-banner.balanced { background: rgba(63,143,106,0.14); color: var(--good); }
   .balanza-banner.unbalanced { background: rgba(181,69,59,0.14); color: var(--danger); }
 
+  /* ---- Balance General ---- */
+  .bg-section { margin-bottom: 22px; }
+  .bg-section h2 { font-size: 15px; font-weight: 700; margin: 0 0 10px; }
+  .bg-total-row { display: flex; justify-content: space-between; font-weight: 700; font-size: 14px; padding: 10px 14px; background: #fafbfc; border: 1px solid #e7e9ec; border-top: none; border-radius: 0 0 10px 10px; margin-top: -1px; }
+
+  /* ---- Flujo de Efectivo ---- */
+  .fe-section-title { font-size: 15px; font-weight: 700; margin: 26px 0 10px; }
+  .fe-not-implemented { background: #f7f9fb; border: 1.5px dashed #dde1e5; border-radius: 10px; padding: 16px; color: var(--ink-soft); font-size: 13px; text-align: center; }
+  .fe-warning { background: rgba(181,69,59,0.1); color: var(--danger); border-radius: 8px; padding: 10px 14px; font-size: 12.5px; margin-bottom: 16px; }
+
   /* ---- Pagos sub-section inside the Cuenta por Pagar modal ---- */
   .pagos-head-inline { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
   .pagos-head-inline h2 { font-size: 14px; }
@@ -192,6 +202,12 @@
         </button>
         <button class="nav-item" data-view="balanza">
           <span class="nav-code">06</span> Balanza de Comprobación
+        </button>
+        <button class="nav-item" data-view="balance-general">
+          <span class="nav-code">07</span> Balance General
+        </button>
+        <button class="nav-item" data-view="flujo-efectivo">
+          <span class="nav-code">08</span> Flujo de Efectivo
         </button>
       </nav>
     </aside>
@@ -434,6 +450,101 @@
             <tbody id="balBody"></tbody>
           </table></div>
           <div class="empty-state" id="balEmptyState" hidden>Sin movimientos contables en este período.</div>
+        </div>
+      </section>
+
+      <section id="view-balance-general" class="view">
+        <div class="wrap">
+          <div class="head-row">
+            <h1>Balance General</h1>
+          </div>
+
+          <div class="filter-row">
+            <div class="filter-field">
+              <label>Fecha</label>
+              <input type="date" id="bgFilterFecha">
+            </div>
+          </div>
+
+          <div class="balanza-banner" id="bgBanner">Cargando…</div>
+
+          <div class="bg-section">
+            <h2>Activo</h2>
+            <div class="table-scroll"><table>
+              <thead><tr><th>Código</th><th>Cuenta</th><th class="num">Balance</th></tr></thead>
+              <tbody id="bgActivoBody"></tbody>
+            </table></div>
+            <div class="bg-total-row"><span>Total Activo</span><span class="mono" id="bgTotalActivo">L. 0.00</span></div>
+          </div>
+
+          <div class="bg-section">
+            <h2>Pasivo</h2>
+            <div class="table-scroll"><table>
+              <thead><tr><th>Código</th><th>Cuenta</th><th class="num">Balance</th></tr></thead>
+              <tbody id="bgPasivoBody"></tbody>
+            </table></div>
+            <div class="bg-total-row"><span>Total Pasivo</span><span class="mono" id="bgTotalPasivo">L. 0.00</span></div>
+          </div>
+
+          <div class="bg-section">
+            <h2>Patrimonio<span class="cxc-note">Incluye Utilidad Acumulada (desde el inicio) - no es la utilidad del año fiscal, sino un acumulado desde que empezó a usarse el libro contable</span></h2>
+            <div class="table-scroll"><table>
+              <thead><tr><th>Código</th><th>Cuenta</th><th class="num">Balance</th></tr></thead>
+              <tbody id="bgPatrimonioBody"></tbody>
+            </table></div>
+            <div class="bg-total-row"><span>Total Patrimonio</span><span class="mono" id="bgTotalPatrimonio">L. 0.00</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-flujo-efectivo" class="view">
+        <div class="wrap">
+          <div class="head-row">
+            <h1>Flujo de Efectivo</h1>
+          </div>
+
+          <div class="filter-row">
+            <div class="filter-field">
+              <label>Desde</label>
+              <input type="date" id="feFilterDesde">
+            </div>
+            <div class="filter-field">
+              <label>Hasta</label>
+              <input type="date" id="feFilterHasta">
+            </div>
+            <button class="btn btn-ghost" id="feBtnClearFilter">Limpiar filtro</button>
+          </div>
+
+          <div class="balanza-banner" id="feReconBanner">Cargando…</div>
+          <div class="fe-warning" id="feWarning" hidden></div>
+
+          <div class="summary-row">
+            <div class="summary-card">
+              <div class="label">Saldo Inicial</div>
+              <div class="value mono" id="feSaldoInicial">L. 0.00</div>
+            </div>
+            <div class="summary-card">
+              <div class="label">Neto de Operación</div>
+              <div class="value mono" id="feNetoOperacion">L. 0.00</div>
+            </div>
+            <div class="summary-card">
+              <div class="label">Saldo Final</div>
+              <div class="value mono" id="feSaldoFinal">L. 0.00</div>
+            </div>
+          </div>
+
+          <h2 class="fe-section-title">Actividades de Operación</h2>
+          <div class="table-scroll"><table>
+            <thead><tr><th>Origen</th><th class="num">Monto</th></tr></thead>
+            <tbody id="feOperacionBody"></tbody>
+          </table></div>
+          <div class="empty-state" id="feOperacionEmpty" hidden>Sin movimientos de caja en este período.</div>
+
+          <h2 class="fe-section-title">Actividades de Inversión</h2>
+          <div class="fe-not-implemented">Sin actividad registrada — requiere seguimiento de activos fijos, no implementado aún.</div>
+
+          <h2 class="fe-section-title">Actividades de Financiamiento</h2>
+          <div class="fe-not-implemented">Sin actividad registrada — requiere seguimiento de financiamiento/capital, no implementado aún.</div>
         </div>
       </section>
     </div>
@@ -1187,6 +1298,103 @@ document.getElementById("balBtnClearFilter").addEventListener("click", () => {
   loadBalanza();
 });
 
+// ---- Balance General ----
+
+let balanceGeneralLoaded = false;
+
+function renderBgSection(bodyId, rows) {
+  document.getElementById(bodyId).innerHTML = rows.map(r => `
+    <tr>
+      <td class="mono">${esc(r.codigo || "—")}</td>
+      <td>${esc(r.nombre)}</td>
+      <td class="num mono">${fmt(r.balance)}</td>
+    </tr>
+  `).join("");
+}
+
+async function loadBalanceGeneral() {
+  const fecha = document.getElementById("bgFilterFecha").value;
+  const params = new URLSearchParams();
+  if (fecha) params.set("fecha", fecha);
+  const data = await fetch(`/api/contabilidad/balance-general?${params.toString()}`).then(r => r.json());
+
+  const banner = document.getElementById("bgBanner");
+  banner.classList.remove("balanced", "unbalanced");
+  if (data.balanced) {
+    banner.classList.add("balanced");
+    banner.textContent = "✓ CUADRADO — Activo = Pasivo + Patrimonio";
+  } else {
+    banner.classList.add("unbalanced");
+    const diff = Math.abs(data.total_activo - (data.total_pasivo + data.total_patrimonio));
+    banner.textContent = `✗ DESCUADRADO — diferencia de ${fmt(diff)}`;
+  }
+
+  renderBgSection("bgActivoBody", data.activo);
+  renderBgSection("bgPasivoBody", data.pasivo);
+  renderBgSection("bgPatrimonioBody", data.patrimonio);
+  document.getElementById("bgTotalActivo").textContent = fmt(data.total_activo);
+  document.getElementById("bgTotalPasivo").textContent = fmt(data.total_pasivo);
+  document.getElementById("bgTotalPatrimonio").textContent = fmt(data.total_patrimonio);
+}
+
+document.getElementById("bgFilterFecha").addEventListener("change", loadBalanceGeneral);
+
+// ---- Flujo de Efectivo ----
+
+let flujoEfectivoLoaded = false;
+
+function currentFeParams() {
+  const params = new URLSearchParams();
+  const desde = document.getElementById("feFilterDesde").value;
+  const hasta = document.getElementById("feFilterHasta").value;
+  if (desde) params.set("desde", desde);
+  if (hasta) params.set("hasta", hasta);
+  return params;
+}
+
+async function loadFlujoEfectivo() {
+  const params = currentFeParams();
+  const data = await fetch(`/api/contabilidad/flujo-efectivo?${params.toString()}`).then(r => r.json());
+
+  const banner = document.getElementById("feReconBanner");
+  banner.classList.remove("balanced", "unbalanced");
+  if (data.reconciles) {
+    banner.classList.add("balanced");
+    banner.textContent = "✓ CONCILIA — el saldo calculado coincide con el saldo real de Caja y Bancos";
+  } else {
+    banner.classList.add("unbalanced");
+    banner.textContent = `✗ NO CONCILIA — calculado ${fmt(data.saldo_final)} vs. libro mayor ${fmt(data.saldo_final_ledger)}`;
+  }
+
+  const warningEl = document.getElementById("feWarning");
+  if (data.advertencia) {
+    warningEl.hidden = false;
+    warningEl.textContent = "⚠ " + data.advertencia;
+  } else {
+    warningEl.hidden = true;
+  }
+
+  document.getElementById("feSaldoInicial").textContent = fmt(data.saldo_inicial);
+  document.getElementById("feNetoOperacion").textContent = fmt(data.neto_operacion);
+  document.getElementById("feSaldoFinal").textContent = fmt(data.saldo_final);
+
+  document.getElementById("feOperacionEmpty").hidden = data.actividades_operacion.length > 0;
+  document.getElementById("feOperacionBody").innerHTML = data.actividades_operacion.map(g => `
+    <tr>
+      <td>${esc(g.label)}</td>
+      <td class="num mono ${g.monto >= 0 ? "text-good" : "text-danger"}">${fmt(g.monto)}</td>
+    </tr>
+  `).join("");
+}
+
+document.getElementById("feFilterDesde").addEventListener("change", loadFlujoEfectivo);
+document.getElementById("feFilterHasta").addEventListener("change", loadFlujoEfectivo);
+document.getElementById("feBtnClearFilter").addEventListener("click", () => {
+  document.getElementById("feFilterDesde").value = "";
+  document.getElementById("feFilterHasta").value = "";
+  loadFlujoEfectivo();
+});
+
 // ---- Sidebar view switching ----
 
 document.querySelectorAll(".nav-item[data-view]").forEach(btn => {
@@ -1215,6 +1423,15 @@ document.querySelectorAll(".nav-item[data-view]").forEach(btn => {
     if (btn.dataset.view === "balanza" && !balanzaLoaded) {
       balanzaLoaded = true;
       loadBalanza();
+    }
+    if (btn.dataset.view === "balance-general" && !balanceGeneralLoaded) {
+      balanceGeneralLoaded = true;
+      document.getElementById("bgFilterFecha").value = new Date().toISOString().slice(0, 10);
+      loadBalanceGeneral();
+    }
+    if (btn.dataset.view === "flujo-efectivo" && !flujoEfectivoLoaded) {
+      flujoEfectivoLoaded = true;
+      loadFlujoEfectivo();
     }
   });
 });
