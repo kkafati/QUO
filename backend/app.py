@@ -3369,17 +3369,17 @@ def contabilidad_ingresos():
     return jsonify({"total_facturado": total_facturado, "isv_collected": isv_collected, "count": len(totals)})
 
 
-@app.route("/api/contabilidad/cuentas-por-cobrar", methods=["GET"])
-@login_required
-def contabilidad_cuentas_por_cobrar():
+def _compute_cuentas_por_cobrar(account_id):
     """Every non-deleted invoice with an outstanding balance (saldo > 0),
-    bucketed by days since `fecha` (issue date).
+    bucketed by days since `fecha` (issue date). Factored out of its route
+    so /api/panel/resumen can call it directly (an internal function call,
+    not an HTTP round-trip to this same app) instead of reimplementing it.
 
     SIMPLIFICATION: Invoice has no due-date field yet - only `fecha` and
     termino_pago, no dias_credito/fecha_vencimiento - so this buckets against
     the issue date, not a formal due date. A future pass could add a real
     due-date field if that distinction becomes necessary; out of scope here."""
-    invoices = Invoice.query.filter_by(account_id=current_account_id(), deleted_at=None).all()
+    invoices = Invoice.query.filter_by(account_id=account_id, deleted_at=None).all()
     hoy = datetime.utcnow().date()
     result = []
     for inv in invoices:
@@ -3408,31 +3408,85 @@ def contabilidad_cuentas_por_cobrar():
             "bucket": bucket,
         })
     result.sort(key=lambda r: r["dias_transcurridos"], reverse=True)
-    return jsonify(result)
+    return result
 
 
-@app.route("/api/contabilidad/estado-resultados", methods=["GET"])
+@app.route("/api/contabilidad/cuentas-por-cobrar", methods=["GET"])
 @login_required
-def contabilidad_estado_resultados():
-    """Basic P&L for a date range: Ingresos (pre-tax) - Gastos = Utilidad."""
-    desde = request.args.get("desde")
-    hasta = request.args.get("hasta")
+def contabilidad_cuentas_por_cobrar():
+    return jsonify(_compute_cuentas_por_cobrar(current_account_id()))
 
-    inv_q = Invoice.query.filter_by(account_id=current_account_id(), deleted_at=None)
+
+def _compute_estado_resultados(account_id, desde, hasta):
+    """Basic P&L for a date range: Ingresos (pre-tax) - Gastos = Utilidad.
+    Factored out so /api/panel/resumen can reuse it for "mes_actual" without
+    duplicating the query logic."""
+    inv_q = Invoice.query.filter_by(account_id=account_id, deleted_at=None)
     if desde:
         inv_q = inv_q.filter(Invoice.fecha >= desde)
     if hasta:
         inv_q = inv_q.filter(Invoice.fecha <= hasta)
     ingresos = round(sum(compute_invoice_totals(i)["subtotal"] for i in inv_q.all()), 2)
 
-    gasto_q = GastoOperativo.query.filter_by(account_id=current_account_id(), deleted_at=None)
+    gasto_q = GastoOperativo.query.filter_by(account_id=account_id, deleted_at=None)
     if desde:
         gasto_q = gasto_q.filter(GastoOperativo.fecha >= desde)
     if hasta:
         gasto_q = gasto_q.filter(GastoOperativo.fecha <= hasta)
     gastos = round(sum(g.monto or 0 for g in gasto_q.all()), 2)
 
-    return jsonify({"ingresos": ingresos, "gastos": gastos, "utilidad": round(ingresos - gastos, 2)})
+    return {"ingresos": ingresos, "gastos": gastos, "utilidad": round(ingresos - gastos, 2)}
+
+
+@app.route("/api/contabilidad/estado-resultados", methods=["GET"])
+@login_required
+def contabilidad_estado_resultados():
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    return jsonify(_compute_estado_resultados(current_account_id(), desde, hasta))
+
+
+# ---------------------------------------------------------------------------
+# Panel - dashboard summary. One aggregating call across Facturación,
+# Contabilidad, and Inventario so the Panel page makes a single request
+# instead of several in parallel on every load. Pure read-only reporting -
+# reuses the exact same computations the underlying endpoints use (via
+# direct Python function calls, never an HTTP round-trip to this same app),
+# so it can never quietly disagree with what those endpoints themselves show.
+# ---------------------------------------------------------------------------
+
+@app.route("/api/panel/resumen", methods=["GET"])
+@login_required
+def panel_resumen():
+    account_id = current_account_id()
+
+    cxc = _compute_cuentas_por_cobrar(account_id)
+    total_pendiente = round(sum(r["saldo"] for r in cxc), 2)
+    vencidas_60_mas = [r for r in cxc if r["bucket"] == "60+"]
+
+    inventario = _compute_inventario_list(account_id)
+    materiales_bajo_stock = sum(1 for m in inventario if m["bajo_stock"])
+    valor_total_inventario = round(sum(m["valor"] for m in inventario), 2)
+
+    # "Current month" computed from the server's date the same way the rest
+    # of this app already defaults fecha fields (datetime.utcnow()).
+    hoy = datetime.utcnow()
+    primer_dia_mes = hoy.strftime("%Y-%m-01")
+    hoy_str = hoy.strftime("%Y-%m-%d")
+    mes_actual = _compute_estado_resultados(account_id, primer_dia_mes, hoy_str)
+
+    return jsonify({
+        "cuentas_por_cobrar": {
+            "total_pendiente": total_pendiente,
+            "vencidas_60_mas": len(vencidas_60_mas),
+            "vencidas_60_mas_total": round(sum(r["saldo"] for r in vencidas_60_mas), 2),
+        },
+        "inventario": {
+            "materiales_bajo_stock": materiales_bajo_stock,
+            "valor_total": valor_total_inventario,
+        },
+        "mes_actual": mes_actual,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -3964,10 +4018,9 @@ def get_material_stock(material_id):
     return jsonify({"material_id": material.id, "stock": compute_material_stock(material.id)})
 
 
-@app.route("/api/inventario", methods=["GET"])
-@login_required
-def list_inventario():
-    materials = Material.query.filter_by(account_id=current_account_id(), deleted_at=None).order_by(Material.code).all()
+def _compute_inventario_list(account_id):
+    """Factored out so /api/panel/resumen can reuse it directly."""
+    materials = Material.query.filter_by(account_id=account_id, deleted_at=None).order_by(Material.code).all()
     result = []
     for m in materials:
         stock = compute_material_stock(m.id)
@@ -3983,7 +4036,13 @@ def list_inventario():
             "bajo_stock": stock < minimo,
             "valor": round(stock * m.unit_price, 2),
         })
-    return jsonify(result)
+    return result
+
+
+@app.route("/api/inventario", methods=["GET"])
+@login_required
+def list_inventario():
+    return jsonify(_compute_inventario_list(current_account_id()))
 
 
 @app.route("/api/inventario/resumen", methods=["GET"])

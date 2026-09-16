@@ -12,6 +12,8 @@
     --lime: #cddc28;
     --ink: #16232f;
     --ink-soft: #5a6570;
+    --good: #3f8f6a;
+    --danger: #b5453b;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -75,6 +77,40 @@
     border-radius: 999px;
     margin-bottom: 10px;
   }
+
+  /* ---- Dashboard summary row - same card language as .option-card below,
+     just smaller/denser since these show a number, not an icon+description ---- */
+  .summary-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+    justify-content: center;
+    max-width: 920px;
+    margin-bottom: 28px;
+  }
+  .summary-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+    width: 280px;
+    padding: 22px 26px;
+    border-radius: 14px;
+    border: 1.5px solid #e7e9ec;
+    text-decoration: none;
+    color: var(--ink);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+  }
+  .summary-card:hover {
+    border-color: var(--blue);
+    box-shadow: 0 8px 24px rgba(6,93,172,0.12);
+    transform: translateY(-2px);
+  }
+  .summary-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); margin-bottom: 8px; }
+  .summary-value { font-size: 24px; font-weight: 700; margin-bottom: 5px; }
+  .summary-sub { font-size: 12.5px; color: var(--ink-soft); line-height: 1.4; }
+  .text-good { color: var(--good); }
+  .text-danger { color: var(--danger); font-weight: 600; }
 
   .options {
     display: flex;
@@ -140,6 +176,26 @@
     <p class="greeting">Bienvenido</p>
     <h1>¿Qué deseas hacer?</h1>
 
+    <div class="summary-row">
+      <a class="summary-card" href="/contabilidad/?view=ingresos">
+        <div class="summary-label">Cuentas por Cobrar</div>
+        <div class="summary-value" id="scCxcValue">…</div>
+        <div class="summary-sub" id="scCxcSub"></div>
+      </a>
+
+      <a class="summary-card" href="/inventario/">
+        <div class="summary-label">Inventario</div>
+        <div class="summary-value" id="scInvValue">…</div>
+        <div class="summary-sub" id="scInvSub"></div>
+      </a>
+
+      <a class="summary-card" href="/contabilidad/?view=reportes">
+        <div class="summary-label">Utilidad del Mes</div>
+        <div class="summary-value" id="scUtilValue">…</div>
+        <div class="summary-sub" id="scUtilSub"></div>
+      </a>
+    </div>
+
     <div class="options">
       <a class="option-card" href="/facturacion/" style="border-color:var(--blue)">
         <div class="option-icon" style="background:var(--blue)">🧾</div>
@@ -199,6 +255,42 @@ fetch("/api/me").then(r => r.json()).then(me => {
   if (me.authenticated && me.company_name) {
     document.getElementById("topbarClient").textContent = me.company_name;
   }
+});
+
+// ---- Dashboard summary row ----
+function fmt(n) { return "L. " + (Number(n) || 0).toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+fetch("/api/panel/resumen").then(r => r.json()).then(data => {
+  const cxc = data.cuentas_por_cobrar;
+  document.getElementById("scCxcValue").textContent = fmt(cxc.total_pendiente);
+  const cxcSub = document.getElementById("scCxcSub");
+  if (cxc.vencidas_60_mas > 0) {
+    cxcSub.textContent = `${cxc.vencidas_60_mas} factura${cxc.vencidas_60_mas === 1 ? "" : "s"} con más de 60 días de atraso (${fmt(cxc.vencidas_60_mas_total)})`;
+    cxcSub.classList.add("text-danger");
+  } else {
+    cxcSub.textContent = "Al día";
+  }
+
+  const inv = data.inventario;
+  document.getElementById("scInvValue").textContent = fmt(inv.valor_total);
+  const invSub = document.getElementById("scInvSub");
+  if (inv.materiales_bajo_stock > 0) {
+    invSub.textContent = `${inv.materiales_bajo_stock} material${inv.materiales_bajo_stock === 1 ? "" : "es"} con stock bajo`;
+    invSub.classList.add("text-danger");
+  } else {
+    invSub.textContent = "Sin alertas de stock";
+  }
+
+  const mes = data.mes_actual;
+  const utilEl = document.getElementById("scUtilValue");
+  utilEl.textContent = fmt(mes.utilidad);
+  utilEl.classList.add(mes.utilidad >= 0 ? "text-good" : "text-danger");
+  document.getElementById("scUtilSub").textContent = `Ingresos ${fmt(mes.ingresos)} · Gastos ${fmt(mes.gastos)}`;
+}).catch(() => {
+  // Read-only dashboard - if it fails to load, degrade to a plain dash
+  // rather than leaving the "…" placeholder looking stuck, and never let
+  // this block the rest of the Panel page from working.
+  ["scCxcValue", "scInvValue", "scUtilValue"].forEach(id => { document.getElementById(id).textContent = "—"; });
 });
 </script>
 </body>

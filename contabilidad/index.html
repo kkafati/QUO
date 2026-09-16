@@ -1593,49 +1593,63 @@ document.getElementById("btnCorrerDepreciacion").addEventListener("click", async
 
 // ---- Sidebar view switching ----
 
+function activateView(viewName) {
+  const btn = document.querySelector(`.nav-item[data-view="${viewName}"]`);
+  if (!btn || btn.disabled) return false;
+  document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById(`view-${viewName}`).classList.add("active");
+  if (viewName === "ingresos" && !ingresosLoaded) {
+    ingresosLoaded = true;
+    loadIngresos();
+  }
+  if (viewName === "reportes" && !reportesLoaded) {
+    reportesLoaded = true;
+    loadEstadoResultados();
+  }
+  if (viewName === "cxp" && !cxpLoaded) {
+    cxpLoaded = true;
+    loadCxpCategorias();
+    loadCxp();
+  }
+  if (viewName === "libro-mayor" && !libroMayorLoaded) {
+    libroMayorLoaded = true;
+    loadCuentasContablesForSelect().then(loadLibroMayor);
+  }
+  if (viewName === "balanza" && !balanzaLoaded) {
+    balanzaLoaded = true;
+    loadBalanza();
+  }
+  if (viewName === "balance-general" && !balanceGeneralLoaded) {
+    balanceGeneralLoaded = true;
+    document.getElementById("bgFilterFecha").value = new Date().toISOString().slice(0, 10);
+    loadBalanceGeneral();
+  }
+  if (viewName === "flujo-efectivo" && !flujoEfectivoLoaded) {
+    flujoEfectivoLoaded = true;
+    loadFlujoEfectivo();
+  }
+  if (viewName === "activos-fijos" && !activosFijosLoaded) {
+    activosFijosLoaded = true;
+    document.getElementById("afPeriodo").value = new Date().toISOString().slice(0, 7);
+    loadActivosFijos();
+  }
+  return true;
+}
+
 document.querySelectorAll(".nav-item[data-view]").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById(`view-${btn.dataset.view}`).classList.add("active");
-    if (btn.dataset.view === "ingresos" && !ingresosLoaded) {
-      ingresosLoaded = true;
-      loadIngresos();
-    }
-    if (btn.dataset.view === "reportes" && !reportesLoaded) {
-      reportesLoaded = true;
-      loadEstadoResultados();
-    }
-    if (btn.dataset.view === "cxp" && !cxpLoaded) {
-      cxpLoaded = true;
-      loadCxpCategorias();
-      loadCxp();
-    }
-    if (btn.dataset.view === "libro-mayor" && !libroMayorLoaded) {
-      libroMayorLoaded = true;
-      loadCuentasContablesForSelect().then(loadLibroMayor);
-    }
-    if (btn.dataset.view === "balanza" && !balanzaLoaded) {
-      balanzaLoaded = true;
-      loadBalanza();
-    }
-    if (btn.dataset.view === "balance-general" && !balanceGeneralLoaded) {
-      balanceGeneralLoaded = true;
-      document.getElementById("bgFilterFecha").value = new Date().toISOString().slice(0, 10);
-      loadBalanceGeneral();
-    }
-    if (btn.dataset.view === "flujo-efectivo" && !flujoEfectivoLoaded) {
-      flujoEfectivoLoaded = true;
-      loadFlujoEfectivo();
-    }
-    if (btn.dataset.view === "activos-fijos" && !activosFijosLoaded) {
-      activosFijosLoaded = true;
-      document.getElementById("afPeriodo").value = new Date().toISOString().slice(0, 7);
-      loadActivosFijos();
-    }
-  });
+  btn.addEventListener("click", () => activateView(btn.dataset.view));
 });
+
+// Deep-link support: /contabilidad/?view=ingresos lands directly on that tab
+// (e.g. clicked from the Panel dashboard's summary cards) instead of always
+// defaulting to Gastos. Falls back to the default (already-active) view if
+// the param is missing, empty, or names a view that doesn't exist here.
+const requestedView = new URLSearchParams(window.location.search).get("view");
+if (requestedView) {
+  activateView(requestedView);
+}
 
 fetch("/api/me").then(r => r.json()).then(me => {
   if (me.authenticated && me.company_name) document.getElementById("topbarClient").textContent = "Contabilidad — " + me.company_name;
