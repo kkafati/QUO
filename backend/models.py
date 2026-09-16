@@ -577,3 +577,49 @@ class MovimientoBancario(db.Model):
 
     asiento = db.relationship("AsientoContable")
 
+
+# ---------------------------------------------------------------------------
+# Phase 4 - Fixed Asset tracking (straight-line depreciation only) and tying
+# the Inventario module into Costo de Ventas. Both post to the same ledger.
+# ---------------------------------------------------------------------------
+
+class ActivoFijo(db.Model):
+    """A depreciable fixed asset. Straight-line depreciation only (no
+    declining balance, no units-of-production) - see DepreciacionRegistro
+    for the monthly entries. No disposal/sale flow in this phase: an asset
+    can be created and depreciated, but "selling" or writing it off before
+    end of useful life is a separate feature, out of scope here."""
+    __tablename__ = "activos_fijos"
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    nombre = db.Column(db.String(255), nullable=False)
+    descripcion = db.Column(db.String(255))
+    fecha_adquisicion = db.Column(db.String(16), nullable=False)
+    costo_adquisicion = db.Column(db.Float, nullable=False, default=0)
+    valor_residual = db.Column(db.Float, nullable=False, default=0)
+    vida_util_anos = db.Column(db.Integer, nullable=False, default=5)
+    created_at = db.Column(db.String(16))
+    deleted_at = db.Column(db.String(16))  # soft delete - blocked in app.py once any depreciación is registered
+
+    depreciaciones = db.relationship("DepreciacionRegistro", backref="activo_fijo", cascade="all, delete-orphan")
+
+
+class DepreciacionRegistro(db.Model):
+    """One month's straight-line depreciation posted for one ActivoFijo.
+    Accumulated depreciation for an asset is always computed by summing its
+    OWN rows here (never by trying to split the shared Depreciación Acumulada
+    ledger account back out per-asset). The unique constraint is the actual
+    guarantee against double-depreciating the same asset for the same
+    período - not just app-level checks."""
+    __tablename__ = "depreciacion_registros"
+    id = db.Column(db.Integer, primary_key=True)
+    activo_fijo_id = db.Column(db.Integer, db.ForeignKey("activos_fijos.id"), nullable=False)
+    periodo = db.Column(db.String(7), nullable=False)  # "YYYY-MM"
+    monto = db.Column(db.Float, nullable=False, default=0)
+    asiento_id = db.Column(db.Integer, db.ForeignKey("asientos_contables.id"))
+    created_at = db.Column(db.String(16))
+
+    __table_args__ = (db.UniqueConstraint("activo_fijo_id", "periodo", name="uq_depreciacion_activo_periodo"),)
+
+    asiento = db.relationship("AsientoContable")
+

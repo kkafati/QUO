@@ -1,12 +1,13 @@
 import os
 import re
 import json
+import calendar
 import mimetypes
 from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, abort
 from werkzeug.security import check_password_hash, generate_password_hash
-from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GastoOperativoItem, GASTO_CATEGORIAS, StockMovimiento, Pago, CuentaContable, AsientoContable, AsientoLinea, CuentaPorPagar, PagoProveedor, MovimientoBancario, GASTO_CATEGORIA_CODIGOS
+from models import db, Account, Material, Labor, Tool, Transport, Gasto, CostCard, CostCardItem, Quote, QuoteLine, QuoteFee, SupplierPrice, RegulacionStudy, Admin, LoginEvent, PageView, Invoice, InvoiceLine, Cliente, Cotizacion, CotizacionLine, Proforma, ProformaLine, GastoOperativo, GastoOperativoItem, GASTO_CATEGORIAS, StockMovimiento, Pago, CuentaContable, AsientoContable, AsientoLinea, CuentaPorPagar, PagoProveedor, MovimientoBancario, GASTO_CATEGORIA_CODIGOS, ActivoFijo, DepreciacionRegistro
 from numero_a_letras import numero_a_letras
 from pdf_render import render_invoice_pdf
 from pdf_render_cotizacion import render_cotizacion_pdf
@@ -2481,27 +2482,38 @@ def convertir_proforma_a_factura(pf_id):
 def ensure_chart_of_accounts(account_id):
     """Seeds a reasonable default Catálogo de Cuentas the first time this
     account touches the ledger, so nobody has to set one up from zero before
-    anything can post. Idempotent - does nothing if accounts already exist."""
-    if CuentaContable.query.filter_by(account_id=account_id).first():
-        return
+    anything can post. Idempotent per ACCOUNT *and* per CODIGO: safe to call
+    on every posting (a no-op once everything exists), and safe to extend
+    with new accounts (as Phase 4 does below) that then get added to an
+    existing account's chart on its next call, without touching or
+    duplicating what's already there."""
     now = datetime.utcnow().strftime("%Y-%m-%d")
+    existentes = {c.codigo: c for c in CuentaContable.query.filter_by(account_id=account_id).all()}
 
     def add(codigo, nombre, tipo, padre_codigo=None):
-        padre = None
-        if padre_codigo:
-            padre = CuentaContable.query.filter_by(account_id=account_id, codigo=padre_codigo).first()
+        if codigo in existentes:
+            return existentes[codigo]
+        padre = existentes.get(padre_codigo)
         cuenta = CuentaContable(
             account_id=account_id, codigo=codigo, nombre=nombre, tipo=tipo,
             cuenta_padre_id=padre.id if padre else None, created_at=now,
         )
         db.session.add(cuenta)
         db.session.flush()
+        existentes[codigo] = cuenta
         return cuenta
 
     add("1000", "Activo Circulante", "activo")
     add("1010", "Caja y Bancos", "activo", "1000")
     add("1020", "Cuentas por Cobrar", "activo", "1000")
-    add("1030", "Inventario", "activo", "1000")  # room for the Inventario module to post here later
+    add("1030", "Inventario", "activo", "1000")
+    # Phase 4: 1040 is a contra-asset - still tipo="activo" like every other
+    # asset account (no separate "contra" tipo exists, or is needed), it just
+    # naturally accumulates a negative balance as depreciation credits post
+    # to it. That's correct and expected under the existing sign convention.
+    add("1040", "Depreciación Acumulada", "activo", "1000")
+    add("1050", "Activo Fijo", "activo", "1000")
+    add("1060", "Ajuste de Inventario", "activo", "1000")
     add("2000", "Pasivo Circulante", "pasivo")
     add("2010", "Cuentas por Pagar", "pasivo", "2000")
     add("2020", "ISV por Pagar", "pasivo", "2000")
@@ -2513,6 +2525,10 @@ def ensure_chart_of_accounts(account_id):
     add("5000", "Costos y Gastos", "gasto")
     for categoria, codigo in GASTO_CATEGORIA_CODIGOS.items():
         add(codigo, categoria, "gasto", "5000")
+    # Phase 4 additions.
+    add("5100", "Costo de Ventas", "gasto", "5000")
+    add("5110", "Gasto de Depreciación", "gasto", "5000")
+    add("5120", "Gasto por Merma de Inventario", "gasto", "5000")
     db.session.commit()
 
 
@@ -2635,6 +2651,70 @@ def post_pago_proveedor_asiento(pago, cxp):
             {"cuenta_codigo": "2010", "debe": pago.monto, "haber": 0},
             {"cuenta_codigo": "1010", "debe": 0, "haber": pago.monto},
         ],
+    )
+
+
+def post_activo_fijo_asiento(activo):
+    # Assumed paid immediately in cash/bank - same simplification Phase 2
+    # made for GastoOperativo. No "bought on credit" link to Cuentas por
+    # Pagar for fixed assets in this phase.
+    return crear_asiento(
+        account_id=activo.account_id, fecha=activo.fecha_adquisicion,
+        descripcion=f"Compra de activo fijo: {activo.nombre}",
+        origen_type="activo_fijo", origen_id=activo.id,
+        lineas=[
+            {"cuenta_codigo": "1050", "debe": activo.costo_adquisicion, "haber": 0},
+            {"cuenta_codigo": "1010", "debe": 0, "haber": activo.costo_adquisicion},
+        ],
+    )
+
+
+def post_depreciacion_asiento(activo, periodo, fecha, monto):
+    return crear_asiento(
+        account_id=activo.account_id, fecha=fecha,
+        descripcion=f"Depreciación {periodo}: {activo.nombre}",
+        origen_type="depreciacion", origen_id=activo.id,
+        lineas=[
+            {"cuenta_codigo": "5110", "debe": monto, "haber": 0},
+            {"cuenta_codigo": "1040", "debe": 0, "haber": monto},
+        ],
+    )
+
+
+def post_movimiento_inventario_asiento(movimiento, material):
+    """Debits/credits Inventario per Phase 4's rules, using material.unit_price
+    AT THE TIME of the movement - there's no FIFO/average costing here (a real
+    feature, out of scope); every salida is treated as a cost of goods sold,
+    since this system has no sub-type for "internal use" vs "sold on a job".
+    Entrada purchases are assumed paid immediately in cash/bank, same
+    simplification as GastoOperativo and ActivoFijo above."""
+    valor = round(abs(movimiento.cantidad) * (material.unit_price or 0), 2)
+    if valor == 0:
+        return None  # an unpriced material (unit_price=0) has nothing to post
+    descripcion = f"Movimiento de inventario ({movimiento.tipo}): {material.code} - {material.description}"
+    if movimiento.tipo == "entrada":
+        lineas = [
+            {"cuenta_codigo": "1030", "debe": valor, "haber": 0},
+            {"cuenta_codigo": "1010", "debe": 0, "haber": valor},
+        ]
+    elif movimiento.tipo == "salida":
+        lineas = [
+            {"cuenta_codigo": "5100", "debe": valor, "haber": 0},
+            {"cuenta_codigo": "1030", "debe": 0, "haber": valor},
+        ]
+    elif movimiento.cantidad > 0:  # ajuste positivo - count came in higher than recorded
+        lineas = [
+            {"cuenta_codigo": "1030", "debe": valor, "haber": 0},
+            {"cuenta_codigo": "1060", "debe": 0, "haber": valor},
+        ]
+    else:  # ajuste negativo - shrinkage/loss
+        lineas = [
+            {"cuenta_codigo": "5120", "debe": valor, "haber": 0},
+            {"cuenta_codigo": "1030", "debe": 0, "haber": valor},
+        ]
+    return crear_asiento(
+        account_id=movimiento.account_id, fecha=movimiento.fecha, descripcion=descripcion,
+        origen_type="movimiento_inventario", origen_id=movimiento.id, lineas=lineas,
     )
 
 
@@ -3669,6 +3749,186 @@ def delete_movimiento_bancario(mov_id):
 
 
 # ---------------------------------------------------------------------------
+# Activos Fijos (fixed assets) - straight-line depreciation only. No
+# disposal/sale flow in this phase - see ActivoFijo's docstring.
+# ---------------------------------------------------------------------------
+
+def compute_depreciacion_acumulada(activo_fijo_id):
+    """Always summed from this asset's OWN DepreciacionRegistro rows - never
+    by trying to split the shared Depreciación Acumulada ledger account back
+    out per-asset (that account only knows the total across all assets)."""
+    total = db.session.query(db.func.sum(DepreciacionRegistro.monto)).filter(
+        DepreciacionRegistro.activo_fijo_id == activo_fijo_id).scalar()
+    return round(total or 0, 2)
+
+
+def activo_fijo_to_dict(a):
+    depreciacion_acumulada = compute_depreciacion_acumulada(a.id)
+    return {
+        "id": a.id, "nombre": a.nombre, "descripcion": a.descripcion,
+        "fecha_adquisicion": a.fecha_adquisicion, "costo_adquisicion": a.costo_adquisicion,
+        "valor_residual": a.valor_residual, "vida_util_anos": a.vida_util_anos,
+        "depreciacion_mensual": round((a.costo_adquisicion - a.valor_residual) / (a.vida_util_anos * 12), 2),
+        "depreciacion_acumulada": depreciacion_acumulada,
+        "valor_en_libros": round(a.costo_adquisicion - depreciacion_acumulada, 2),
+        "created_at": a.created_at,
+    }
+
+
+@app.route("/api/activos-fijos", methods=["GET"])
+@login_required
+def list_activos_fijos():
+    activos = (ActivoFijo.query.filter_by(account_id=current_account_id(), deleted_at=None)
+               .order_by(ActivoFijo.fecha_adquisicion.desc(), ActivoFijo.id.desc()).all())
+    return jsonify([activo_fijo_to_dict(a) for a in activos])
+
+
+@app.route("/api/activos-fijos/<int:activo_id>", methods=["GET"])
+@login_required
+def get_activo_fijo(activo_id):
+    a = ActivoFijo.query.filter_by(id=activo_id, account_id=current_account_id()).first_or_404()
+    return jsonify(activo_fijo_to_dict(a))
+
+
+@app.route("/api/activos-fijos", methods=["POST"])
+@login_required
+def create_activo_fijo():
+    data = request.json or {}
+    nombre = (data.get("nombre") or "").strip()
+    if not nombre:
+        return jsonify({"error": "El nombre es requerido."}), 400
+    try:
+        costo_adquisicion = float(data.get("costo_adquisicion", 0) or 0)
+        valor_residual = float(data.get("valor_residual", 0) or 0)
+        vida_util_anos = int(data.get("vida_util_anos", 0) or 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Costo, valor residual y vida útil deben ser números."}), 400
+    if costo_adquisicion <= 0:
+        return jsonify({"error": "El costo de adquisición debe ser mayor a cero."}), 400
+    if valor_residual < 0:
+        return jsonify({"error": "El valor residual no puede ser negativo."}), 400
+    if valor_residual >= costo_adquisicion:
+        return jsonify({"error": "El valor residual debe ser menor al costo de adquisición."}), 400
+    if vida_util_anos <= 0:
+        return jsonify({"error": "La vida útil debe ser mayor a cero años."}), 400
+
+    now = datetime.utcnow().strftime("%Y-%m-%d")
+    activo = ActivoFijo(
+        account_id=current_account_id(),
+        nombre=nombre,
+        descripcion=(data.get("descripcion") or "").strip(),
+        fecha_adquisicion=data.get("fecha_adquisicion") or now,
+        costo_adquisicion=costo_adquisicion,
+        valor_residual=valor_residual,
+        vida_util_anos=vida_util_anos,
+        created_at=now,
+    )
+    db.session.add(activo)
+    db.session.flush()  # get activo.id for posting, commit happens with the asiento below
+
+    try:
+        post_activo_fijo_asiento(activo)
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({"error": f"No se pudo registrar el asiento contable: {e}"}), 400
+
+    return jsonify(activo_fijo_to_dict(activo)), 201
+
+
+@app.route("/api/activos-fijos/<int:activo_id>", methods=["PUT"])
+@login_required
+def update_activo_fijo(activo_id):
+    a = ActivoFijo.query.filter_by(id=activo_id, account_id=current_account_id()).first_or_404()
+    data = request.json or {}
+    if "nombre" in data:
+        nombre = (data.get("nombre") or "").strip()
+        if not nombre:
+            return jsonify({"error": "El nombre es requerido."}), 400
+        a.nombre = nombre
+    a.descripcion = (data.get("descripcion", a.descripcion) or "").strip()
+    # costo_adquisicion, valor_residual, vida_util_anos, fecha_adquisicion are
+    # intentionally NOT editable once created - they're already posted to the
+    # ledger and used by any depreciación already run; changing them here
+    # would leave past asientos/registros out of sync with no way to reconcile.
+    db.session.commit()
+    return jsonify(activo_fijo_to_dict(a))
+
+
+@app.route("/api/activos-fijos/<int:activo_id>", methods=["DELETE"])
+@login_required
+def delete_activo_fijo(activo_id):
+    a = ActivoFijo.query.filter_by(id=activo_id, account_id=current_account_id(), deleted_at=None).first_or_404()
+    if DepreciacionRegistro.query.filter_by(activo_fijo_id=a.id).first():
+        return jsonify({
+            "error": "No se puede eliminar: este activo ya tiene depreciación registrada. "
+                     "La baja o venta de activos no está implementada todavía (fuera del alcance de esta fase)."
+        }), 400
+    a.deleted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    db.session.commit()
+    return "", 204
+
+
+@app.route("/api/activos-fijos/depreciar", methods=["POST"])
+@login_required
+def depreciar_activos_fijos():
+    """Runs straight-line depreciation for every active asset acquired on or
+    before the end of `periodo`, once per período per asset (enforced by
+    DepreciacionRegistro's unique constraint, not just this check)."""
+    periodo = (request.args.get("periodo") or "").strip()
+    if not re.match(r"^\d{4}-\d{2}$", periodo):
+        return jsonify({"error": "El período debe tener el formato YYYY-MM."}), 400
+    year, month = (int(p) for p in periodo.split("-"))
+    if not (1 <= month <= 12):
+        return jsonify({"error": "El período debe tener el formato YYYY-MM."}), 400
+    fin_periodo = f"{year:04d}-{month:02d}-{calendar.monthrange(year, month)[1]:02d}"
+
+    account_id = current_account_id()
+    activos = (ActivoFijo.query.filter_by(account_id=account_id, deleted_at=None)
+               .filter(ActivoFijo.fecha_adquisicion <= fin_periodo).all())
+
+    depreciados = []
+    saltados = []
+    for a in activos:
+        if DepreciacionRegistro.query.filter_by(activo_fijo_id=a.id, periodo=periodo).first():
+            saltados.append({"activo_fijo_id": a.id, "nombre": a.nombre, "razon": "ya procesado para este período"})
+            continue
+
+        depreciable_base = round(a.costo_adquisicion - a.valor_residual, 2)
+        acumulada = compute_depreciacion_acumulada(a.id)
+        if acumulada >= depreciable_base - 0.01:
+            saltados.append({"activo_fijo_id": a.id, "nombre": a.nombre, "razon": "ya completamente depreciado"})
+            continue
+
+        monto = round(depreciable_base / (a.vida_util_anos * 12), 2)
+        if monto <= 0:
+            saltados.append({"activo_fijo_id": a.id, "nombre": a.nombre, "razon": "monto de depreciación es cero"})
+            continue
+
+        try:
+            asiento = post_depreciacion_asiento(a, periodo, fin_periodo, monto)
+        except ValueError as e:
+            saltados.append({"activo_fijo_id": a.id, "nombre": a.nombre, "razon": f"error al contabilizar: {e}"})
+            continue
+
+        registro = DepreciacionRegistro(
+            activo_fijo_id=a.id, periodo=periodo, monto=monto, asiento_id=asiento.id,
+            created_at=datetime.utcnow().strftime("%Y-%m-%d"),
+        )
+        db.session.add(registro)
+        db.session.commit()
+        depreciados.append({"activo_fijo_id": a.id, "nombre": a.nombre, "monto": monto})
+
+    return jsonify({
+        "periodo": periodo,
+        "depreciados": depreciados,
+        "saltados": saltados,
+        "total_activos_depreciados": len(depreciados),
+        "total_activos_saltados": len(saltados),
+        "total_monto_depreciado": round(sum(d["monto"] for d in depreciados), 2),
+    })
+
+
+# ---------------------------------------------------------------------------
 # Inventario - stock levels (computed from a movement ledger), low-stock
 # alerts, and valuation. v1 scope: no auto-linking to quotes/invoices yet.
 # ---------------------------------------------------------------------------
@@ -3794,7 +4054,16 @@ def create_movimiento():
         created_at=datetime.utcnow().strftime("%Y-%m-%d"),
     )
     db.session.add(m)
-    db.session.commit()
+    db.session.flush()  # get m.id for posting, commit happens with the asiento below
+
+    try:
+        asiento = post_movimiento_inventario_asiento(m, material)
+        if asiento is None:
+            db.session.commit()  # nothing to post (material.unit_price is 0) - still commit the movement itself
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({"error": f"No se pudo registrar el asiento contable: {e}"}), 400
+
     return jsonify(movimiento_to_dict(m)), 201
 
 

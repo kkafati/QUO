@@ -97,6 +97,12 @@
   .fe-not-implemented { background: #f7f9fb; border: 1.5px dashed #dde1e5; border-radius: 10px; padding: 16px; color: var(--ink-soft); font-size: 13px; text-align: center; }
   .fe-warning { background: rgba(181,69,59,0.1); color: var(--danger); border-radius: 8px; padding: 10px 14px; font-size: 12.5px; margin-bottom: 16px; }
 
+  /* ---- Activos Fijos ---- */
+  .depreciar-bar { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
+  .depreciar-result { background: #f7f9fb; border: 1px solid #e7e9ec; border-radius: 10px; padding: 14px 16px; font-size: 13px; margin-bottom: 16px; line-height: 1.6; }
+  .depreciar-result .df-ok { color: var(--good); font-weight: 600; }
+  .depreciar-result .df-skip { color: var(--ink-soft); }
+
   /* ---- Pagos sub-section inside the Cuenta por Pagar modal ---- */
   .pagos-head-inline { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
   .pagos-head-inline h2 { font-size: 14px; }
@@ -208,6 +214,9 @@
         </button>
         <button class="nav-item" data-view="flujo-efectivo">
           <span class="nav-code">08</span> Flujo de Efectivo
+        </button>
+        <button class="nav-item" data-view="activos-fijos">
+          <span class="nav-code">09</span> Activos Fijos
         </button>
       </nav>
     </aside>
@@ -547,6 +556,34 @@
           <div class="fe-not-implemented">Sin actividad registrada — requiere seguimiento de financiamiento/capital, no implementado aún.</div>
         </div>
       </section>
+
+      <section id="view-activos-fijos" class="view">
+        <div class="wrap">
+          <div class="head-row">
+            <h1>Activos Fijos</h1>
+            <div class="toolbar">
+              <button class="btn btn-primary" id="btnNuevoActivo">+ Nuevo Activo</button>
+            </div>
+          </div>
+
+          <div class="depreciar-bar">
+            <div class="filter-field">
+              <label>Período a depreciar</label>
+              <input type="month" id="afPeriodo">
+            </div>
+            <button class="btn btn-ghost" id="btnCorrerDepreciacion">Correr Depreciación</button>
+          </div>
+          <div class="depreciar-result" id="afDepreciarResult" hidden></div>
+
+          <div class="table-scroll"><table>
+            <thead><tr>
+              <th>Nombre</th><th>Adquisición</th><th class="num">Costo</th><th class="num">Deprec. Acumulada</th><th class="num">Valor en Libros</th><th></th>
+            </tr></thead>
+            <tbody id="afBody"></tbody>
+          </table></div>
+          <div class="empty-state" id="afEmptyState" hidden>Aún no hay activos fijos registrados.</div>
+        </div>
+      </section>
     </div>
   </div>
 
@@ -684,6 +721,46 @@
       <h2>Papelera — Cuentas por Pagar</h2>
       <table><thead><tr><th>Emisión</th><th>Proveedor</th><th></th></tr></thead><tbody id="cxpTrashBody"></tbody></table>
       <div class="modal-actions"><button class="btn btn-ghost" id="cxpCloseTrash">Cerrar</button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="activoModal" hidden>
+    <div class="modal">
+      <h2 id="activoModalTitle">Nuevo Activo Fijo</h2>
+      <input type="hidden" id="activoId">
+      <div class="field">
+        <label>Nombre</label>
+        <input type="text" id="af_nombre" placeholder="Ej: Camión de reparto">
+      </div>
+      <div class="field">
+        <label>Descripción (opcional)</label>
+        <input type="text" id="af_descripcion">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Fecha de adquisición</label>
+          <input type="date" id="af_fecha_adquisicion">
+        </div>
+        <div class="field">
+          <label>Costo de adquisición (L.)</label>
+          <input type="number" id="af_costo_adquisicion" step="0.01" min="0" placeholder="0.00">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Valor residual (L.)</label>
+          <input type="number" id="af_valor_residual" step="0.01" min="0" value="0">
+        </div>
+        <div class="field">
+          <label>Vida útil (años)</label>
+          <input type="number" id="af_vida_util_anos" step="1" min="1" value="5">
+        </div>
+      </div>
+      <div class="modal-error" id="activoModalError"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="activoBtnCancel">Cancelar</button>
+        <button class="btn btn-primary" id="activoBtnSave">Guardar</button>
+      </div>
     </div>
   </div>
 
@@ -1395,6 +1472,125 @@ document.getElementById("feBtnClearFilter").addEventListener("click", () => {
   loadFlujoEfectivo();
 });
 
+// ---- Activos Fijos ----
+
+let activosFijosLoaded = false;
+let activosCache = [];
+
+async function loadActivosFijos() {
+  activosCache = await fetch("/api/activos-fijos").then(r => r.json());
+  document.getElementById("afEmptyState").hidden = activosCache.length > 0;
+  document.getElementById("afBody").innerHTML = activosCache.map(a => `
+    <tr>
+      <td>${esc(a.nombre)}</td>
+      <td>${esc(a.fecha_adquisicion)}</td>
+      <td class="num mono">${fmt(a.costo_adquisicion)}</td>
+      <td class="num mono">${fmt(a.depreciacion_acumulada)}</td>
+      <td class="num mono">${fmt(a.valor_en_libros)}</td>
+      <td>
+        <button class="btn btn-sm btn-ghost" data-edit="${a.id}">Editar</button>
+        <button class="btn btn-sm btn-danger" data-del="${a.id}">×</button>
+      </td>
+    </tr>
+  `).join("");
+
+  document.querySelectorAll("#afBody [data-edit]").forEach(btn => {
+    btn.addEventListener("click", () => openActivoModal(activosCache.find(a => a.id == btn.dataset.edit)));
+  });
+  document.querySelectorAll("#afBody [data-del]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("¿Eliminar este activo fijo?")) return;
+      const res = await fetch(`/api/activos-fijos/${btn.dataset.del}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "No se pudo eliminar el activo.");
+        return;
+      }
+      loadActivosFijos();
+    });
+  });
+}
+
+function openActivoModal(activo) {
+  document.getElementById("activoModalError").textContent = "";
+  const camposFijos = ["af_fecha_adquisicion", "af_costo_adquisicion", "af_valor_residual", "af_vida_util_anos"];
+  if (activo) {
+    document.getElementById("activoModalTitle").textContent = "Editar Activo Fijo";
+    document.getElementById("activoId").value = activo.id;
+    document.getElementById("af_nombre").value = activo.nombre;
+    document.getElementById("af_descripcion").value = activo.descripcion || "";
+    document.getElementById("af_fecha_adquisicion").value = activo.fecha_adquisicion;
+    document.getElementById("af_costo_adquisicion").value = activo.costo_adquisicion;
+    document.getElementById("af_valor_residual").value = activo.valor_residual;
+    document.getElementById("af_vida_util_anos").value = activo.vida_util_anos;
+    // Not editable once created - already posted to the ledger and possibly
+    // already depreciated (see the backend comment in update_activo_fijo).
+    camposFijos.forEach(id => { document.getElementById(id).disabled = true; });
+  } else {
+    document.getElementById("activoModalTitle").textContent = "Nuevo Activo Fijo";
+    document.getElementById("activoId").value = "";
+    document.getElementById("af_nombre").value = "";
+    document.getElementById("af_descripcion").value = "";
+    document.getElementById("af_fecha_adquisicion").value = new Date().toISOString().slice(0, 10);
+    document.getElementById("af_costo_adquisicion").value = "";
+    document.getElementById("af_valor_residual").value = 0;
+    document.getElementById("af_vida_util_anos").value = 5;
+    camposFijos.forEach(id => { document.getElementById(id).disabled = false; });
+  }
+  document.getElementById("activoModal").hidden = false;
+}
+
+document.getElementById("btnNuevoActivo").addEventListener("click", () => openActivoModal(null));
+document.getElementById("activoBtnCancel").addEventListener("click", () => { document.getElementById("activoModal").hidden = true; });
+
+document.getElementById("activoBtnSave").addEventListener("click", async () => {
+  const id = document.getElementById("activoId").value;
+  const body = {
+    nombre: document.getElementById("af_nombre").value,
+    descripcion: document.getElementById("af_descripcion").value,
+  };
+  if (!id) {
+    body.fecha_adquisicion = document.getElementById("af_fecha_adquisicion").value;
+    body.costo_adquisicion = document.getElementById("af_costo_adquisicion").value;
+    body.valor_residual = document.getElementById("af_valor_residual").value;
+    body.vida_util_anos = document.getElementById("af_vida_util_anos").value;
+  }
+  const url = id ? `/api/activos-fijos/${id}` : "/api/activos-fijos";
+  const method = id ? "PUT" : "POST";
+  const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok) {
+    document.getElementById("activoModalError").textContent = data.error || "Error al guardar.";
+    return;
+  }
+  document.getElementById("activoModal").hidden = true;
+  loadActivosFijos();
+});
+
+document.getElementById("btnCorrerDepreciacion").addEventListener("click", async () => {
+  const periodo = document.getElementById("afPeriodo").value; // "YYYY-MM" from <input type="month">
+  const resultEl = document.getElementById("afDepreciarResult");
+  if (!periodo) { alert("Selecciona un período."); return; }
+  const res = await fetch(`/api/activos-fijos/depreciar?periodo=${encodeURIComponent(periodo)}`, { method: "POST" });
+  const data = await res.json();
+  resultEl.hidden = false;
+  if (!res.ok) {
+    resultEl.innerHTML = `<span class="df-skip">${esc(data.error || "Error al correr depreciación.")}</span>`;
+    return;
+  }
+  const depreciadosHtml = data.depreciados.length
+    ? data.depreciados.map(d => `<div class="df-ok">✓ ${esc(d.nombre)}: ${fmt(d.monto)}</div>`).join("")
+    : "";
+  const saltadosHtml = data.saltados.length
+    ? data.saltados.map(s => `<div class="df-skip">— ${esc(s.nombre)}: ${esc(s.razon)}</div>`).join("")
+    : "";
+  resultEl.innerHTML = `
+    <strong>Período ${esc(data.periodo)}:</strong> ${data.total_activos_depreciados} depreciado(s), ${data.total_activos_saltados} omitido(s), total ${fmt(data.total_monto_depreciado)}
+    ${depreciadosHtml}${saltadosHtml}
+  `;
+  loadActivosFijos();
+});
+
 // ---- Sidebar view switching ----
 
 document.querySelectorAll(".nav-item[data-view]").forEach(btn => {
@@ -1432,6 +1628,11 @@ document.querySelectorAll(".nav-item[data-view]").forEach(btn => {
     if (btn.dataset.view === "flujo-efectivo" && !flujoEfectivoLoaded) {
       flujoEfectivoLoaded = true;
       loadFlujoEfectivo();
+    }
+    if (btn.dataset.view === "activos-fijos" && !activosFijosLoaded) {
+      activosFijosLoaded = true;
+      document.getElementById("afPeriodo").value = new Date().toISOString().slice(0, 7);
+      loadActivosFijos();
     }
   });
 });
