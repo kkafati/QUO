@@ -340,16 +340,28 @@ def requires_role(*roles):
     ON TOP of @login_required (i.e. listed above it, so it runs after
     login_required has already confirmed there's a session at all) - this
     decorator only checks WHICH module the logged-in user may reach, not
-    WHETHER they're logged in. A role each role doesn't have gets a 403,
-    not a redirect to login, since the user IS authenticated - they just
-    can't use this module."""
+    WHETHER they're logged in.
+
+    administrador is ALWAYS permitted, regardless of which roles a given
+    call site lists - "role == administrador OR role in roles", never just
+    "role in roles". This is deliberate: administrador is supposed to have
+    full access to every module per the original spec, and checking it here
+    (once) means no call site has to remember to list "administrador" in
+    its allowed roles, including any new route added later. Forgetting it
+    at a call site is exactly the bug this decorator previously had - every
+    @requires_role("ventas"/"contador"/"bodega") route silently locked
+    administrador out because the call site was missing "administrador".
+
+    A denied request always gets the same JSON error (never a redirect or
+    Werkzeug's generic default 403 page, even for a plain page-load route),
+    since the user IS authenticated - they just can't use this module, and
+    there's no login page to usefully redirect them to."""
     def decorator(view):
         @wraps(view)
         def wrapped(*args, **kwargs):
-            if current_role() not in roles:
-                if request.path.startswith("/api/"):
-                    return jsonify({"error": "No tienes permiso para acceder a este módulo."}), 403
-                abort(403)
+            role = current_role()
+            if role != "administrador" and role not in roles:
+                return jsonify({"error": "No tienes permiso para acceder a este módulo."}), 403
             return view(*args, **kwargs)
         return wrapped
     return decorator
