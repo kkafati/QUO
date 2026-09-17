@@ -178,6 +178,10 @@
           </div>
 
           <div class="filter-row">
+            <div class="filter-field">
+              <label>Buscar</label>
+              <input type="text" id="filterExistenciasSearch" placeholder="Buscar por código o descripción...">
+            </div>
             <label class="filter-check">
               <input type="checkbox" id="filterSoloBajoStock">
               Mostrar solo stock bajo
@@ -241,6 +245,7 @@
       <h2>Nuevo Movimiento</h2>
       <div class="field">
         <label>Material</label>
+        <input type="text" id="f_material_search" placeholder="Buscar por código o descripción..." style="margin-bottom:6px">
         <select id="f_material_id"></select>
       </div>
       <div class="field-row">
@@ -277,6 +282,16 @@
 function esc(s) { return (s ?? "").toString().replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
 function fmt(n) { return "L. " + (Number(n) || 0).toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
+// Shared substring match used by both the Existencias search bar and the
+// material picker in the movement modal - one place to keep "search by
+// code or description" behavior consistent between the two.
+function materialMatchesQuery(material, query) {
+  if (!query) return true;
+  if (!material) return false;
+  const q = query.toLowerCase();
+  return (material.code || "").toLowerCase().includes(q) || (material.description || "").toLowerCase().includes(q);
+}
+
 // ---- 01 Existencias ----
 
 let existenciasCache = [];
@@ -312,9 +327,26 @@ function renderReconciliacion(data) {
 
 function renderExistencias() {
   const soloBajoStock = document.getElementById("filterSoloBajoStock").checked;
-  const rows = soloBajoStock ? existenciasCache.filter(m => m.bajo_stock) : existenciasCache;
+  const searchText = document.getElementById("filterExistenciasSearch").value.trim();
 
-  document.getElementById("existenciasEmptyState").hidden = rows.length > 0;
+  let rows = existenciasCache;
+  if (soloBajoStock) rows = rows.filter(m => m.bajo_stock);
+  if (searchText) rows = rows.filter(m => materialMatchesQuery(m, searchText));
+
+  const emptyState = document.getElementById("existenciasEmptyState");
+  if (rows.length > 0) {
+    emptyState.hidden = true;
+  } else if (existenciasCache.length === 0) {
+    emptyState.hidden = false;
+    emptyState.textContent = "Aún no hay materiales en el catálogo.";
+  } else if (searchText) {
+    emptyState.hidden = false;
+    emptyState.textContent = `Sin resultados para "${searchText}".`;
+  } else {
+    emptyState.hidden = false;
+    emptyState.textContent = "Ningún material cumple con el filtro seleccionado.";
+  }
+
   document.getElementById("existenciasBody").innerHTML = rows.map(m => `
     <tr class="clickable ${m.bajo_stock ? "bajo-stock" : ""}" data-material-id="${m.id}">
       <td class="mono">${esc(m.code)}</td>
@@ -331,6 +363,12 @@ function renderExistencias() {
 }
 
 document.getElementById("filterSoloBajoStock").addEventListener("change", renderExistencias);
+
+let existenciasSearchDebounce = null;
+document.getElementById("filterExistenciasSearch").addEventListener("input", () => {
+  clearTimeout(existenciasSearchDebounce);
+  existenciasSearchDebounce = setTimeout(renderExistencias, 180);
+});
 
 // ---- 02 Movimientos ----
 
@@ -399,8 +437,22 @@ document.getElementById("movBtnVerTodos").addEventListener("click", () => {
   updateMovFilterBanner();
 });
 
+// Filters the modal's material <select> by hiding non-matching <option>s
+// rather than rebuilding the list, so the selected option's value (and
+// therefore which material a movement posts against) is never disturbed
+// by typing in the search box.
+function filterMaterialSelect(query) {
+  const select = document.getElementById("f_material_id");
+  Array.from(select.options).forEach(opt => {
+    const material = materialesCache.find(m => String(m.id) === opt.value);
+    opt.hidden = !materialMatchesQuery(material, query);
+  });
+}
+
 function openMovimientoModal() {
   document.getElementById("modalError").textContent = "";
+  document.getElementById("f_material_search").value = "";
+  filterMaterialSelect("");
   document.getElementById("f_material_id").value = materialesCache[0] ? materialesCache[0].id : "";
   document.getElementById("f_tipo").value = "entrada";
   document.getElementById("f_cantidad").value = "";
@@ -408,6 +460,10 @@ function openMovimientoModal() {
   document.getElementById("f_referencia").value = "";
   document.getElementById("movimientoModal").hidden = false;
 }
+
+document.getElementById("f_material_search").addEventListener("input", (e) => {
+  filterMaterialSelect(e.target.value.trim());
+});
 
 document.getElementById("btnNuevoMovimiento").addEventListener("click", openMovimientoModal);
 document.getElementById("btnCancelModal").addEventListener("click", () => { document.getElementById("movimientoModal").hidden = true; });
